@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Imports\ExpensesImport;
 use App\Models\Expense;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ExpensesController extends Controller
