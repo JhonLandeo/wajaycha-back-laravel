@@ -6,10 +6,15 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "guzzlehttp/guzzle": "^7.9",
         "laravel/framework": "^11.9",
         "laravel/sanctum": "*",
         "laravel/tinker": "^2.9",
         "maatwebsite/excel": "^3.1",
+        "setasign/fpdf": "^1.8",
+        "setasign/fpdi": "^2.6",
+        "smalot/pdfparser": "^2.11",
+        "thiagoalessio/tesseract_ocr": "^2.13",
         "tymon/jwt-auth": "^2.1"
     },
     "require-dev": {

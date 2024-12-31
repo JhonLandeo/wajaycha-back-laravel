@@ -3,6 +3,7 @@
 namespace App\Imports;
 
 use App\Models\Expense;
+use App\Models\TransactionYape;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
@@ -10,7 +11,7 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Imports\HeadingRowFormatter;
 
 HeadingRowFormatter::default('none');
-class ExpensesImport implements ToModel, WithHeadingRow
+class TransactionYapeImport implements ToModel, WithHeadingRow
 {
     /**
      * Especificar la fila donde comienzan los encabezados
@@ -29,8 +30,9 @@ class ExpensesImport implements ToModel, WithHeadingRow
      */
     public function model(array $row)
     {
-       
+    //    Log::info($row);
         $dateOperation = null;
+        LOg::info($row['Fecha de operación']);
 
         if (!empty($row['Fecha de operación'])) {
             $dateString = $row['Fecha de operación'];
@@ -42,7 +44,7 @@ class ExpensesImport implements ToModel, WithHeadingRow
                 $dateOperation = Carbon::createFromFormat('d/m/Y', $dateString)->format('Y-m-d') . ' 00:00:00';
             }
         }
-        return new Expense([
+        return new TransactionYape([
             'message' => $row['Mensaje'],
             'origin' => $row['Origen'],
             'destination' => $row['Destino'],
