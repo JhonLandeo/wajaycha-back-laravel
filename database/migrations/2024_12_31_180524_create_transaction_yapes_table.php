@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('destination');
             $table->decimal('amount');
             $table->timestamp('date_operation');
+            $table->foreignId('user_id')->constrained();
             $table->enum('type_transaction', ['income', 'expense']);
             $table->timestamps();
         });

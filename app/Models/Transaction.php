@@ -28,18 +28,18 @@ class Transaction extends Model
         return $this->belongsTo(Detail::class);
     }
 
-    // Relación Has One Through para obtener la subcategoría
-    public function subCategory()
-    {
-        return $this->hasOneThrough(
-            SubCategory::class, 
-            Detail::class,  
-            'id',               // Clave foránea en `details` que apunta a `transactions`
-            'id',               // Clave foránea en `sub_categories` que apunta a `details`
-            'detail_id',        // Clave local en `transactions` que apunta a `details`
-            'sub_category_id'   // Clave local en `details` que apunta a `sub_categories`
-        );
-    }
+    // // Relación Has One Through para obtener la subcategoría
+    // public function subCategory()
+    // {
+    //     return $this->hasOneThrough(
+    //         SubCategory::class, 
+    //         Detail::class,  
+    //         'id',               // Clave foránea en `details` que apunta a `transactions`
+    //         'id',               // Clave foránea en `sub_categories` que apunta a `details`
+    //         'detail_id',        // Clave local en `transactions` que apunta a `details`
+    //         'sub_category_id'   // Clave local en `details` que apunta a `sub_categories`
+    //     );
+    // }
 
     // Relación Has One Through para obtener la categoría
     public function category()

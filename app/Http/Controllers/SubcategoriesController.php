@@ -17,8 +17,6 @@ class SubcategoriesController extends Controller
         $subcategories = SubCategory::paginate($per_page, ['*'], 'page', $page);
 
         return response()->json($subcategories);
-
-
     }
 
     /**

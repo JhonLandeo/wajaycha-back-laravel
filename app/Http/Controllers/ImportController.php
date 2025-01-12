@@ -21,7 +21,8 @@ class ImportController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
-        $data = Import::paginate($perPage, ['*'], 'page', $page);
+        $data = Import::where('user_id', $request->user_id)
+        ->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json($data);
     }
@@ -61,7 +62,6 @@ class ImportController extends Controller
                 'created_at' => now()
             ]);
 
-            Log::info($request);
 
             $this->pdfController->extractData($request);
             DB::commit();

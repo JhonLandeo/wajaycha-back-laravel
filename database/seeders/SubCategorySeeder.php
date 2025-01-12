@@ -18,6 +18,7 @@ class SubCategorySeeder extends Seeder
         DB::table('subcategories')->insert([
             // Fijos
             ['name' => 'Vivienda', 'category_id' => $categories['Fijos'], 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Telefonia', 'category_id' => $categories['Fijos'], 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Servicios básicos', 'category_id' => $categories['Fijos'], 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Seguros', 'category_id' => $categories['Fijos'], 'created_at' => now(), 'updated_at' => now()],
             // Variables
@@ -25,6 +26,12 @@ class SubCategorySeeder extends Seeder
             ['name' => 'Transporte', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Alimentación', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Entretenimiento', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Prestamos', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Salud', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Vestimenta', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Donaciones', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Favores', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Educacion', 'category_id' => $categories['Variables'], 'created_at' => now(), 'updated_at' => now()],
             // Ahorro
             ['name' => 'Inversiones', 'category_id' => $categories['Ahorro'], 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Fondo de emergencia', 'category_id' => $categories['Ahorro'], 'created_at' => now(), 'updated_at' => now()],

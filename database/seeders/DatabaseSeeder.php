@@ -21,8 +21,10 @@ class DatabaseSeeder extends Seeder
         // ]);
 
         $this->call([
-            CategorySeeder::class,
-            SubCategorySeeder::class,
+            // CategorySeeder::class,
+            // SubCategorySeeder::class,
+            FinancialEntitiesSeeder::class,
+            PaymentServicesSeeder::class
         ]);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PdfRequest;
+use App\Models\Detail;
 use App\Models\Details;
 use App\Models\Expense;
 use App\Models\Transaction;
@@ -38,7 +39,7 @@ class PdfController extends Controller
 
         // Desencriptar el archivo PDF si está encriptado
         if ($this->isEncrypted($filePath)) {
-            $filePath = $this->decryptPdf($filePath);
+            $filePath = $this->decryptPdf($filePath, $request->password);
         }
 
         // Intentar leer el archivo como un PDF basado en texto
@@ -109,18 +110,18 @@ class PdfController extends Controller
         try {
             DB::beginTransaction();
             foreach ($details as $item) {
-                $details = Details::firstOrCreate(['name' => $item['name'], 'user_id' => $item['user_id']]);
+                $details = Detail::firstOrCreate(['name' => $item['name'], 'user_id' => $item['user_id']]);
             }
 
             foreach ($transactions as &$item) {
-                $item['detail_id'] = Details::where('name', $item['name'])->first()->id;
+                $item['detail_id'] = Detail::where('name', $item['name'])->first()->id;
                 unset($item['name']);
             }
 
             Transaction::upsert(
                 $transactions,
                 ['detail_id'],
-                ['amount', 'date_operation']
+                ['amount', 'date_operation', 'type_transaction']
             );
             DB::commit();
         } catch (\Throwable $th) {
@@ -181,12 +182,9 @@ class PdfController extends Controller
      * @param string $filePath
      * @return string $decryptedFilePath
      */
-    private function decryptPdf($filePath)
+    private function decryptPdf($filePath, $password)
     {
         $decryptedFilePath = storage_path('app/uploads/decrypted_' . basename($filePath));
-
-        // Contraseña del archivo PDF
-        $password = '76288003'; // Cambiar por la contraseña del PDF
 
         // Comando para usar qpdf y desencriptar el archivo
         $command = sprintf(

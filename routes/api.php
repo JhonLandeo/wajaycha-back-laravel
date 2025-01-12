@@ -23,6 +23,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('hourly-data', [DashboardController::class, 'getHourlyData']);
     Route::post('monthly-data', [DashboardController::class, 'getMonthlyData']);
     Route::post('import-yape', [TransactionYapeController::class, 'import']);
+    Route::post('transaction-by-sub-category', [DashboardController::class, 'getTransactionBySubcategory']);
 
     Route::resource('categories', CategoryController::class);
     Route::resource('subcategories', SubcategoriesController::class);
@@ -30,6 +31,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::resource('imports', ImportController::class);
 
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
+    Route::get('get-summary-by-sub-category', [TransactionsController::class, 'getSummaryBySubCategory']);
 
     Route::post('chat', [ChatGptController::class, 'chat']);
     Route::post('extract-pdf-data', [PdfController::class, 'extractData']);

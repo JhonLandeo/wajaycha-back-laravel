@@ -18,12 +18,12 @@ class Detail extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function subCategory()
-    {
-        return $this->belongsTo(SubCategory::class);
-    }
-    public function transaction()
-    {
-        return $this->hasMany(Transaction::class);
-    }
+    // public function subCategory()
+    // {
+    //     return $this->belongsTo(SubCategory::class);
+    // }
+    // public function transaction()
+    // {
+    //     return $this->hasMany(Transaction::class);
+    // }
 }
