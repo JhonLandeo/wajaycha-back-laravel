@@ -21,7 +21,8 @@ class DashboardController extends Controller
             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense")
                 ->join('details as d', 'transactions.detail_id', '=',  'd.id')
                 ->whereYear('date_operation', $request->year)
-                ->where('d.user_id', $request->user_id)
+                ->whereYear('date_operation', $request->year)
+                ->where('transactions.user_id', $request->user_id)
                 ->first();
 
             $balance = Transaction::selectRaw("SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) AS total_income,
@@ -30,7 +31,8 @@ class DashboardController extends Controller
             - SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS balance")
                 ->join('details as d', 'transactions.detail_id', '=',  'd.id')
                 ->whereYear('date_operation', $request->year)
-                ->where('d.user_id', $request->user_id)
+                ->whereYear('date_operation', $request->year)
+                ->where('transactions.user_id', $request->user_id)
                 ->first();
 
             $data = [
@@ -50,28 +52,45 @@ class DashboardController extends Controller
     public function topFiveData(Request $request)
     {
         try {
-            $topExpenses = Transaction::selectRaw("SUM(amount) value, d.name name")
-                ->join('details as d', 'transactions.detail_id', '=',  'd.id')
-                ->where('type_transaction', '=', 'expense')
-                ->where('d.user_id', $request->user_id)
-                ->whereYear('date_operation', $request->year)
-                ->whereMonth('date_operation', $request->month)
+            $year = $request->input('year', null);
+            $month = $request->input('month', null);
+            $queryBase = DB::table('transactions as t')
+                ->selectRaw("CAST(SUM(amount) AS DECIMAL(10,2)) as value, d.name as name")
+                ->join('details as d', 't.detail_id', '=',  'd.id')
+                ->where('t.user_id', $request->user_id);
+
+            $queryIncomes = clone $queryBase;
+            $queryExpenses = clone $queryBase;
+            if ($month) {
+                $queryIncomes->whereMonth('date_operation', $month);
+                $queryExpenses->whereMonth('date_operation', $month);
+            }
+            if ($year) {
+                $queryIncomes->whereYear('date_operation', $year);
+                $queryExpenses->whereYear('date_operation', $year);
+            }
+            $topIncomes = $queryIncomes
+                ->where('type_transaction', 'income')
                 ->groupBy('d.name')
                 ->orderBy('value', 'desc')
                 ->limit(5)
-                ->get();
+                ->get()
+                ->map(function ($item) {
+                    $item->value = (float) $item->value;
+                    return $item;
+                });
 
-
-            $topIncomes = Transaction::selectRaw("SUM(amount) value, d.name name")
-                ->join('details as d', 'transactions.detail_id', '=',  'd.id')
-                ->where('type_transaction', '=', 'income')
-                ->where('d.user_id', $request->user_id)
-                ->whereYear('date_operation', $request->year)
-                ->whereMonth('date_operation', $request->month)
+            $topExpenses = $queryExpenses
+                ->where('type_transaction', 'expense')
                 ->groupBy('d.name')
                 ->orderBy('value', 'desc')
                 ->limit(5)
-                ->get();
+                ->get()
+                ->map(function ($item) {
+                    $item->value = (float) $item->value;
+                    return $item;
+                });
+
 
             $data = [
                 'top_five_expenses' => $topExpenses,
@@ -87,19 +106,28 @@ class DashboardController extends Controller
     public function getWeeklyData(Request $request)
     {
         try {
-            $data = Transaction::selectRaw(" ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
+            $year = $request->input('year', null);
+            $month = $request->input('month', null);
+            $query = DB::table('transactions as t')
+                ->selectRaw(" ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense,
             DAYOFWEEK(date_operation) day,
             DAYNAME(date_operation) name_day")
-                ->join('details as d', 'transactions.detail_id', '=',  'd.id')
-                ->where('d.user_id', $request->user_id)
-                ->whereYear('date_operation', $request->year)
-                ->whereMonth('date_operation', $request->month)
+                ->join('details as d', 't.detail_id', '=',  'd.id');
+            if ($year) {
+                $query->whereYear('date_operation', $year);
+            }
+            if ($month) {
+                $query->whereMonth('date_operation', $month);
+            }
+            $results =
+                $query
+                ->where('t.user_id', $request->user_id)
                 ->groupBy('day')
                 ->groupBy('name_day')
                 ->orderBy('day')
                 ->get();
-            return response()->json($data);
+            return response()->json($results);
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -112,7 +140,7 @@ class DashboardController extends Controller
              ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense,
             HOUR(date_operation) hour")
                 ->join('details as d', 'transactions.detail_id', '=',  'd.id')
-                ->where('d.user_id', $request->user_id)
+                ->where('transactions.user_id', $request->user_id)
                 ->whereYear('date_operation', $request->year)
                 ->groupBY('hour')
                 ->orderBy('hour')
@@ -127,12 +155,23 @@ class DashboardController extends Controller
     public function getMonthlyData(Request $request)
     {
         try {
-            $data = Transaction::selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_monthly_income,
-             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_monthly_expense,
+            $selectValidate = $request->isChecked ?
+                "ROUND(COUNT(CASE 
+                WHEN type_transaction = 'income' THEN t.id END),2) AS count_monthly_income,
+             ROUND(COUNT(CASE 
+                WHEN type_transaction = 'expense' THEN t.id END),2) AS count_monthly_expense" :
+                "ROUND(SUM(CASE 
+                WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_monthly_income,
+             ROUND(SUM(CASE 
+                WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_monthly_expense";
+
+
+            $data = DB::table('transactions as t')
+                ->selectRaw("$selectValidate,
             MONTH(date_operation) month,
             MONTHNAME(date_operation) name_month")
-                ->join('details as d', 'transactions.detail_id', '=',  'd.id')
-                ->where('d.user_id', $request->user_id)
+                ->join('details as d', 't.detail_id', '=',  'd.id')
+                ->where('t.user_id', $request->user_id)
                 ->whereYear('date_operation', $request->year)
                 ->groupBy('month')
                 ->groupBy('name_month')
@@ -151,37 +190,45 @@ class DashboardController extends Controller
         $type = $request->input('type', null);
         $userId = $request->input('user_id', null);
 
-        $query = Transaction::leftJoin('details as d', 'd.id', '=', 'transactions.detail_id')
-            ->leftJoin('sub_categories as sc', 'sc.id', '=', 'transactions.sub_category_id')
+        $query = DB::table('transactions as t')
+            ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
+            ->leftJoin('sub_categories as sc', 'sc.id', '=', 't.sub_category_id')
             ->select(
                 DB::raw('COALESCE(sc.name, "Sin categorizar") as name'),
                 DB::raw('COUNT(*) as quantity'),
-                DB::raw('SUM(transactions.amount) as total')
-            )
-            ->where('transactions.type_transaction', 'expense');
+                DB::raw(" SUM(CASE 
+                    WHEN t.type_transaction = 'expense' THEN t.amount 
+                    WHEN t.type_transaction = 'income' THEN -t.amount 
+                    ELSE 0 
+                END) as total")
+            );
 
         if ($year) {
-            $query->whereYear('transactions.date_operation', $year);
+            $query->whereYear('t.date_operation', $year);
         }
 
         if ($month) {
-            $query->whereMonth('transactions.date_operation', $month);
+            $query->whereMonth('t.date_operation', $month);
         }
 
         // if ($type) {
-        //     $query->where('transactions.type_transaction', $type);
+        //     $query->where('t.type_transaction', $type);
         // }
 
         if ($userId) {
-            $query->where('d.user_id', $userId);
+            $query->where('t.user_id', $userId);
         }
 
         $results = $query->groupBy('sc.name')
-            ->orderBy(DB::raw('SUM(transactions.amount)'), 'desc')
+            ->orderBy(DB::raw('total'), 'desc')
             ->get();
 
+        $filter = $results->filter(function ($item) {
+            return $item->total > 0;
+        });
 
 
-        return response()->json($results);
+
+        return response()->json($filter);
     }
 }

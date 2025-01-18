@@ -35,4 +35,5 @@ Route::middleware([JwtMiddleware::class])->group(function () {
 
     Route::post('chat', [ChatGptController::class, 'chat']);
     Route::post('extract-pdf-data', [PdfController::class, 'extractData']);
+    Route::post('export-transactions', [TransactionsController::class, 'exportTransaction']);
 });

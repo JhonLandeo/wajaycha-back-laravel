@@ -19,6 +19,7 @@ return new class extends Migration
             $table->timestamp('date_operation');
             $table->enum('type_transaction', ['income', 'expense']);
             $table->foreign('subcategory_id')->references('id')->on('subcategories');
+            $table->foreignId('user_id')->constrained();
             $table->timestamps();
         });
     }

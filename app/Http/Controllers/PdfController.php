@@ -29,7 +29,7 @@ class PdfController extends Controller
     public function extractData(PdfRequest $request)
     {
 
-        
+
         // Obtener el archivo PDF desde la solicitud
         $file = $request->file('file');
         $originalName = $file->getClientOriginalName();
@@ -92,9 +92,10 @@ class PdfController extends Controller
                 $dayMonth = $day . $monthFormat;
                 $transactions[] = [
                     'amount' => $income == 0 ? floatval(str_replace(',', '', $expense)) : floatval(str_replace(',', '', $income)),
-                    'date_operation' => Carbon::createFromLocaleFormat('dM', 'es', $dayMonth)->setYear($year),
+                    'date_operation' => Carbon::createFromLocaleFormat('dM', 'es', $dayMonth)->setYear($year)->format('Y-m-d 00:00:00'),
                     'type_transaction' => $income == 0 ? 'expense' : 'income',
                     'name' => $description,
+                    'user_id' => $request->user_id,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
@@ -102,7 +103,7 @@ class PdfController extends Controller
                     'name' => $description,
                     'created_at' => now(),
                     'updated_at' => now(),
-                    'user_id' => $request->user_id,
+
                 ];
             }
         }
@@ -110,7 +111,7 @@ class PdfController extends Controller
         try {
             DB::beginTransaction();
             foreach ($details as $item) {
-                $details = Detail::firstOrCreate(['name' => $item['name'], 'user_id' => $item['user_id']]);
+                Detail::firstOrCreate(['name' => $item['name']]);
             }
 
             foreach ($transactions as &$item) {
@@ -118,11 +119,52 @@ class PdfController extends Controller
                 unset($item['name']);
             }
 
-            Transaction::upsert(
-                $transactions,
-                ['detail_id'],
-                ['amount', 'date_operation', 'type_transaction']
-            );
+            Log::info($transactions);
+
+            // Transaction::upsert(
+            //     $transactions,
+            //     ['detail_id', 'amount', 'date_operation', 'type_transaction', 'user_id'],
+            //     ['amount', 'date_operation', 'type_transaction']
+            // );
+            // $transactions = [
+            //     ['detail_id' => 670, 'amount' => 10.0, 'date_operation' => '2024-11-30 00:00:00', 'type_transaction' => 'income'],
+            //     ['detail_id' => 315, 'amount' => 10.0, 'date_operation' => '2024-11-30 00:00:00', 'type_transaction' => 'income'],
+            // ];
+            // Transaction::upsert($transactions, ['detail_id'], ['amount', 'date_operation', 'type_transaction']);
+
+            $existingTransactions = Transaction::whereIn('detail_id', array_column($transactions, 'detail_id'))
+                ->whereIn('date_operation', array_column($transactions, 'date_operation'))
+                ->whereIn('user_id', array_column($transactions, 'user_id'))
+                ->whereIn('amount', array_column($transactions, 'amount'))
+                ->get(['detail_id', 'date_operation', 'user_id', 'amount'])
+                ->toArray();
+
+
+
+            $filteredTransactions = array_filter($transactions, function ($transaction) use ($existingTransactions) {
+                foreach ($existingTransactions as $existing) {
+                    if (
+                        $transaction['detail_id'] == $existing['detail_id'] &&
+                        $transaction['date_operation'] == $existing['date_operation'] &&
+                        $transaction['user_id'] == $existing['user_id'] &&
+                        $transaction['amount'] == $existing['amount']
+                    ) {
+                        return false; // Si coincide, no incluirlo
+                    }
+                }
+                return true; // Si no coincide, incluirlo
+            });
+
+            Transaction::insert($filteredTransactions);
+
+
+            // Transaction::upsert(
+            //     $filteredTransactions,
+            //     ['detail_id'], // Comparar por esta columna
+            //     ['amount', 'date_operation', 'type_transaction']
+            // );
+
+
             DB::commit();
         } catch (\Throwable $th) {
             DB::rollBack();
