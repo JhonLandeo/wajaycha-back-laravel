@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PdfRequest;
+use App\Models\FinancialEntity;
 use App\Models\Import;
+use App\Models\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -21,11 +23,23 @@ class ImportController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
-        $data = Import::where('user_id', $request->user_id)
-        ->paginate($perPage, ['*'], 'page', $page);
+
+        $query = DB::table('imports as i')
+            ->select('i.*', 'fe.name as financial_name')
+            ->leftJoin('financial_entities as fe', 'financial_id', '=', 'fe.id')
+            ->where('user_id', $request->user_id);
+
+        $data = $query->paginate($perPage, ['*'], 'page', $page);
+
+        $data->getCollection()->transform(function ($item) {
+            $url = Storage::url('file/' . $item->name);
+            $item->url = $url;
+            return $item;
+        });
 
         return response()->json($data);
     }
+
 
     /**
      * Show the form for creating a new resource.
@@ -103,5 +117,16 @@ class ImportController extends Controller
     public function destroy(Import $import)
     {
         return $import->delete();
+    }
+
+
+    public function getBank()
+    {
+        return FinancialEntity::get();
+    }
+
+    public function getService()
+    {
+        return PaymentService::get();
     }
 }

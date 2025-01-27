@@ -20,6 +20,8 @@ return new class extends Migration
             $table->string('url');
             $table->bigInteger('size');
             $table->foreignId('user_id')->constrained();
+            $table->bigInteger('financial_id')->unsigned();
+            $table->foreign('financial_id')->references('id')->on('financial_entities');
             $table->timestamps();
         });
     }
