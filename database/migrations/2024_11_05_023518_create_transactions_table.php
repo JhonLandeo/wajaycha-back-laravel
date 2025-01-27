@@ -18,7 +18,8 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
             $table->timestamp('date_operation');
             $table->enum('type_transaction', ['income', 'expense']);
-            $table->foreign('subcategory_id')->references('id')->on('subcategories');
+            $table->unsignedBigInteger('subcategory_id')->nullable();
+            $table->foreign('subcategory_id')->references('id')->on('sub_categories');
             $table->foreignId('user_id')->constrained();
             $table->timestamps();
         });
