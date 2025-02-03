@@ -106,31 +106,37 @@ class TransactionsController extends Controller
         $type = $request->input('type', null);
         $userId = $request->input('user_id', null);
 
-        $query = Transaction::join('details as d', 'd.id', '=', 'transactions.detail_id')
-            ->join('sub_categories as sc', 'sc.id', '=', 'd.sub_category_id')
+        $query = DB::table('transactions as t')
+            ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
+            ->leftJoin('sub_categories as sc', 'sc.id', '=', 't.sub_category_id')
             ->select(
-                'sc.name',
+                DB::raw('COALESCE(sc.name, "Sin categorizar") as name'),
                 DB::raw('COUNT(*) as quantity'),
-                DB::raw('SUM(transactions.amount) as total')
+                DB::raw(" SUM(CASE 
+                    WHEN t.type_transaction = 'expense' THEN t.amount 
+                    WHEN t.type_transaction = 'income' THEN -t.amount 
+                    ELSE 0 
+                END) as total")
             );
 
-        // Aplicamos los filtros condicionales
         if ($year) {
-            $query->whereYear('transactions.date_operation', $year);
-        }
-        if ($month) {
-            $query->whereMonth('transactions.date_operation', $month);
-        }
-        if ($type) {
-            $query->where('transactions.type_transaction', $type);
-        }
-        if ($userId) {
-            $query->where('transactions.user_id', $userId);
+            $query->whereYear('t.date_operation', $year);
         }
 
-        // Realizamos la paginación
+        if ($month) {
+            $query->whereMonth('t.date_operation', $month);
+        }
+
+        if ($type) {
+            $query->where('t.type_transaction', $type);
+        }
+
+        if ($userId) {
+            $query->where('t.user_id', $userId);
+        }
+
         $results = $query->groupBy('sc.name')
-            ->orderBy(DB::raw('SUM(transactions.amount)'), 'desc')
+            ->orderBy(DB::raw('total'), 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
 
         // Devolvemos la respuesta en formato JSON

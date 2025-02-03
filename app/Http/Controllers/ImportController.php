@@ -73,6 +73,7 @@ class ImportController extends Controller
                 'url' => $url,
                 'size' => $size,
                 'user_id' => $request->user_id,
+                'financial_id' => $request->financial,
                 'created_at' => now()
             ]);
 

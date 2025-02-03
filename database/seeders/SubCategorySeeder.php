@@ -15,7 +15,7 @@ class SubCategorySeeder extends Seeder
     {
         $categories = DB::table('categories')->pluck('id', 'name');
 
-        DB::table('subcategories')->insert([
+        DB::table('sub_categories')->insert([
             // Fijos
             ['name' => 'Vivienda', 'category_id' => $categories['Fijos'], 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Telefonia', 'category_id' => $categories['Fijos'], 'created_at' => now(), 'updated_at' => now()],
