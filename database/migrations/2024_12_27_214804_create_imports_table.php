@@ -20,6 +20,11 @@ return new class extends Migration
             $table->string('url');
             $table->bigInteger('size');
             $table->foreignId('user_id')->constrained();
+<<<<<<< Updated upstream
+=======
+            $table->unsignedBigInteger('financial_id')->nullable();
+            $table->foreign('financial_id')->references('id')->on('financial_entities');
+>>>>>>> Stashed changes
             $table->timestamps();
         });
     }

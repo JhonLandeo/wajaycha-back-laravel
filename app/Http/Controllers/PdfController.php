@@ -237,6 +237,7 @@ class PdfController extends Controller
         );
 
 
+        Log::info(['command' => $command]);
         exec($command, $output, $returnVar);
 
 
