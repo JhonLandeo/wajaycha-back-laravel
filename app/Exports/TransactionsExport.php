@@ -9,7 +9,7 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 class TransactionsExport implements FromCollection, WithHeadings
 {
 
-    // 
+    // export
     protected $data;
 
     public function __construct(Collection $data)
