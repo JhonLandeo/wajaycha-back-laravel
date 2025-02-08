@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
+        $middleware->validateCsrfTokens(except: [
+            'wajaycha.netlify.app',
+            'wajaycha.netlify.app/*',
+        ]);
         
     })
     ->withExceptions(function (Exceptions $exceptions) {
