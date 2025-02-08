@@ -15,11 +15,11 @@ return [
     |
     */
 
-    'paths' => ['*'],
+    'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [env('FRONTEND_URL', 'https://wajaycha.netlify.app')],
+    'allowed_origins' => ['https://wajaycha.netlify.app'],
 
     'allowed_origins_patterns' => [],
 
