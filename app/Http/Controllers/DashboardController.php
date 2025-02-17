@@ -36,8 +36,8 @@ class DashboardController extends Controller
                 ->first();
 
             $data = [
-                'avg_daily_income' => ['amount' => (float) $avg->avg_daily_income, 'title' => 'AVG Daily Income', 'type' => 'income'],
-                'avg_daily_expense' => ['amount' => (float) $avg->avg_daily_expense, 'title' => 'AVG Daily Expense', 'type' => 'expense'],
+                'avg_daily_income' => ['amount' => (float) $avg->avg_daily_income, 'title' => 'AVG Ingreso diario', 'type' => 'income'],
+                'avg_daily_expense' => ['amount' => (float) $avg->avg_daily_expense, 'title' => 'AVG Gasto diario', 'type' => 'expense'],
                 'total_income' => ['amount' => (float) $balance->total_income, 'title' => 'Total de ingresos', 'type' => 'income'],
                 'total_expense' => ['amount' => (float) $balance->total_expense, 'title' => 'Total de gastos', 'type' => 'expense'],
                 'balance' => ['amount' => (float) $balance->balance, 'title' => 'Balance'],
@@ -106,6 +106,8 @@ class DashboardController extends Controller
     public function getWeeklyData(Request $request)
     {
         try {
+            DB::statement("SET lc_time_names = 'es_ES'");
+
             $year = $request->input('year', null);
             $month = $request->input('month', null);
             $query = DB::table('transactions as t')
@@ -127,6 +129,9 @@ class DashboardController extends Controller
                 ->groupBy('name_day')
                 ->orderBy('day')
                 ->get();
+            foreach ($results as $result) {
+                $result->name_day = ucfirst($result->name_day);
+            }
             return response()->json($results);
         } catch (\Throwable $th) {
             throw $th;
@@ -155,6 +160,8 @@ class DashboardController extends Controller
     public function getMonthlyData(Request $request)
     {
         try {
+            DB::statement("SET lc_time_names = 'es_ES'");
+
             $selectValidate = $request->isChecked ?
                 "ROUND(COUNT(CASE 
                 WHEN type_transaction = 'income' THEN t.id END),2) AS count_monthly_income,
@@ -177,6 +184,9 @@ class DashboardController extends Controller
                 ->groupBy('name_month')
                 ->orderBy('month')
                 ->get();
+            foreach ($data as $item) {
+                $item->name_month = ucfirst($item->name_month);
+            }
             return response()->json($data);
         } catch (\Throwable $th) {
             throw $th;
