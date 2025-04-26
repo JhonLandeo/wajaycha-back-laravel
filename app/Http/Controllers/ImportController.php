@@ -6,6 +6,7 @@ use App\Http\Requests\PdfRequest;
 use App\Models\FinancialEntity;
 use App\Models\Import;
 use App\Models\PaymentService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -19,7 +20,7 @@ class ImportController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
@@ -31,28 +32,17 @@ class ImportController extends Controller
 
         $data = $query->paginate($perPage, ['*'], 'page', $page);
 
-        $data->getCollection()->transform(function ($item) {
-            $url = Storage::url('file/' . $item->name);
-            $item->url = $url;
-            return $item;
-        });
+        foreach ($data->items() as $item) {
+            $item->url = Storage::url('files/' . $item->name);
+        }
 
         return response()->json($data);
-    }
-
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(PdfRequest $request)
+    public function store(PdfRequest $request) : JsonResponse
     {
         try {
             $file = $request->file('file');
@@ -89,45 +79,33 @@ class ImportController extends Controller
     }
 
     /**
-     * Display the specified resource.
-     */
-    public function show(Import $import)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Import $import)
-    {
-        //
-    }
-
-    /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Import $import)
+    public function update(Request $request, Import $import): JsonResponse  
     {
-        return $import->update($request->all());
+        $data = $import->update($request->all());
+        return response()->json($data);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Import $import)
+    public function destroy(Import $import): JsonResponse
     {
-        return $import->delete();
+        $data = $import->delete();
+        return response()->json($data);
     }
 
 
-    public function getBank()
+    public function getBank(): JsonResponse
     {
-        return FinancialEntity::get();
+        $data = FinancialEntity::get();
+        return response()->json($data);
     }
 
-    public function getService()
+    public function getService(): JsonResponse  
     {
-        return PaymentService::get();
+        $data = PaymentService::get();
+        return response()->json($data);
     }
 }

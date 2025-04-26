@@ -3,9 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Detail;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
+/**
+ * @property-read Detail $detail
+ */
 class Transaction extends Model
 {
+    protected $table = 'transactions';
     protected $guarded = [];
     protected $fillable = [
         'name',
@@ -14,35 +21,20 @@ class Transaction extends Model
         'amount',
         'created_at',
         'updated_at',
-        'details_id',
+        'detail_id',
     ];
 
     protected $casts = [
         'value' => 'float',
     ];
 
-
-    // Relación Has One con Detail (una transacción tiene un solo detalle)
-    public function detail()
+    public function detail(): BelongsTo
     {
-        return $this->belongsTo(Detail::class);
+        return $this->belongsTo(Detail::class, 'detail_id');
     }
 
-    // // Relación Has One Through para obtener la subcategoría
-    // public function subCategory()
-    // {
-    //     return $this->hasOneThrough(
-    //         SubCategory::class, 
-    //         Detail::class,  
-    //         'id',               // Clave foránea en `details` que apunta a `transactions`
-    //         'id',               // Clave foránea en `sub_categories` que apunta a `details`
-    //         'detail_id',        // Clave local en `transactions` que apunta a `details`
-    //         'sub_category_id'   // Clave local en `details` que apunta a `sub_categories`
-    //     );
-    // }
 
-    // Relación Has One Through para obtener la categoría
-    public function category()
+    public function category(): HasOneThrough
     {
         return $this->hasOneThrough(Category::class, SubCategory::class);
     }

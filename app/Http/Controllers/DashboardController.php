@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Imports\ExpensesImport;
 use App\Imports\TransactionYapeImport;
 use App\Models\Transaction;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -14,10 +15,11 @@ class DashboardController extends Controller
 {
 
 
-    public function kpiData(Request $request)
+    public function kpiData(Request $request): JsonResponse
     {
         try {
-            $avg = Transaction::selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
+            $avg = DB::table('transactions')
+                ->selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense")
                 ->join('details as d', 'transactions.detail_id', '=',  'd.id')
                 ->whereYear('date_operation', $request->year)
@@ -25,7 +27,8 @@ class DashboardController extends Controller
                 ->where('transactions.user_id', $request->user_id)
                 ->first();
 
-            $balance = Transaction::selectRaw("SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) AS total_income,
+            $balance = DB::table('transactions')
+                ->selectRaw("SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) AS total_income,
             SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS total_expense,
             SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) 
             - SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS balance")
@@ -49,7 +52,7 @@ class DashboardController extends Controller
         }
     }
 
-    public function topFiveData(Request $request)
+    public function topFiveData(Request $request): JsonResponse
     {
         try {
             $year = $request->input('year', null);
@@ -103,16 +106,26 @@ class DashboardController extends Controller
         }
     }
 
-    public function getWeeklyData(Request $request)
+    public function getWeeklyData(Request $request): JsonResponse
     {
         try {
             DB::statement("SET lc_time_names = 'es_ES'");
 
+            $isChecked = $request->input('isChecked', false);
+            $selectValidate = $isChecked ?
+                "ROUND(COUNT(CASE 
+                WHEN type_transaction = 'income' THEN t.id END),2) AS count_weekly_income,
+             ROUND(COUNT(CASE 
+                WHEN type_transaction = 'expense' THEN t.id END),2) AS count_weekly_expense" :
+                "ROUND(SUM(CASE 
+                WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_weekly_income,
+             ROUND(SUM(CASE 
+                WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_weekly_expense";    
+
             $year = $request->input('year', null);
             $month = $request->input('month', null);
             $query = DB::table('transactions as t')
-                ->selectRaw(" ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
-            ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense,
+                ->selectRaw("$selectValidate,
             DAYOFWEEK(date_operation) day,
             DAYNAME(date_operation) name_day")
                 ->join('details as d', 't.detail_id', '=',  'd.id');
@@ -138,7 +151,7 @@ class DashboardController extends Controller
         }
     }
 
-    public function getHourlyData(Request $request)
+    public function getHourlyData(Request $request): JsonResponse
     {
         try {
             $data = Transaction::selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
@@ -157,7 +170,7 @@ class DashboardController extends Controller
         }
     }
 
-    public function getMonthlyData(Request $request)
+    public function getMonthlyData(Request $request): JsonResponse
     {
         try {
             DB::statement("SET lc_time_names = 'es_ES'");
@@ -193,7 +206,7 @@ class DashboardController extends Controller
         }
     }
 
-    public function getTransactionBySubcategory(Request $request)
+    public function getTransactionBySubcategory(Request $request): JsonResponse
     {
         $year = $request->input('year', null);
         $month = $request->input('month', null);

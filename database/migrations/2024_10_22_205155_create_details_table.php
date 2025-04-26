@@ -13,9 +13,7 @@ return new class extends Migration
     {
         Schema::create('details', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('subcategory_id')->nullable();
             $table->foreign('subcategory_id')->references('id')->on('sub_categories');
-            // $table->foreignId('user_id')->constrained();
             $table->string('name');
             $table->timestamps();
         });

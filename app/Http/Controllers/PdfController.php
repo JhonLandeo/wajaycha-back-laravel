@@ -10,11 +10,13 @@ use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use DateTime;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Js;
 use Smalot\PdfParser\Parser;
 use thiagoalessio\TesseractOCR\TesseractOCR;
 use setasign\Fpdi\Fpdi;
@@ -26,7 +28,7 @@ class PdfController extends Controller
         App::setLocale('es');
         Carbon::setLocale('es');
     }
-    public function extractData(PdfRequest $request)
+    public function extractData(PdfRequest $request): JsonResponse
     {
 
 
@@ -98,6 +100,7 @@ class PdfController extends Controller
                     'user_id' => $request->user_id,
                     'created_at' => now(),
                     'updated_at' => now(),
+                    'detail_id' => null,
                 ];
                 $details[] = [
                     'name' => $description,
@@ -115,22 +118,15 @@ class PdfController extends Controller
             }
 
             foreach ($transactions as &$item) {
-                $item['detail_id'] = Detail::where('name', $item['name'])->first()->id;
+                $detail = Detail::where('name', $item['name'])->first();
+                if ($detail) {
+                    $item['detail_id'] = $detail->id;
+                } else {
+                    continue;
+                }
                 unset($item['name']);
             }
 
-            Log::info($transactions);
-
-            // Transaction::upsert(
-            //     $transactions,
-            //     ['detail_id', 'amount', 'date_operation', 'type_transaction', 'user_id'],
-            //     ['amount', 'date_operation', 'type_transaction']
-            // );
-            // $transactions = [
-            //     ['detail_id' => 670, 'amount' => 10.0, 'date_operation' => '2024-11-30 00:00:00', 'type_transaction' => 'income'],
-            //     ['detail_id' => 315, 'amount' => 10.0, 'date_operation' => '2024-11-30 00:00:00', 'type_transaction' => 'income'],
-            // ];
-            // Transaction::upsert($transactions, ['detail_id'], ['amount', 'date_operation', 'type_transaction']);
 
             $existingTransactions = Transaction::whereIn('detail_id', array_column($transactions, 'detail_id'))
                 ->whereIn('date_operation', array_column($transactions, 'date_operation'))
@@ -138,8 +134,6 @@ class PdfController extends Controller
                 ->whereIn('amount', array_column($transactions, 'amount'))
                 ->get(['detail_id', 'date_operation', 'user_id', 'amount'])
                 ->toArray();
-
-
 
             $filteredTransactions = array_filter($transactions, function ($transaction) use ($existingTransactions) {
                 foreach ($existingTransactions as $existing) {
@@ -149,30 +143,19 @@ class PdfController extends Controller
                         $transaction['user_id'] == $existing['user_id'] &&
                         $transaction['amount'] == $existing['amount']
                     ) {
-                        return false; // Si coincide, no incluirlo
+                        return false;
                     }
                 }
-                return true; // Si no coincide, incluirlo
+                return true;
             });
 
             Transaction::insert($filteredTransactions);
-
-
-            // Transaction::upsert(
-            //     $filteredTransactions,
-            //     ['detail_id'], // Comparar por esta columna
-            //     ['amount', 'date_operation', 'type_transaction']
-            // );
-
 
             DB::commit();
         } catch (\Throwable $th) {
             DB::rollBack();
             throw $th;
         }
-
-
-
 
         return response()->json($transactions);
     }
@@ -212,7 +195,7 @@ class PdfController extends Controller
         try {
             $pdf->setSourceFile($filePath);
             return false;
-        } catch (\setasign\Fpdi\PdfParser\PDFParserException $e) {
+        } catch (\setasign\Fpdi\PdfParser\PdfParserException $e) {
 
             return true; // El archivo está encriptado
         }
@@ -222,6 +205,7 @@ class PdfController extends Controller
      * Desencripta un archivo PDF usando qpdf.
      *
      * @param string $filePath
+     * @param string $password
      * @return string $decryptedFilePath
      */
     private function decryptPdf($filePath, $password)

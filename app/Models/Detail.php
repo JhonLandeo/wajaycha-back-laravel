@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Transaction;
 class Detail extends Model
 {
+    protected $table = 'details';
     protected $guarded = [];
 
     protected $fillable = [
@@ -13,17 +15,8 @@ class Detail extends Model
         'user_id',
     ];
 
-    public function user()
+    public function transactions(): HasMany
     {
-        return $this->belongsTo(User::class);
+        return $this->hasMany(Transaction::class, 'detail_id');
     }
-
-    // public function subCategory()
-    // {
-    //     return $this->belongsTo(SubCategory::class);
-    // }
-    // public function transaction()
-    // {
-    //     return $this->hasMany(Transaction::class);
-    // }
 }
