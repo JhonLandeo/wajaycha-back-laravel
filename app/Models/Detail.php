@@ -13,6 +13,7 @@ class Detail extends Model
     protected $fillable = [
         'name',
         'user_id',
+        'sub_category_id',
     ];
 
     public function transactions(): HasMany

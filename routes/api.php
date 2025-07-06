@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DetailsController;
 use App\Http\Controllers\ImportController;
 use App\Http\Controllers\PdfController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SubcategoriesController;
 use App\Http\Controllers\TransactionsController;
 use App\Http\Controllers\TransactionYapeController;
@@ -29,6 +30,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::resource('subcategories', SubcategoriesController::class);
     Route::resource('transactions', TransactionsController::class);
     Route::resource('imports', ImportController::class);
+    Route::resource('details', DetailsController::class);
 
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
     Route::get('get-summary-by-sub-category', [TransactionsController::class, 'getSummaryBySubCategory']);

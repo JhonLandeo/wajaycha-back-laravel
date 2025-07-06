@@ -18,25 +18,40 @@ class DashboardController extends Controller
     public function kpiData(Request $request): JsonResponse
     {
         try {
-            $avg = DB::table('transactions')
+            $year = $request->input('year', null);
+            $month = $request->input('month', null);
+            $avgBase = DB::table('transactions')
                 ->selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense")
-                ->join('details as d', 'transactions.detail_id', '=',  'd.id')
-                ->whereYear('date_operation', $request->year)
-                ->whereYear('date_operation', $request->year)
-                ->where('transactions.user_id', $request->user_id)
+                ->join('details as d', 'transactions.detail_id', '=',  'd.id');
+
+
+            if ($month) {
+                $avg = $avgBase->whereMonth('date_operation', $month);
+            }
+            if ($year) {
+                $avg = $avgBase->whereYear('date_operation', $year);
+            }
+
+            $avg = $avgBase->where('transactions.user_id', $request->user_id)
                 ->first();
 
-            $balance = DB::table('transactions')
+            $balanceBase = DB::table('transactions')
                 ->selectRaw("SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) AS total_income,
             SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS total_expense,
             SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) 
-            - SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS balance")
-                ->join('details as d', 'transactions.detail_id', '=',  'd.id')
-                ->whereYear('date_operation', $request->year)
-                ->whereYear('date_operation', $request->year)
-                ->where('transactions.user_id', $request->user_id)
+            - SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS balance");
+
+            if ($month) {
+                $balance = $balanceBase->whereMonth('date_operation', $month);
+            }
+            if ($year) {
+                $balance = $balanceBase->whereYear('date_operation', $year);
+            }
+
+            $balance = $balanceBase->where('transactions.user_id', $request->user_id)
                 ->first();
+
 
             $data = [
                 'avg_daily_income' => ['amount' => (float) $avg->avg_daily_income, 'title' => 'AVG Ingreso diario', 'type' => 'income'],
@@ -120,7 +135,7 @@ class DashboardController extends Controller
                 "ROUND(SUM(CASE 
                 WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_weekly_income,
              ROUND(SUM(CASE 
-                WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_weekly_expense";    
+                WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_weekly_expense";
 
             $year = $request->input('year', null);
             $month = $request->input('month', null);
@@ -186,17 +201,21 @@ class DashboardController extends Controller
                 WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_monthly_expense";
 
 
-            $data = DB::table('transactions as t')
+            $baseQuery = DB::table('transactions as t')
                 ->selectRaw("$selectValidate,
-            MONTH(date_operation) month,
-            MONTHNAME(date_operation) name_month")
+                MONTH(date_operation) month,
+                MONTHNAME(date_operation) name_month")
                 ->join('details as d', 't.detail_id', '=',  'd.id')
-                ->where('t.user_id', $request->user_id)
-                ->whereYear('date_operation', $request->year)
-                ->groupBy('month')
+                ->where('t.user_id', $request->user_id);
+
+            if ($request->year) {
+                $baseQuery->whereYear('date_operation', $request->year);
+            }
+
+            $data = $baseQuery->groupBy('month')
                 ->groupBy('name_month')
-                ->orderBy('month')
-                ->get();
+                ->orderBy('month')->get();
+
             foreach ($data as $item) {
                 $item->name_month = ucfirst($item->name_month);
             }

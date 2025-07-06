@@ -6,6 +6,7 @@ use App\Exports\TransactionsExport;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Js;
@@ -31,87 +32,44 @@ class TransactionsController extends Controller
         $weekend = filter_var($request->input('weekend', false), FILTER_VALIDATE_BOOLEAN);
         $workday = filter_var($request->input('workday', false), FILTER_VALIDATE_BOOLEAN);
 
+        $procedure = $recurring ? 'get_transactions_by_detail' : 'get_transactions';
 
-        $subQuery = "
-            (SELECT JSON_ARRAYAGG(JSON_OBJECT(
-                'date_operation', yape_trans.date_operation,
-                'amount', yape_trans.amount,
-                'origin', yape_trans.origin,
-                'destination', yape_trans.destination,
-                'type_transaction', yape_trans.type_transaction,
-                'message', yape_trans.message
-            ))
-            FROM transaction_yapes yape_trans
-            WHERE yape_trans.amount = transactions.amount
-              AND yape_trans.user_id = $userId
-              AND DATE(yape_trans.date_operation) = DATE(transactions.date_operation)
-            ) AS relation
-        ";
+        $statement = DB::select("CALL $procedure(?,?,?,?,?,?,?,?,?,?,?,?)", [
+            $perPage,
+            $page,
+            $year,
+            $month,
+            $type,
+            $amount,
+            $search,
+            $subCategory,
+            $userId,
+            $recurring,
+            $weekend,
+            $workday
+        ]);
 
-        $subQueryFrequency = "(
-            SELECT
-                COUNT(*)
-            FROM
-                transactions t2
-            WHERE
-                t2.detail_id = transactions.detail_id
-            GROUP BY
-                t2.detail_id ) as frequency";
-
-        $query = Transaction::with('detail')
-            ->join('details as d', 'd.id', '=', 'transactions.detail_id')
-            ->selectRaw("transactions.*, $subQuery")
-            ->selectRaw("transactions.*, $subQueryFrequency");
-
-        if ($year) {
-            $query->whereYear('date_operation', $year);
+        foreach ($statement as $key => $value) {
+            if (!$recurring) {
+                $statement[$key]->yape_trans = json_decode($value->yape_trans);
+            } else {
+                $statement[$key]->child_transactions = json_decode($value->child_transactions);
+            }
         }
 
-        if ($month) {
-            $query->whereMonth('date_operation', $month);
+        $total = 0;
+        if(!empty($statement)){
+            $total = $statement[0]->total_count;
         }
 
-        if ($weekend) {
-            $query->whereIn(DB::raw('DAYOFWEEK(date_operation)'), [1, 7]);
-        }
+        $paginator = new LengthAwarePaginator(
+            $statement,
+            $total,
+            $perPage,
+            $page
+        );
 
-        if ($workday) {
-            $query->whereBetween(DB::raw('DAYOFWEEK(date_operation)'), [2, 6]);
-        }
-
-
-        if ($type) {
-            $query->where('type_transaction', $type);
-        }
-        if ($amount && $amount != 0.00) {
-            $query->where('amount', $amount);
-        }
-
-        if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->whereLike('d.name', "%$search%")
-                    ->orWhereRaw("EXISTS (
-                      SELECT 1
-                      FROM transaction_yapes yape_trans
-                      WHERE yape_trans.amount = transactions.amount
-                        AND DATE(yape_trans.date_operation) = DATE(transactions.date_operation)
-                        AND yape_trans.destination LIKE ?)", ["%$search%"]);
-            });
-        }
-
-        if ($subCategory && $subCategory == 'without_sub_category') {
-            $query->whereNull('transactions.sub_category_id');
-        } elseif ($subCategory) {
-            $query->where('transactions.sub_category_id', $subCategory);
-        }
-        $query->where('transactions.user_id', $userId);
-        if ($recurring) {
-            $query->orderBy('frequency', 'desc');
-        }
-        $data = $query->orderBy('transactions.date_operation', 'desc')
-            ->paginate($perPage, ['*'], 'page', $page);
-
-        return response()->json($data);
+        return response()->json($paginator);
     }
 
 

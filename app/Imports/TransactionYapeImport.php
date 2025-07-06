@@ -4,6 +4,7 @@ namespace App\Imports;
 
 use App\Models\TransactionYape;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Imports\HeadingRowFormatter;
@@ -46,8 +47,27 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             }
         }
 
-        return TransactionYape::firstOrCreate(
-            [
+        $toleranceInSeconds = 60;
+        $startDate = Carbon::parse($dateOperation)->subSeconds($toleranceInSeconds);
+        $endDate = Carbon::parse($dateOperation)->addSeconds($toleranceInSeconds);
+        Log::info('Date Operation: ' . $dateOperation);
+        Log::info('Start Date: ' . $startDate);
+        Log::info('End Date: ' . $endDate);
+
+        $yapeRecord = TransactionYape::where('message', $row['Mensaje'])
+            ->where('message', $row['Mensaje'])
+            ->where('origin', $row['Origen'])
+            ->where('destination', $row['Destino'])
+            ->where('amount', (float) $row['Monto'])
+            ->whereBetween('date_operation', [$startDate, $endDate])
+            ->where('type_transaction', $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income')
+            ->where('user_id', 1)
+            ->first();
+
+        if ($yapeRecord) {
+            return;
+        } else {
+            return  TransactionYape::create([
                 'message' => $row['Mensaje'],
                 'origin' => $row['Origen'],
                 'destination' => $row['Destino'],
@@ -55,8 +75,20 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
                 'date_operation' => $dateOperation,
                 'type_transaction' => $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income',
                 'user_id' => 1,
-            ]
-        );
+            ]);
+        }
+
+        // return TransactionYape::firstOrCreate(
+        //     [
+        //         'message' => $row['Mensaje'],
+        //         'origin' => $row['Origen'],
+        //         'destination' => $row['Destino'],
+        //         'amount' => (float) $row['Monto'],
+        //         'date_operation' => $dateOperation,
+        //         'type_transaction' => $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income',
+        //         'user_id' => 1,
+        //     ]
+        // );
     }
 
 
