@@ -161,16 +161,16 @@ class FinancialReportController extends Controller
 
     public function budgetDeviation($month)
     {
-        $presupuestoMensual = DB::table('sub_categories')->get();
-        return $this->totalExpensesByCategory(5)->map(function ($item, $sub) use ($presupuestoMensual) {
-            $monthly_budget = $presupuestoMensual->where('name', $sub)->value('monthly_budget');
-            $varianza =  $item - $monthly_budget;
+        $monthlyBudget = DB::table('sub_categories')->get();
+        return $this->totalExpensesByCategory($month)->map(function ($item, $sub) use ($monthlyBudget) {
+            $monthly_budget = $monthlyBudget->where('name', $sub)->value('monthly_budget');
+            $variance =  $item - $monthly_budget;
             return (object) [
-                'subcategoria' => $sub,
-                'presupuestado' => $monthly_budget,
+                'subcategory' => $sub,
+                'budgeted' => $monthly_budget,
                 'real' => $item,
-                'varianza' => $varianza,
-                'estado' => $varianza <= 0 ? 'Dentro del presupuesto' : 'Excedido'
+                'variance' => $variance,
+                'status' => $variance <= 0 ? 'Dentro del presupuesto' : 'Excedido'
             ];
         });
     }
