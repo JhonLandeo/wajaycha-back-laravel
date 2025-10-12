@@ -1,41 +1,80 @@
-name: Sharedhosting deploy
+# name: Sharedhosting deploy
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#     - name: Checkout del repositorio
+#       uses: actions/checkout@v2
+
+#     - name: Configurar entorno PHP
+#       uses: shivammathur/setup-php@v2
+#       with:
+#         php-version: '8.2'
+
+#     - name: Install dependencies
+#       run: composer install --no-dev --prefer-dist --no-scripts --no-progress --no-suggest
+
+#     - name: Configure env and run migrations
+#       env:
+#         FTP_HOST: ${{ secrets.FTP_HOST }}
+#         FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+#         FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+#         FTP_DESTINATION: ${{ secrets.FTP_DESTINATION }}
+#       run: |
+#         php artisan config:cache
+#         php artisan migrate --force
+#         php artisan db:seed --force
+
+#     - name: Deploy to shared hosting
+#       uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+#       with:
+#         server: ${{ secrets.FTP_HOST }}
+#         username: ${{ secrets.FTP_USERNAME }}
+#         password: ${{ secrets.FTP_PASSWORD }}
+#         server-dir: ${{ secrets.FTP_DESTINATION }}/
+
+name: Deploy Laravel to Production
 
 on:
   push:
     branches:
-      - main
+      - main # O la rama que uses para producción, ej: master
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout del repositorio
-      uses: actions/checkout@v2
+    - name: 1. Checkout repository
+      uses: actions/checkout@v3
 
-    - name: Configurar entorno PHP
+    - name: 2. Setup PHP
       uses: shivammathur/setup-php@v2
       with:
-        php-version: '8.2'
+        php-version: '8.4' # Asegúrate de que coincida con tu versión
+        extensions: mbstring, xml, ctype, json, tokenizer
+        tools: composer
 
-    - name: Install dependencies
-      run: composer install --no-dev --prefer-dist --no-scripts --no-progress --no-suggest
+    - name: 3. Install Composer Dependencies
+      run: composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
-    - name: Configure env and run migrations
-      env:
-        FTP_HOST: ${{ secrets.FTP_HOST }}
-        FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-        FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-        FTP_DESTINATION: ${{ secrets.FTP_DESTINATION }}
-      run: |
-        php artisan config:cache
-        php artisan migrate --force
-        php artisan db:seed --force
-
-    - name: Deploy to shared hosting
-      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+    - name: 4. Deploy to Server via SSH
+      uses: appleboy/ssh-action@master
       with:
-        server: ${{ secrets.FTP_HOST }}
-        username: ${{ secrets.FTP_USERNAME }}
-        password: ${{ secrets.FTP_PASSWORD }}
-        server-dir: ${{ secrets.FTP_DESTINATION }}/
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd ${{ secrets.PROJECT_PATH }}
+          git pull origin main
+          composer install --no-dev --optimize-autoloader
+          php artisan migrate --force
+          php artisan optimize:clear
+          echo "✅ Deployment finished successfully."
