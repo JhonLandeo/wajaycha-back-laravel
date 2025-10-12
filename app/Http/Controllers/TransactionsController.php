@@ -34,7 +34,7 @@ class TransactionsController extends Controller
 
         $procedure = $recurring ? 'get_transactions_by_detail' : 'get_transactions';
 
-        $statement = DB::select("CALL $procedure(?,?,?,?,?,?,?,?,?,?,?,?)", [
+        $statement = DB::select("select * from $procedure(?,?,?,?,?,?,?,?,?,?,?,?)", [
             $perPage,
             $page,
             $year,

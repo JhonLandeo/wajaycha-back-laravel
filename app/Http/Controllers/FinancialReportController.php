@@ -6,17 +6,18 @@ use DateTime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class FinancialReportController extends Controller
 {
     private $transactions;
     public function __construct()
     {
-        $this->transactions = DB::table('transactions as t')
-            ->select('t.id', 't.amount', 't.date_operation', 't.type_transaction', 's.name as subcat_name', 'd.name as detail_name', 't.sub_category_id')
-            ->join('sub_categories as s', 's.id', '=', 't.sub_category_id')
-            ->join('details as d', 'd.id', '=', 't.detail_id')
-            ->get();
+        // $this->transactions = DB::table('transactions as t')
+        //     ->select('t.id', 't.amount', 't.date_operation', 't.type_transaction', 's.name as subcat_name', 'd.name as detail_name', 't.sub_category_id')
+        //     ->join('sub_categories as s', 's.id', '=', 't.sub_category_id')
+        //     ->join('details as d', 'd.id', '=', 't.detail_id')
+        //     ->get();
     }
 
     public function getBalance()
@@ -179,9 +180,9 @@ class FinancialReportController extends Controller
     {
         $transactionsWithDetail = DB::table('transactions as t')
             ->selectRaw("
-                CASE 
+                CASE
                     WHEN t.yape_id IS NULL THEN d.name
-                    ELSE IF(ty.type_transaction = 'expense', ty.destination, ty.origin) 
+                    ELSE IF(ty.type_transaction = 'expense', ty.destination, ty.origin)
                 END AS detail_name,
                 t.amount,
                 t.id,
@@ -268,4 +269,282 @@ class FinancialReportController extends Controller
 
         return $transaccionesConcurrentes;
     }
+
+    public function cashFlowWeekly()
+    {
+        $weeklyCashFlow = $this->transactions->groupBy(function ($item) {
+            return Carbon::parse($item->date_operation)->startOfWeek();
+        })->map(function ($group, $week) {
+            $ingreso = $group->where('type_transaction', 'income')->sum('amount');
+            $egreso = $group->where('type_transaction', 'expense')->sum('amount');
+            $numberOfWeek = Carbon::parse($week)->weekOfYear();
+            $endWeekDay = Carbon::parse($week)->endOfWeek();
+            return (object) [
+                'semana_del_año' => $numberOfWeek,
+                'ingresos' => $ingreso,
+                'gastos' => $egreso,
+                'flujo_neto' => $ingreso - $egreso,
+                'rango_fechas' => Carbon::parse($week)->format('Y-m-d') . ' a ' . $endWeekDay->format('Y-m-d')
+            ];
+        })->flatten()->sortBy('semana_del_año');
+
+        return $weeklyCashFlow;
+    }
+
+    public function spendingVelocity()
+    {
+        return $this->transactions->groupBy(function ($item) {
+            return Carbon::parse($item->date_operation)->monthOfYear();
+        })->map(function ($group, $month) {
+            $totalExpense = round($group->where('type_transaction', 'expense')->sum('amount'), 2);
+            $daysOfPeriod = Carbon::create(2025, $month, 1)->daysInMonth();
+            $velocity = round($totalExpense / $daysOfPeriod, 2);
+            $monthName = Carbon::create(null, $month, 1)->monthName;
+            return (object) [
+                'periodo' => $monthName . ' 2025',
+                'gasto_total' => $totalExpense,
+                'dias_en_periodo' => $daysOfPeriod,
+                'velocidad_de_gasto' => $velocity,
+                'diagnostico' => 'En promedio, gastaste ' . $velocity . ' por día durante el mes de ' . $monthName
+            ];
+        })->flatten();
+    }
+
+    public function getLargestExpenseInDays($days)
+    {
+        $transaction =  $this->transactions->where('type_transaction', 'expense')->filter(function ($item) use ($days) {
+            $subtractDays = now()->subDay($days);
+            return $item->date_operation > $subtractDays;
+        })->sortByDesc('amount')->first();
+
+        return (object) [
+            'periodo_analizado' => 'Ultimos ' . $days . ' dias',
+            'transaction' => $transaction
+        ];
+    }
+
+    public function drillDown($subcategory)
+    {
+        $data = $this->transactions
+            ->where('type_transaction', 'expense')
+            ->where('subcat_name', $subcategory)
+            ->groupBy('detail_name')
+            ->map(function ($group, $detailName) {
+                return (object) [
+                    'descripcion' => $detailName,
+                    'numero_transacciones' => $group->count(),
+                    'monto_total' => $group->sum('amount'),
+                ];
+            })
+            ->sortByDesc('monto_total')
+            ->values();
+
+        return (object) [
+            'categoria_analizada' => $subcategory,
+            'desglose_por_descripcion' => $data
+        ];
+    }
+
+    public function correlationByCategory($subcategory)
+    {
+
+        $base = $this->transactions
+            ->groupBy('subcat_name')
+            ->map(function ($group, $key) {
+                $month = $group->groupBy(function ($item) {
+                    return Carbon::parse($item->date_operation)->monthName;
+                });
+                return $month;
+            })->map(function ($sub, $key) {
+                return $sub->map(function ($data) {
+                    $expense = $data->where('type_transaction', 'expense')->sum('amount');
+                    $income = $data->where('type_transaction', 'income')->sum('amount');
+                    return $expense - $income;
+                });
+            });
+
+        $mainSubcategory = $base->get($subcategory);
+        $diferentSubcategory = $base->filter(function ($value, $key) use ($subcategory) {
+            return $key !== $subcategory;
+        });
+
+        return $diferentSubcategory->map(function ($item, $key) use ($mainSubcategory) {
+
+            return $mainSubcategory->flatMap(function ($sub, $subkey) use ($item) {
+                return [$subkey => [$sub, $item->get($subkey)]];
+            })->values();
+        })->map(function ($item) {
+            $r = 0;
+            $n = $item->count();
+            $sum_x = $item->reduce(function ($carry, $item) {
+                return $carry + $item[0];
+            }, 0);
+            $sum_y = $item->reduce(function ($carry, $item) {
+                return $carry + $item[1];
+            }, 0);
+            $sum_x2 = $item->map(function ($item) {
+                return $item[0] * $item[0];
+            })->sum();
+            $sum_y2 = $item->map(function ($item) {
+                return $item[1] * $item[1];
+            })->sum();
+            $sum_xy =  $item->map(function ($item) {
+                return $item[0] * $item[1];
+            })->sum();
+            $numerador = ($n * $sum_xy - $sum_x * $sum_y);
+            $denominador = sqrt(($n * $sum_x2 - pow($sum_x, 2)) * ($n * $sum_y2 - pow($sum_y, 2)));
+            if ($numerador != 0 && $denominador != 0) {
+                $r = $numerador / $denominador;
+            }
+            return (object) [
+                'data_points_used' => $n,
+                'correlation_coefficient' => $r
+            ];
+        })->map(function ($item, $key) use ($subcategory) {
+            $correlation_coefficient = $item->correlation_coefficient;
+            $strength = '';
+            if ($correlation_coefficient >= 0.9) {
+                $strength = 'Muy fuerte';
+            } elseif ($correlation_coefficient >= 0.7) {
+                $strength = 'Fuerte';
+            } elseif ($correlation_coefficient >= 0.4) {
+                $strength = 'Moderada';
+            } elseif ($correlation_coefficient >= 0.1) {
+                $strength = 'Débil';
+            } else {
+                $strength = 'Nula o despreciable';
+            }
+            $varY = $key;
+            $varX = $subcategory;
+            $direction = $correlation_coefficient > 0 ? 'Positiva' : 'Negativa';
+            $interpretation = "Se ha encontrado una $strength correlación $direction entre $varX y $varY. ";
+
+            if ($direction === 'Positiva') {
+                $interpretation .= "Esto sugiere que cuando aumentas tus gastos en $varX, también aumentan los de $varY.";
+            } else {
+                $interpretation .= "Esto indica que cuando aumentas tus gastos en $varX, los de $varY tienden a disminuir.";
+            }
+            return (object) [
+                'analysis_type' => "Correlación de Gastos Mensuales",
+                'variables' => (object)[
+                    'x' => $varX,
+                    'y' => $varY
+                ],
+                'correlation_coefficient' => $correlation_coefficient,
+                'strength' => $strength,
+                'direction' => $direction,
+                'interpretation' => $interpretation,
+                'data_points_used' => $item->data_points_used
+            ];
+        })->values();
+    }
+
+    public function getQuantityByAmountRange()
+    {
+        $ranges = [
+            '0 - $10' => [0, 10],
+            '$10.01 - $25' => [10.01, 25],
+            '$25.01 - $50' => [25.01, 50],
+            '$50.01 - $100' => [50.01, 100],
+            '$100+' => [100.01, INF],
+        ];
+
+        $amountCounts = [];
+        foreach ($ranges as $label => $range) {
+            $amountCounts[$label] = 0;
+        }
+
+        foreach ($this->transactions->where('type_transaction', 'expense') as $transaction) {
+            foreach ($ranges as $label => [$min, $max]) {
+                if ($transaction->amount >= $min && $transaction->amount <= $max) {
+                    $amountCounts[$label]++;
+                    break;
+                }
+            }
+        }
+
+        return $amountCounts;
+    }
+    public function getVolatileSubcategory()
+    {
+        return $this->transactions->groupBy('subcat_name')
+            ->map(function ($group) {
+                $month = $group->groupBy(function ($item) {
+                    return Carbon::parse($item->date_operation)->monthName;
+                });
+                return $month;
+            })->map(function ($sub) {
+                return $sub->map(function ($data) {
+                    $expense = $data->where('type_transaction', 'expense')->sum('amount');
+                    $income = $data->where('type_transaction', 'income')->sum('amount');
+                    return $expense - $income;
+                })->values();
+            })->map(function ($item, $key) {
+                $promedio = $item->avg();
+                $coeficienteVariacion = 0;
+                if($promedio > 0){
+                    $total = $item->count();
+                    $varianza =  $item->reduce(function ($carry, $subItem) use ($promedio) {
+                        $result = $carry + ($subItem - $promedio) ** 2;
+                        return $result;
+                    });
+                    $desviacion = ($total > 1) ? sqrt($varianza / ($total - 1)) : 0;
+                    $coeficienteVariacion = $desviacion / $promedio;
+                }
+
+                $diagnostic = '';
+
+                if ($coeficienteVariacion <= -1.5) {
+                    $diagnostic = 'Muy estable';
+                } elseif ($coeficienteVariacion > -1.5 && $coeficienteVariacion <= -0.5) {
+                    $diagnostic = 'Estable';
+                } elseif ($coeficienteVariacion > -0.5 && $coeficienteVariacion <= 0.5) {
+                    $diagnostic = 'Normal';
+                } elseif ($coeficienteVariacion > 0.5 && $coeficienteVariacion <= 1.5) {
+                    $diagnostic = 'Volatil';
+                } else {
+                    $diagnostic = 'Muy Volátil';
+                }
+                return (object) [
+                    'categoria' => $key,
+                    'volatilidad' => $coeficienteVariacion,
+                    'diagnostico' => $diagnostic
+                ];
+            })->values();
+    }
+
+    public function getParetoCategory(){
+        $totalExpenseBySubcategory = $this->transactions->where('type_transaction', 'expense')
+        ->groupBy('subcat_name')
+        ->map(function ($group) {
+            $expense = $group->where('type_transaction', 'expense')->sum('amount');
+            $income = $group->where('type_transaction', 'income')->sum('amount');
+            return $expense - $income;
+        })->sortDesc();
+        $total = $totalExpenseBySubcategory->values()->sum();
+        $percentages = $totalExpenseBySubcategory->map(function ($item) use ($total) {
+            return (object) [
+                'percentage' => $item * 100 / $total,
+                'amount' => $item
+            ];
+        });
+        $pareto = collect();
+        $acc = 0;
+        foreach ($percentages as $key => $value) {
+            $acc += $value->percentage;
+            $pareto[] = (object) [
+                'acumulado_porc' => $acc,
+                'subcategory' => $key,
+                'gasto' => $value->amount
+            ];
+            if($acc >= 80) break;
+        }
+        $accPercentage = $pareto->last()->acumulado_porc;
+        $quantity = $pareto->count();
+        return (object) [
+            'principio_pareto' => $pareto,
+            'conclusion' => "El $accPercentage% de todos tus gastos provienen de solo $quantity subcategorias",
+        ];
+    }
+
 }

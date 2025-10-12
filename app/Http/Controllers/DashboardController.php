@@ -124,42 +124,45 @@ class DashboardController extends Controller
     public function getWeeklyData(Request $request): JsonResponse
     {
         try {
-            DB::statement("SET lc_time_names = 'es_ES'");
-
             $isChecked = $request->input('isChecked', false);
-            $selectValidate = $isChecked ?
-                "ROUND(COUNT(CASE 
-                WHEN type_transaction = 'income' THEN t.id END),2) AS count_weekly_income,
-             ROUND(COUNT(CASE 
-                WHEN type_transaction = 'expense' THEN t.id END),2) AS count_weekly_expense" :
-                "ROUND(SUM(CASE 
-                WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_weekly_income,
-             ROUND(SUM(CASE 
-                WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_weekly_expense";
 
-            $year = $request->input('year', null);
-            $month = $request->input('month', null);
+            // Esta parte de la lógica no necesita cambios, ya que es SQL estándar.
+            $selectAggregate = $isChecked ?
+                "COUNT(CASE WHEN type_transaction = 'income' THEN t.id END) AS count_weekly_income,
+             COUNT(CASE WHEN type_transaction = 'expense' THEN t.id END) AS count_weekly_expense" :
+                "ROUND(SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_weekly_income,
+             ROUND(SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_weekly_expense";
+
+            // CAMBIOS CLAVE: Reemplazamos las funciones de MySQL con las de PostgreSQL
+            $dayOfWeekExpression = "EXTRACT(ISODOW FROM t.date_operation)"; // Lunes=1, Domingo=7
+            $dayNameExpression = "TRIM(to_char(t.date_operation, 'Day'))"; // 'Day' para el nombre del día, TRIM para quitar espacios
+
             $query = DB::table('transactions as t')
-                ->selectRaw("$selectValidate,
-            DAYOFWEEK(date_operation) day,
-            DAYNAME(date_operation) name_day")
+                ->selectRaw("
+                {$selectAggregate},
+                {$dayOfWeekExpression} AS day,
+                {$dayNameExpression} AS name_day
+            ")
                 ->join('details as d', 't.detail_id', '=',  'd.id');
-            if ($year) {
-                $query->whereYear('date_operation', $year);
+
+            if ($request->filled('year')) {
+                $query->whereYear('t.date_operation', $request->year);
             }
-            if ($month) {
-                $query->whereMonth('date_operation', $month);
+            if ($request->filled('month')) {
+                $query->whereMonth('t.date_operation', $request->month);
             }
-            $results =
-                $query
+
+            $results = $query
                 ->where('t.user_id', $request->user_id)
-                ->groupBy('day')
-                ->groupBy('name_day')
-                ->orderBy('day')
+                // CAMBIO: Usamos groupByRaw para agrupar por las expresiones, no por los alias.
+                ->groupByRaw("{$dayOfWeekExpression}, {$dayNameExpression}")
+                ->orderByRaw($dayOfWeekExpression) // Usamos orderByRaw para consistencia.
                 ->get();
+
             foreach ($results as $result) {
-                $result->name_day = ucfirst($result->name_day);
+                $result->name_day = mb_convert_case($result->name_day, MB_CASE_TITLE, "UTF-8");
             }
+
             return response()->json($results);
         } catch (\Throwable $th) {
             throw $th;
@@ -169,13 +172,15 @@ class DashboardController extends Controller
     public function getHourlyData(Request $request): JsonResponse
     {
         try {
-            $data = Transaction::selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
-             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense,
-            HOUR(date_operation) hour")
-                ->join('details as d', 'transactions.detail_id', '=',  'd.id')
+            $data = Transaction::selectRaw("
+            ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END), 2) AS avg_daily_income,
+            ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END), 2) AS avg_daily_expense,
+            EXTRACT(HOUR FROM date_operation) AS hour  -- CAMBIO 1: Se usa EXTRACT en lugar de HOUR()
+        ")
+                ->join('details as d', 'transactions.detail_id', '=', 'd.id')
                 ->where('transactions.user_id', $request->user_id)
                 ->whereYear('date_operation', $request->year)
-                ->groupBY('hour')
+                ->groupByRaw('EXTRACT(HOUR FROM date_operation)')
                 ->orderBy('hour')
                 ->get();
 
@@ -188,38 +193,59 @@ class DashboardController extends Controller
     public function getMonthlyData(Request $request): JsonResponse
     {
         try {
-            DB::statement("SET lc_time_names = 'es_ES'");
+            $isChecked = $request->input('isChecked', false);
+            $selectAggregate = $isChecked ?
+                "COUNT(CASE WHEN type_transaction = 'income' THEN t.id END) AS count_monthly_income,
+             COUNT(CASE WHEN type_transaction = 'expense' THEN t.id END) AS count_monthly_expense" :
+                "ROUND(SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_monthly_income,
+             ROUND(SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_monthly_expense";
 
-            $selectValidate = $request->isChecked ?
-                "ROUND(COUNT(CASE 
-                WHEN type_transaction = 'income' THEN t.id END),2) AS count_monthly_income,
-             ROUND(COUNT(CASE 
-                WHEN type_transaction = 'expense' THEN t.id END),2) AS count_monthly_expense" :
-                "ROUND(SUM(CASE 
-                WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_monthly_income,
-             ROUND(SUM(CASE 
-                WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_monthly_expense";
-
+            // CAMBIO: Usamos la función de PostgreSQL para extraer el número del mes.
+            $monthNumberExpression = "EXTRACT(MONTH FROM t.date_operation)";
 
             $baseQuery = DB::table('transactions as t')
-                ->selectRaw("$selectValidate,
-                MONTH(date_operation) month,
-                MONTHNAME(date_operation) name_month")
+                ->selectRaw("
+                {$selectAggregate},
+                {$monthNumberExpression} AS month
+            ")
                 ->join('details as d', 't.detail_id', '=',  'd.id')
                 ->where('t.user_id', $request->user_id);
 
-            if ($request->year) {
-                $baseQuery->whereYear('date_operation', $request->year);
+            if ($request->filled('year')) {
+                $baseQuery->whereYear('t.date_operation', $request->year);
             }
 
-            $data = $baseQuery->groupBy('month')
-                ->groupBy('name_month')
-                ->orderBy('month')->get();
+            $data = $baseQuery
+                // CAMBIO: Agrupamos y ordenamos por la expresión original, no por el alias.
+                ->groupByRaw($monthNumberExpression)
+                ->orderByRaw($monthNumberExpression)
+                ->get();
 
-            foreach ($data as $item) {
-                $item->name_month = ucfirst($item->name_month);
-            }
-            return response()->json($data);
+            // --- MANEJO DE LA PRESENTACIÓN (IDIOMA) EN PHP ---
+            // Esto es mucho más robusto que depender de la configuración del servidor de BD.
+            $monthMap = [
+                1 => 'Enero',
+                2 => 'Febrero',
+                3 => 'Marzo',
+                4 => 'Abril',
+                5 => 'Mayo',
+                6 => 'Junio',
+                7 => 'Julio',
+                8 => 'Agosto',
+                9 => 'Septiembre',
+                10 => 'Octubre',
+                11 => 'Noviembre',
+                12 => 'Diciembre',
+            ];
+
+            // Usamos el método map de las Colecciones de Laravel para añadir el nombre del mes.
+            $formattedData = $data->map(function ($item) use ($monthMap) {
+                // Añadimos la propiedad 'name_month' a cada objeto del resultado.
+                $item->name_month = $monthMap[$item->month] ?? 'Desconocido';
+                return $item;
+            });
+
+            return response()->json($formattedData);
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -229,20 +255,24 @@ class DashboardController extends Controller
     {
         $year = $request->input('year', null);
         $month = $request->input('month', null);
-        $type = $request->input('type', null);
+        // $type = $request->input('type', null); // Descomentar si se va a usar
         $userId = $request->input('user_id', null);
+
+        // Guardamos las expresiones complejas en variables para reutilizarlas y mayor claridad.
+        $nameExpression = "COALESCE(sc.name, 'Sin categorizar')"; // CAMBIO 1: Comillas simples para la cadena
+        $totalExpression = "SUM(CASE 
+        WHEN t.type_transaction = 'expense' THEN t.amount 
+        WHEN t.type_transaction = 'income' THEN -t.amount 
+        ELSE 0 
+    END)";
 
         $query = DB::table('transactions as t')
             ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
             ->leftJoin('sub_categories as sc', 'sc.id', '=', 't.sub_category_id')
             ->select(
-                DB::raw('COALESCE(sc.name, "Sin categorizar") as name'),
+                DB::raw("{$nameExpression} as name"),
                 DB::raw('COUNT(*) as quantity'),
-                DB::raw(" SUM(CASE 
-                    WHEN t.type_transaction = 'expense' THEN t.amount 
-                    WHEN t.type_transaction = 'income' THEN -t.amount 
-                    ELSE 0 
-                END) as total")
+                DB::raw("{$totalExpression} as total")
             );
 
         if ($year) {
@@ -261,16 +291,17 @@ class DashboardController extends Controller
             $query->where('t.user_id', $userId);
         }
 
-        $results = $query->groupBy('sc.name')
-            ->orderBy(DB::raw('total'), 'desc')
+        $results = $query
+            ->groupByRaw($nameExpression) // Agrupamos por la expresión completa
+            ->havingRaw("{$totalExpression} > 0") // OPTIMIZACIÓN: Filtramos en la BD con HAVING
+            ->orderByRaw("{$totalExpression} DESC") // CAMBIO 2: Ordenamos por la expresión completa
             ->get();
 
-        $filter = $results->filter(function ($item) {
-            return $item->total > 0;
-        });
+        // ELIMINADO: Ya no es necesario filtrar en PHP, la base de datos ya lo hizo.
+        // $filter = $results->filter(function ($item) {
+        //     return $item->total > 0;
+        // });
 
-
-
-        return response()->json($filter);
+        return response()->json($results);
     }
 }
