@@ -45,36 +45,49 @@ name: Deploy Laravel to Production
 on:
   push:
     branches:
-      - main # O la rama que uses para producción, ej: master
+      - main # O la rama que uses para producción
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 1. Checkout repository
-      uses: actions/checkout@v3
-
-    - name: 2. Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.4' # Asegúrate de que coincida con tu versión
-        extensions: mbstring, xml, ctype, json, tokenizer
-        tools: composer
-
-    - name: 3. Install Composer Dependencies
-      run: composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
-
-    - name: 4. Deploy to Server via SSH
+    - name: Deploy to Server via SSH
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USERNAME }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
+          # Navega al directorio del proyecto
           cd ${{ secrets.PROJECT_PATH }}
+
+          # 1. Poner la aplicación en modo mantenimiento
+          php artisan down || true
+
+          # 2. Obtener el código más reciente
+          git reset --hard origin/main
           git pull origin main
-          composer install --no-dev --optimize-autoloader
-          php artisan migrate --force
+
+          # 3. Instalar dependencias de Composer
+          composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+
+          # 4. Limpiar TODAS las cachés de Laravel
           php artisan optimize:clear
-          echo "✅ Deployment finished successfully."
+
+          # 5. Ejecutar migraciones de la base de datos
+          php artisan migrate --force
+
+          # 6. Reconstruir la caché para producción
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+
+          # 7. Reiniciar PHP-FPM para limpiar la caché OPcache del servidor
+          echo "Reiniciando PHP-FPM para aplicar los cambios..."
+          sudo systemctl restart php8.4-fpm
+
+          # 8. Sacar la aplicación del modo mantenimiento
+          php artisan up
+          
+          echo "✅ ¡Despliegue completado exitosamente!"
