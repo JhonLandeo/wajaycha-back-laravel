@@ -59,15 +59,15 @@ jobs:
         username: ${{ secrets.USERNAME }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          # Navega al directorio del proyecto
+         # Navega al directorio del proyecto
           cd ${{ secrets.PROJECT_PATH }}
 
           # 1. Poner la aplicación en modo mantenimiento
           php artisan down || true
 
-          # 2. Obtener el código más reciente
-          git reset --hard origin/main
-          git pull origin main
+          # 2. Obtener el código más reciente COMO EL USUARIO WWW-DATA
+          sudo -u www-data git reset --hard origin/main
+          sudo -u www-data git pull origin main
 
           # 3. Instalar dependencias de Composer
           composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
