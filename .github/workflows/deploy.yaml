@@ -69,7 +69,7 @@ jobs:
           php artisan down || true
           
           # 3. Obtener el código más reciente COMO www-data
-          sudo -u www-data git reset --hard origin/main
+          sudo -u www-data git pull
           
           # 4. Instalar dependencias COMO www-data
           sudo -u www-data composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
