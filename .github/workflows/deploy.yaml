@@ -60,29 +60,32 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           cd ${{ secrets.PROJECT_PATH }}
+          
+          # 1. (CRÍTICO) Arreglar la propiedad de los archivos ANTES de hacer nada
+          # Este comando es ejecutado por 'jhon' usando sus nuevos poderes de sudo
+          sudo chown -R www-data:www-data .
+          
+          # 2. Poner en modo mantenimiento
           php artisan down || true
           
-          # Ejecutar comandos de Git COMO www-data
+          # 3. Obtener el código más reciente COMO www-data
           sudo -u www-data git reset --hard origin/main
-          sudo -u www-data git pull origin main
           
-          # Instalar dependencias COMO www-data
+          # 4. Instalar dependencias COMO www-data
           sudo -u www-data composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
           
-          # Limpiar y reconstruir caché (puede ser jhon, pero por consistencia lo hacemos como www-data)
-          sudo -u www-data php artisan optimize:clear
-          
-          # Ejecutar migraciones COMO www-data
+          # 5. Ejecutar migraciones y cachés COMO www-data
           sudo -u www-data php artisan migrate --force
-          
-          # Reconstruir caché para producción
+          sudo -u www-data php artisan optimize:clear
           sudo -u www-data php artisan config:cache
           sudo -u www-data php artisan route:cache
           sudo -u www-data php artisan view:cache
           
-          # Reiniciar PHP-FPM (esto lo ejecuta jhon, usando su permiso NOPASSWD específico)
+          # 6. Reiniciar PHP-FPM (ejecutado por 'jhon' usando sudo)
           echo "Reiniciando PHP-FPM para aplicar los cambios..."
           sudo systemctl restart php8.4-fpm
           
+          # 7. Sacar del modo mantenimiento
           php artisan up
+          
           echo "✅ ¡Despliegue completado exitosamente!"
