@@ -21,7 +21,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [env('FRONTEND_URL', 'https://wajaycha.netlify.app')],
+    'allowed_origins' => [env('FRONTEND_URL', 'https://wajaycha.com')],
 
     'allowed_origins_patterns' => [],
 
