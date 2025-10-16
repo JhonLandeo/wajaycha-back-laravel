@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'sanctum/csrf-cookie', // Excluye esta ruta para que Vue pueda obtener el token CSRF sin problema
             'login', // Excluye login si usas autenticación con tokens
             'logout',
+            'register',
         ]);
         
     })
