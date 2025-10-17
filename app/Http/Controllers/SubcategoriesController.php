@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\SubCategory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Js;
 
 class SubcategoriesController extends Controller
@@ -45,6 +46,6 @@ class SubcategoriesController extends Controller
     public function destroy(SubCategory $subcategories): JsonResponse
     {
         $subcategories->delete();
-        return response()->json($subcategories, 204);
+        return response()->json($subcategories, 200);
     }
 }

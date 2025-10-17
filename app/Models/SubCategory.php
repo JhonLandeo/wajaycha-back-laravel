@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SubCategory extends Model
 {
+    protected $table = 'sub_categories';
     protected $guarded = [];
 
     public function category(): BelongsTo
