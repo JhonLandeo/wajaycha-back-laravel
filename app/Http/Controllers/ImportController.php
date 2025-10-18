@@ -42,25 +42,29 @@ class ImportController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(PdfRequest $request) : JsonResponse
+    public function store(PdfRequest $request): JsonResponse
     {
         try {
             $file = $request->file('file');
             $originalName = $file->getClientOriginalName();
             $extension = $file->getClientOriginalExtension();
             $size = $file->getSize();
-            $file->store('files');
+            $financialCode = DB::table('financial_entities')
+                ->where('id', $request->financial)
+                ->value('code');
+            $folder = 'files/' . $financialCode;
+            $storedPath = $file->store($folder);
             $mime = Storage::mimeType($file);
-            $path = Storage::path($file);
-            $url = Storage::url($file);
+            // $path = Storage::path($file);
+            // $url = Storage::url($file);
 
             DB::beginTransaction();
             DB::table('imports')->insert([
                 'name' => $originalName,
                 'extension' => $extension,
-                'path' => $path,
+                'path' => $storedPath,
                 'mime' => $mime,
-                'url' => $url,
+                'url' => null,
                 'size' => $size,
                 'user_id' => $request->user_id,
                 'financial_id' => $request->financial,
@@ -74,6 +78,7 @@ class ImportController extends Controller
             return response()->json(['status' => 'ok']);
         } catch (\Throwable $th) {
             DB::rollBack();
+            Log::error("Error al importar archivo: " . $th->getMessage());
             throw $th;
         }
     }
@@ -81,7 +86,7 @@ class ImportController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Import $import): JsonResponse  
+    public function update(Request $request, Import $import): JsonResponse
     {
         $data = $import->update($request->all());
         return response()->json($data);
@@ -103,9 +108,15 @@ class ImportController extends Controller
         return response()->json($data);
     }
 
-    public function getService(): JsonResponse  
+    public function getService(): JsonResponse
     {
         $data = PaymentService::get();
         return response()->json($data);
+    }
+
+    public function download($id)
+    {
+        $import = DB::table('imports')->find($id); 
+        return Storage::download($import->path, $import->name);
     }
 }

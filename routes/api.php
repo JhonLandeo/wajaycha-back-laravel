@@ -41,4 +41,5 @@ Route::middleware([JwtMiddleware::class])->group(function () {
 
     Route::get('get-bank', [ImportController::class, 'getBank']);
     Route::get('get-service', [ImportController::class, 'getService']);
+    Route::get('/imports/{id}/download', [ImportController::class, 'download']);
 });

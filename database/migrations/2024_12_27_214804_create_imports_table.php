@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('extension');
             $table->string('path');
             $table->string('mime');
-            $table->string('url');
+            $table->string('url')->nullable();
             $table->bigInteger('size');
             $table->foreignId('user_id')->constrained();
             $table->bigInteger('financial_id')->unsigned();

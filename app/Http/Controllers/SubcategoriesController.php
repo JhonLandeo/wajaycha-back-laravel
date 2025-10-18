@@ -34,18 +34,23 @@ class SubcategoriesController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, SubCategory $subcategories): JsonResponse
+    public function update(Request $request, SubCategory $subcategory): JsonResponse
     {
-        $subcategories->update($request->all());
-        return response()->json($subcategories);
+        $validatedData = $request->validate([
+            'name' => 'required|string|max:255',
+            'category_id' => 'required|exists:categories,id',
+        ]);
+        $subcategory->update($validatedData);
+        return response()->json($subcategory);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(SubCategory $subcategories): JsonResponse
+    public function destroy(SubCategory $subcategory): JsonResponse
     {
-        $subcategories->delete();
-        return response()->json($subcategories, 200);
+        logger('Deleting subcategory: ', $subcategory->toArray());
+        $data = $subcategory->delete();
+        return response()->json($data);
     }
 }
