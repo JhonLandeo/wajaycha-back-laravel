@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('register', [JWTAuthController::class, 'register']);
 Route::post('login', [JWTAuthController::class, 'login']);
+Route::post('logout', [JWTAuthController::class, 'logout']);
 
 Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('kpi-data', [DashboardController::class, 'kpiData']);
