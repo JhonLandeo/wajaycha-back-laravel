@@ -26,7 +26,12 @@ class ParetoClassificationController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $data = ParetoClassification::create($request->all());
+        $validatedData = $request->validate([
+            'name' => 'required|string|max:255',
+            'percentage' => 'required|numeric|between:0,100',
+
+        ]);
+        $data = ParetoClassification::create($validatedData);
         return response()->json($data);
     }
 
@@ -53,7 +58,11 @@ class ParetoClassificationController extends Controller
      */
     public function update(Request $request, ParetoClassification $pareto_classification): JsonResponse
     {
-        $data = $pareto_classification->update($request->all());
+        $validatedData = $request->validate([
+            'name' => 'required|string|max:255',
+            'percentage' => 'required|numeric|between:0,100',
+        ]);
+        $data = $pareto_classification->update($validatedData);
         return response()->json($data);
     }
 

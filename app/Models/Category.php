@@ -9,8 +9,8 @@ class Category extends Model
 {
     protected $guarded = [];
 
-    public function category(): BelongsTo
+    public function paretoClassification(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(ParetoClassification::class);
     }
 }

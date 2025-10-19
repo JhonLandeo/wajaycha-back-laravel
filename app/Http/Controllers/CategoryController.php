@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
-use Illuminate\Database\Eloquent\Casts\Json;
+use App\Models\SubCategory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Js;
 
 class CategoryController extends Controller
 {
@@ -14,12 +16,11 @@ class CategoryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 10);
+        $per_page = $request->input('per_page', 10);
         $page = $request->input('page', 1);
+        $categories = Category::paginate($per_page, ['*'], 'page', $page);
 
-        $category = Category::paginate($perPage, ['*'], 'page', $page);
-
-        return response()->json($category);
+        return response()->json($categories);
     }
 
     /**
@@ -27,26 +28,13 @@ class CategoryController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $data = Category::create($request->all());
-        return response()->json($data);
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(Category $category): JsonResponse
-    {
-        $data = $category;
-        return response()->json($data);
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Category $category): JsonResponse
-    {
-        $data = $category;
-        return response()->json($data);
+        $validatedData = $request->validate([
+            'name' => 'required|string|max:255',
+            'pareto_classification_id' => 'required|exists:pareto_classifications,id',
+            'monthly_budget' => 'required|numeric|min:0',
+        ]);
+        $categories = Category::create($validatedData);
+        return response()->json($categories, 201);
     }
 
     /**
@@ -54,8 +42,13 @@ class CategoryController extends Controller
      */
     public function update(Request $request, Category $category): JsonResponse
     {
-        $data = $category->update($request->all());
-        return response()->json($data);
+        $validatedData = $request->validate([
+            'name' => 'required|string|max:255',
+            'pareto_classification_id' => 'required|exists:pareto_classifications,id',
+            'monthly_budget' => 'required|numeric|min:0',
+        ]);
+        $category->update($validatedData);
+        return response()->json($category);
     }
 
     /**

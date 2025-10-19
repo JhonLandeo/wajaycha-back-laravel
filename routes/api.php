@@ -29,7 +29,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('transaction-by-category', [DashboardController::class, 'getTransactionByCategory']);
 
     Route::resource('pareto-classification', ParetoClassificationController::class);
-    Route::resource('categories', CategoriesController::class);
+    Route::resource('categories', CategoryController::class);
     Route::resource('transactions', TransactionsController::class);
     Route::resource('imports', ImportController::class);
     Route::resource('details', DetailsController::class);
