@@ -11,8 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('sub_categories', function (Blueprint $table) {
+        Schema::create('categories', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('pareto_classification_id')->constrained();
+            $table->string('name');
             $table->decimal('monthly_budget')->nullable()->after('name');
+            $table->timestamps();
         });
     }
 
@@ -21,8 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('sub_categories', function (Blueprint $table) {
-            $table->dropColumn('monthly_budget');
-        });
+        Schema::dropIfExists('categories');
     }
 };

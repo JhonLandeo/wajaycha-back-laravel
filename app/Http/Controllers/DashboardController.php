@@ -251,7 +251,7 @@ class DashboardController extends Controller
         }
     }
 
-    public function getTransactionBySubcategory(Request $request): JsonResponse
+    public function getTransactionByCategory(Request $request): JsonResponse
     {
         $year = $request->input('year', null);
         $month = $request->input('month', null);
@@ -259,7 +259,7 @@ class DashboardController extends Controller
         $userId = $request->input('user_id', null);
 
         // Guardamos las expresiones complejas en variables para reutilizarlas y mayor claridad.
-        $nameExpression = "COALESCE(sc.name, 'Sin categorizar')"; // CAMBIO 1: Comillas simples para la cadena
+        $nameExpression = "COALESCE(c.name, 'Sin categorizar')"; // CAMBIO 1: Comillas simples para la cadena
         $totalExpression = "SUM(CASE 
         WHEN t.type_transaction = 'expense' THEN t.amount 
         WHEN t.type_transaction = 'income' THEN -t.amount 
@@ -268,7 +268,7 @@ class DashboardController extends Controller
 
         $query = DB::table('transactions as t')
             ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
-            ->leftJoin('sub_categories as sc', 'sc.id', '=', 't.sub_category_id')
+            ->leftJoin('categories as c', 'c.id', '=', 't.category_id')
             ->select(
                 DB::raw("{$nameExpression} as name"),
                 DB::raw('COUNT(*) as quantity'),

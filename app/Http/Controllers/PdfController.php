@@ -31,7 +31,6 @@ class PdfController extends Controller
     public function extractData(PdfRequest $request): JsonResponse
     {
 
-
         // Obtener el archivo PDF desde la solicitud
         $file = $request->file('file');
         $originalName = $file->getClientOriginalName();

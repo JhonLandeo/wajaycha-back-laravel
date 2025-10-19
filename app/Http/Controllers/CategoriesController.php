@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use App\Models\SubCategory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Js;
 
-class SubcategoriesController extends Controller
+class CategoriesController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -17,9 +18,9 @@ class SubcategoriesController extends Controller
     {
         $per_page = $request->input('per_page', 10);
         $page = $request->input('page', 1);
-        $subcategories = SubCategory::paginate($per_page, ['*'], 'page', $page);
+        $categories = Category::paginate($per_page, ['*'], 'page', $page);
 
-        return response()->json($subcategories);
+        return response()->json($categories);
     }
 
     /**
@@ -27,30 +28,29 @@ class SubcategoriesController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $subcategories = SubCategory::create($request->all());
-        return response()->json($subcategories, 201);
+        $categories = Category::create($request->all());
+        return response()->json($categories, 201);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, SubCategory $subcategory): JsonResponse
+    public function update(Request $request, Category $category): JsonResponse
     {
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',
             'category_id' => 'required|exists:categories,id',
         ]);
-        $subcategory->update($validatedData);
-        return response()->json($subcategory);
+        $category->update($validatedData);
+        return response()->json($category);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(SubCategory $subcategory): JsonResponse
+    public function destroy(Category $category): JsonResponse
     {
-        logger('Deleting subcategory: ', $subcategory->toArray());
-        $data = $subcategory->delete();
+        $data = $category->delete();
         return response()->json($data);
     }
 }

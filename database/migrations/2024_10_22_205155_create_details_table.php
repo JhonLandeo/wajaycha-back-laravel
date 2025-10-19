@@ -13,7 +13,6 @@ return new class extends Migration
     {
         Schema::create('details', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('subcategory_id')->constrained('sub_categories');
             $table->string('name');
             $table->timestamps();
         });

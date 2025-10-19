@@ -22,13 +22,13 @@ return new class extends Migration
                         p_type type_transaction, 
                         p_amount numeric, 
                         p_search character varying, 
-                        p_sub_category text, 
+                        p_category text, 
                         p_user_id integer, 
                         p_recurring boolean, 
                         p_weekend boolean, 
                         p_workday boolean
                     )
-                    RETURNS TABLE(id bigint, message text, amount numeric, date_operation timestamp without time zone, type_transaction character varying, sub_category_id bigint, detail_id bigint, detail_name character varying, frequency_general jsonb, frequency bigint, yape_trans jsonb, yape_id bigint, user_id bigint, source_type text, total_count bigint)
+                    RETURNS TABLE(id bigint, message text, amount numeric, date_operation timestamp without time zone, type_transaction character varying, category_id bigint, detail_id bigint, detail_name character varying, frequency_general jsonb, frequency bigint, yape_trans jsonb, yape_id bigint, user_id bigint, source_type text, total_count bigint)
                     LANGUAGE sql
                     AS $$
                     SELECT * FROM (
@@ -46,11 +46,11 @@ return new class extends Migration
                             JOIN (
                                 SELECT
                                     t2.detail_id,
-                                    sc.name,
+                                    c.name,
                                     COUNT(t2.id) AS count
                                 FROM transactions t2
-                                JOIN sub_categories sc ON sc.id = t2.sub_category_id
-                                GROUP BY t2.detail_id, sc.name
+                                JOIN categories c ON c.id = t2.category_id
+                                GROUP BY t2.detail_id, c.name
                             ) sub ON sub.detail_id = d.id
                             GROUP BY d.id
                         ),
@@ -62,7 +62,7 @@ return new class extends Migration
                                 t.amount,
                                 t.date_operation,
                                 t.type_transaction,
-                                t.sub_category_id,
+                                t.category_id,
                                 t.detail_id,
                                 d.name AS detail_name,
                                 t.user_id,
@@ -88,8 +88,8 @@ return new class extends Migration
                                 
                                 -- Filtros de Subcategoría
                                 AND (CASE
-                                        WHEN p_sub_category = 'without_sub_category' THEN t.sub_category_id IS NULL
-                                        WHEN p_sub_category IS NOT NULL AND p_sub_category <> 'without_sub_category' THEN t.sub_category_id = p_sub_category::BIGINT -- Casting necesario
+                                        WHEN p_category = 'without_sub_category' THEN t.category_id IS NULL
+                                        WHEN p_category IS NOT NULL AND p_category <> 'without_sub_category' THEN t.category_id = p_category::BIGINT -- Casting necesario
                                         ELSE TRUE
                                     END)
                         ),
@@ -97,7 +97,7 @@ return new class extends Migration
                             -- CTE para transaction_yapes filtradas base
                             SELECT
                                 ty.id, ty.message, ty.amount, ty.date_operation, ty.type_transaction,
-                                ty.origin, ty.destination, ty.user_id, ty.sub_category_id
+                                ty.origin, ty.destination, ty.user_id, ty.category_id
                             FROM transaction_yapes ty
                             WHERE
                                 ty.user_id = p_user_id
@@ -108,8 +108,8 @@ return new class extends Migration
                                 AND (p_type IS NULL OR ty.type_transaction::type_transaction = p_type)
                                 AND (p_amount IS NULL OR p_amount = 0.00 OR ty.amount = p_amount)
                                 AND (CASE
-                                        WHEN p_sub_category = 'without_sub_category' THEN ty.sub_category_id IS NULL
-                                        WHEN p_sub_category IS NOT NULL AND p_sub_category <> 'without_sub_category' THEN ty.sub_category_id = p_sub_category::BIGINT
+                                        WHEN p_category = 'without_sub_category' THEN ty.category_id IS NULL
+                                        WHEN p_category IS NOT NULL AND p_category <> 'without_sub_category' THEN ty.category_id = p_category::BIGINT
                                         ELSE TRUE
                                     END)
                         ),
@@ -153,7 +153,7 @@ return new class extends Migration
                             -- Transacciones únicas emparejadas o no emparejadas, con filtro de búsqueda aplicado
                             SELECT
                                 tylc.id, tylc.message, tylc.amount, tylc.date_operation, tylc.type_transaction,
-                                tylc.sub_category_id, tylc.detail_id, tylc.detail_name, tylc.frequency_general,
+                                tylc.category_id, tylc.detail_id, tylc.detail_name, tylc.frequency_general,
                                 tylc.frequency, tylc.yape_trans, tylc.matched_yape_id, tylc.user_id,
                                 'transaction' AS source_type
                             FROM TRANSACTIONS_YAPE_LINK_CANDIDATES tylc
@@ -176,7 +176,7 @@ return new class extends Migration
                             -- Yapes que no se emparejaron con ninguna transacción
                             SELECT
                                 pfy.id, pfy.message, pfy.amount, pfy.date_operation, pfy.type_transaction,
-                                pfy.sub_category_id,
+                                pfy.category_id,
                                 NULL::BIGINT AS detail_id,
                                 pfy.destination AS detail_name,
                                 NULL::JSONB AS frequency_general,
@@ -203,7 +203,7 @@ return new class extends Migration
                         -- Consulta Final con Paginación y Conteo Total
                         SELECT
                             fuwtc.id, fuwtc.message, fuwtc.amount, fuwtc.date_operation, fuwtc.type_transaction,
-                            fuwtc.sub_category_id, fuwtc.detail_id, fuwtc.detail_name,
+                            fuwtc.category_id, fuwtc.detail_id, fuwtc.detail_name,
                             fuwtc.frequency_general, fuwtc.frequency, fuwtc.yape_trans,
                             fuwtc.matched_yape_id AS yape_id,
                             fuwtc.user_id,

@@ -12,7 +12,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::unprepared("CREATE TYPE public.type_transaction AS ENUM ('income', 'expense');");
+        // $this->down();
+        // DB::unprepared("CREATE TYPE public.type_transaction AS ENUM ('income', 'expense');");
     }
 
     /**
@@ -20,5 +21,6 @@ return new class extends Migration
      */
     public function down(): void
     {
+        DB::unprepared('DROP TYPE IF EXISTS public.type_transaction;');
     }
 };

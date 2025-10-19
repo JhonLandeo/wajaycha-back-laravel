@@ -13,13 +13,12 @@ return new class extends Migration
     {
         Schema::create('payment_services', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->unique(); // Nombre del servicio (Yape, Plin, etc.)
-            $table->unsignedBigInteger('operator_id')->nullable(); // Relación con financial_entities
-            $table->string('type'); // Tipo: Billetera Digital, Servicio de Pago
-            $table->string('website')->nullable(); // Sitio web
+            $table->string('name')->unique();
+            $table->unsignedBigInteger('financial_entity_id')->nullable(); 
+            $table->string('type');
+            $table->string('website')->nullable();
 
-            // Clave foránea para operator_id
-            $table->foreign('operator_id')->references('id')->on('financial_entities')->onDelete('set null');
+            $table->foreign('financial_entity_id')->references('id')->on('financial_entities');
             $table->timestamps();
         });
     }

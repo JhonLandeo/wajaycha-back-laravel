@@ -16,13 +16,13 @@ class PaymentServicesSeeder extends Seeder
         $services = [
             [
                 'name' => 'Yape',
-                'operator_id' => DB::table('financial_entities')->where('name', 'Banco de Crédito del Perú')->value('id'),
+                'financial_entity_id' => DB::table('financial_entities')->where('name', 'Banco de Crédito del Perú')->value('id'),
                 'type' => 'Billetera Digital',
                 'website' => 'https://www.yape.com.pe',
             ],
             [
                 'name' => 'Plin',
-                'operator_id' => null, // Operado por múltiples bancos
+                'financial_entity_id' => null,
                 'type' => 'Servicio de Pago Interbancario',
                 'website' => 'https://www.plin.pe',
             ],

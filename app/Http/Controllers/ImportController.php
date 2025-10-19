@@ -55,8 +55,6 @@ class ImportController extends Controller
             $folder = 'files/' . $financialCode;
             $storedPath = $file->store($folder);
             $mime = Storage::mimeType($file);
-            // $path = Storage::path($file);
-            // $url = Storage::url($file);
 
             DB::beginTransaction();
             DB::table('imports')->insert([

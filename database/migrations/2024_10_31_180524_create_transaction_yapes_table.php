@@ -19,6 +19,10 @@ return new class extends Migration
             $table->decimal('amount');
             $table->timestamp('date_operation');
             $table->foreignId('user_id')->constrained();
+            $table->unsignedBigInteger('category_id')->nullable()->after('user_id');
+            $table->foreign('category_id')->references('id')->on('categories');
+            $table->unsignedBigInteger('detail_id')->nullable()->after('sub_category_id');
+            $table->foreign('detail_id')->references('id')->on('details');
             $table->enum('type_transaction', ['income', 'expense']);
             $table->timestamps();
         });

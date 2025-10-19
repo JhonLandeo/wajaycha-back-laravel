@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('details_yape', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('sub_category_id')->nullable();
-            $table->foreign('sub_category_id')->references('id')->on('sub_categories');
+            $table->unsignedBigInteger('category_id')->nullable();
+            $table->foreign('category_id')->references('id')->on('categories');
             $table->string('name');
             $table->timestamps();
         });
