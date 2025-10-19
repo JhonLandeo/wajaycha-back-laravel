@@ -16,6 +16,8 @@ return new class extends Migration
             $table->foreignId('pareto_classification_id')->constrained();
             $table->string('name');
             $table->decimal('monthly_budget')->nullable()->after('name');
+            $table->unsignedBigInteger('user_id');
+            $table->foreign('user_id')->references('id')->on('users');
             $table->timestamps();
         });
     }

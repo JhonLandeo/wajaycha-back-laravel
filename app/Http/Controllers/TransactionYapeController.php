@@ -6,6 +6,7 @@ use App\Imports\TransactionYapeImport;
 use App\Models\TransactionYape;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -19,6 +20,7 @@ class TransactionYapeController extends Controller
     {
         try {
             $file = $request->file('file');
+            $userId = Auth::id();
             $originalName = $file->getClientOriginalName();
             $extension = $file->getClientOriginalExtension();
             $size = $file->getSize();
@@ -34,7 +36,7 @@ class TransactionYapeController extends Controller
                 'mime' => $mime,
                 'url' => null,
                 'size' => $size,
-                'user_id' => $request->user_id,
+                'user_id' => $userId,
                 'financial_id' => self::FINANCIAL_BCP_ID,
                 'financial_entity_id' => self::FINANCIAL_BCP_ID,
                 'created_at' => now()

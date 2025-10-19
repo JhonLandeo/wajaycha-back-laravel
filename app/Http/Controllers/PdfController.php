@@ -33,6 +33,7 @@ class PdfController extends Controller
 
         // Obtener el archivo PDF desde la solicitud
         $file = $request->file('file');
+        $userId = Auth::id();
         $originalName = $file->getClientOriginalName();
 
         $year = (int)substr($originalName, 6, 4);
@@ -96,7 +97,7 @@ class PdfController extends Controller
                     'date_operation' => Carbon::createFromLocaleFormat('dM', 'es', $dayMonth)->setYear($year)->format('Y-m-d 00:00:00'),
                     'type_transaction' => $income == 0 ? 'expense' : 'income',
                     'name' => $description,
-                    'user_id' => $request->user_id,
+                    'user_id' => $userId,
                     'created_at' => now(),
                     'updated_at' => now(),
                     'detail_id' => null,

@@ -8,6 +8,7 @@ use App\Models\Import;
 use App\Models\PaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -24,11 +25,12 @@ class ImportController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
+        $userId = Auth::id();
 
         $query = DB::table('imports as i')
             ->select('i.*', 'fe.name as financial_name')
             ->leftJoin('financial_entities as fe', 'financial_id', '=', 'fe.id')
-            ->where('user_id', $request->user_id);
+            ->where('user_id', $userId);
 
         $data = $query->paginate($perPage, ['*'], 'page', $page);
 
@@ -55,6 +57,7 @@ class ImportController extends Controller
             $folder = 'files/' . $financialCode;
             $storedPath = $file->store($folder);
             $mime = Storage::mimeType($file);
+            $userId = Auth::id();
 
             DB::beginTransaction();
             DB::table('imports')->insert([
@@ -64,7 +67,7 @@ class ImportController extends Controller
                 'mime' => $mime,
                 'url' => null,
                 'size' => $size,
-                'user_id' => $request->user_id,
+                'user_id' => $userId,
                 'financial_id' => $request->financial,
                 'created_at' => now()
             ]);

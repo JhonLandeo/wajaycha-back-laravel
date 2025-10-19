@@ -7,6 +7,7 @@ use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Js;
@@ -27,7 +28,7 @@ class TransactionsController extends Controller
         $amount = $request->input('amount', null);
         $search = $request->input('search', null);
         $subCategory = $request->input('sub_category', null);
-        $userId = $request->input('user_id', null);
+        $userId = Auth::id();
         $recurring = filter_var($request->input('recurring', false), FILTER_VALIDATE_BOOLEAN);
         $weekend = filter_var($request->input('weekend', false), FILTER_VALIDATE_BOOLEAN);
         $workday = filter_var($request->input('workday', false), FILTER_VALIDATE_BOOLEAN);
@@ -80,7 +81,7 @@ class TransactionsController extends Controller
         $year = $request->input('year', null);
         $month = $request->input('month', null);
         $type = $request->input('type', null);
-        $userId = $request->input('user_id', null);
+        $userId = Auth::id();
 
         $query = DB::table('transactions as t')
             ->leftJoin('details as d', 'd.id', '=', 't.detail_id')

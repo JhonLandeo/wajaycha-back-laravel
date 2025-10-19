@@ -7,6 +7,7 @@ use App\Imports\TransactionYapeImport;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
@@ -20,6 +21,7 @@ class DashboardController extends Controller
         try {
             $year = $request->input('year', null);
             $month = $request->input('month', null);
+            $userId = Auth::id();
             $avgBase = DB::table('transactions')
                 ->selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense")
@@ -33,7 +35,7 @@ class DashboardController extends Controller
                 $avg = $avgBase->whereYear('date_operation', $year);
             }
 
-            $avg = $avgBase->where('transactions.user_id', $request->user_id)
+            $avg = $avgBase->where('transactions.user_id', $userId)
                 ->first();
 
             $balanceBase = DB::table('transactions')
@@ -49,7 +51,7 @@ class DashboardController extends Controller
                 $balance = $balanceBase->whereYear('date_operation', $year);
             }
 
-            $balance = $balanceBase->where('transactions.user_id', $request->user_id)
+            $balance = $balanceBase->where('transactions.user_id', $userId)
                 ->first();
 
 
@@ -72,10 +74,11 @@ class DashboardController extends Controller
         try {
             $year = $request->input('year', null);
             $month = $request->input('month', null);
+            $userId = Auth::id();
             $queryBase = DB::table('transactions as t')
                 ->selectRaw("CAST(SUM(amount) AS DECIMAL(10,2)) as value, d.name as name")
                 ->join('details as d', 't.detail_id', '=',  'd.id')
-                ->where('t.user_id', $request->user_id);
+                ->where('t.user_id', $userId);
 
             $queryIncomes = clone $queryBase;
             $queryExpenses = clone $queryBase;
@@ -125,6 +128,7 @@ class DashboardController extends Controller
     {
         try {
             $isChecked = $request->input('isChecked', false);
+            $userId = Auth::id();
 
             // Esta parte de la lógica no necesita cambios, ya que es SQL estándar.
             $selectAggregate = $isChecked ?
@@ -153,7 +157,7 @@ class DashboardController extends Controller
             }
 
             $results = $query
-                ->where('t.user_id', $request->user_id)
+                ->where('t.user_id', $userId)
                 // CAMBIO: Usamos groupByRaw para agrupar por las expresiones, no por los alias.
                 ->groupByRaw("{$dayOfWeekExpression}, {$dayNameExpression}")
                 ->orderByRaw($dayOfWeekExpression) // Usamos orderByRaw para consistencia.
@@ -172,13 +176,14 @@ class DashboardController extends Controller
     public function getHourlyData(Request $request): JsonResponse
     {
         try {
+            $userId = Auth::id();
             $data = Transaction::selectRaw("
             ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END), 2) AS avg_daily_income,
             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END), 2) AS avg_daily_expense,
             EXTRACT(HOUR FROM date_operation) AS hour  -- CAMBIO 1: Se usa EXTRACT en lugar de HOUR()
         ")
                 ->join('details as d', 'transactions.detail_id', '=', 'd.id')
-                ->where('transactions.user_id', $request->user_id)
+                ->where('transactions.user_id', $userId)
                 ->whereYear('date_operation', $request->year)
                 ->groupByRaw('EXTRACT(HOUR FROM date_operation)')
                 ->orderBy('hour')
@@ -194,6 +199,7 @@ class DashboardController extends Controller
     {
         try {
             $isChecked = $request->input('isChecked', false);
+            $userId = Auth::id();
             $selectAggregate = $isChecked ?
                 "COUNT(CASE WHEN type_transaction = 'income' THEN t.id END) AS count_monthly_income,
              COUNT(CASE WHEN type_transaction = 'expense' THEN t.id END) AS count_monthly_expense" :
@@ -209,7 +215,7 @@ class DashboardController extends Controller
                 {$monthNumberExpression} AS month
             ")
                 ->join('details as d', 't.detail_id', '=',  'd.id')
-                ->where('t.user_id', $request->user_id);
+                ->where('t.user_id', $userId);
 
             if ($request->filled('year')) {
                 $baseQuery->whereYear('t.date_operation', $request->year);
@@ -255,16 +261,14 @@ class DashboardController extends Controller
     {
         $year = $request->input('year', null);
         $month = $request->input('month', null);
-        // $type = $request->input('type', null); // Descomentar si se va a usar
-        $userId = $request->input('user_id', null);
+        $userId = Auth::id();
 
-        // Guardamos las expresiones complejas en variables para reutilizarlas y mayor claridad.
-        $nameExpression = "COALESCE(c.name, 'Sin categorizar')"; // CAMBIO 1: Comillas simples para la cadena
+        $nameExpression = "COALESCE(c.name, 'Sin categorizar')";
         $totalExpression = "SUM(CASE 
         WHEN t.type_transaction = 'expense' THEN t.amount 
         WHEN t.type_transaction = 'income' THEN -t.amount 
         ELSE 0 
-    END)";
+        END)";
 
         $query = DB::table('transactions as t')
             ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
@@ -283,24 +287,15 @@ class DashboardController extends Controller
             $query->whereMonth('t.date_operation', $month);
         }
 
-        // if ($type) {
-        //     $query->where('t.type_transaction', $type);
-        // }
-
         if ($userId) {
             $query->where('t.user_id', $userId);
         }
 
         $results = $query
-            ->groupByRaw($nameExpression) // Agrupamos por la expresión completa
-            ->havingRaw("{$totalExpression} > 0") // OPTIMIZACIÓN: Filtramos en la BD con HAVING
-            ->orderByRaw("{$totalExpression} DESC") // CAMBIO 2: Ordenamos por la expresión completa
+            ->groupByRaw($nameExpression)
+            ->havingRaw("{$totalExpression} > 0")
+            ->orderByRaw("{$totalExpression} DESC")
             ->get();
-
-        // ELIMINADO: Ya no es necesario filtrar en PHP, la base de datos ya lo hizo.
-        // $filter = $results->filter(function ($item) {
-        //     return $item->total > 0;
-        // });
 
         return response()->json($results);
     }

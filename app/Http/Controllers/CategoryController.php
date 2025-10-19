@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\SubCategory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Js;
 
@@ -18,9 +19,19 @@ class CategoryController extends Controller
     {
         $per_page = $request->input('per_page', 10);
         $page = $request->input('page', 1);
-        $categories = Category::paginate($per_page, ['*'], 'page', $page);
+        $userId = Auth::id();
+
+        $categories = Category::query()
+        ->where('user_id', $userId)
+        ->with('paretoClassification')
+        ->orderBy('created_at', 'desc')
+        ->paginate($per_page, ['*'], 'page', $page);
 
         return response()->json($categories);
+
+        // $per_page = $request->input('per_page', 10);
+        // $page = $request->input('page', 1);
+        // $categories = Category::with('pareto_classification')->get();
     }
 
     /**
@@ -28,11 +39,13 @@ class CategoryController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $userId = Auth::id();
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',
             'pareto_classification_id' => 'required|exists:pareto_classifications,id',
             'monthly_budget' => 'required|numeric|min:0',
         ]);
+        $validatedData['user_id'] = $userId;
         $categories = Category::create($validatedData);
         return response()->json($categories, 201);
     }

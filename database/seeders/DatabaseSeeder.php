@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
         // ]);
 
         $this->call([
+            UserSeeder::class,
             ParetoClassificationSeeder::class,
             CategorySeeder::class,
             FinancialEntitiesSeeder::class,

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ParetoClassification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class ParetoClassificationController extends Controller
 {
@@ -16,7 +17,9 @@ class ParetoClassificationController extends Controller
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
 
-        $category = ParetoClassification::paginate($perPage, ['*'], 'page', $page);
+        $category = ParetoClassification::where('user_id', Auth::id())
+        ->orderBy('created_at', 'desc')
+        ->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json($category);
     }
@@ -26,11 +29,12 @@ class ParetoClassificationController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $userId = Auth::id();
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',
             'percentage' => 'required|numeric|between:0,100',
-
         ]);
+        $validatedData['user_id'] = $userId;
         $data = ParetoClassification::create($validatedData);
         return response()->json($data);
     }
