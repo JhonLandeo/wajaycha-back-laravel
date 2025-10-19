@@ -17,27 +17,23 @@ class JWTAuthController extends Controller
     // User registration
     public function register(Request $request): JsonResponse    
     {
-        $validator = Validator::make($request->all(), [
+        $validatedData = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'last_name' => 'required|string|max:255',
             'password' => 'required|string|min:6|confirmed',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json($validator->errors()->toJson(), 400);
-        }
-
         $user = User::create([
-            'name' => $request->get('name'),
-            'last_name' => $request->get('last_name'),
-            'email' => $request->get('email'),
-            'password' => Hash::make($request->get('password')),
+            'name' => $validatedData['name'],
+            'last_name' => $validatedData['last_name'],
+            'email' => $validatedData['email'],
+            'password' => Hash::make($validatedData['password']),
         ]);
 
         $token = JWTAuth::fromUser($user);
 
-        return response()->json(compact('user', 'token'), 201);
+        return response()->json(compact('token', 'user'));
     }
 
     // User login

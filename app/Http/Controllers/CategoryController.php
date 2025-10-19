@@ -28,10 +28,6 @@ class CategoryController extends Controller
         ->paginate($per_page, ['*'], 'page', $page);
 
         return response()->json($categories);
-
-        // $per_page = $request->input('per_page', 10);
-        // $page = $request->input('page', 1);
-        // $categories = Category::with('pareto_classification')->get();
     }
 
     /**

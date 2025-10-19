@@ -36,15 +36,11 @@ class SendSummaryTransactionByMonth extends Command
     public function handle()
     {
         try {
-            // $month = date('m');
-            // $year = date('Y');
-            // $budgetDeviation = $this->financialReportController->budgetDeviation($month - 1);
-            // Log::info('Budget Deviation: ', (array) $budgetDeviation);
-            // Mail::to('jpls80032017@gmail.com')->queue(new NotificationSummaryByMonth($budgetDeviation));
-
-
-            $data = $this->financialReportController->getParetoCategory('Transporte');
-            Log::info('Cash Flow Weekly: '. var_export($data, true));
+            $month = date('m');
+            $year = date('Y');
+            $budgetDeviation = $this->financialReportController->budgetDeviation($month - 1);
+            Log::info('Budget Deviation: ', (array) $budgetDeviation);
+            Mail::to('jpls80032017@gmail.com')->queue(new NotificationSummaryByMonth($budgetDeviation));
         } catch (\Throwable $th) {
             error_log($th);
 
