@@ -10,7 +10,6 @@ use App\Http\Controllers\ImportController;
 use App\Http\Controllers\ParetoClassificationController;
 use App\Http\Controllers\PdfController;
 use App\Http\Controllers\ReportController;
-use App\Http\Controllers\SubcategoriesController;
 use App\Http\Controllers\TransactionsController;
 use App\Http\Controllers\TransactionYapeController;
 use App\Http\Middleware\JwtMiddleware;
@@ -18,9 +17,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('register', [JWTAuthController::class, 'register']);
 Route::post('login', [JWTAuthController::class, 'login']);
-Route::post('logout', [JWTAuthController::class, 'logout']);
 
 Route::middleware([JwtMiddleware::class])->group(function () {
+    Route::post('logout', [JWTAuthController::class, 'logout']);
     Route::post('kpi-data', [DashboardController::class, 'kpiData']);
     Route::post('top-data', [DashboardController::class, 'topFiveData']);
     Route::post('weekly-data', [DashboardController::class, 'getWeeklyData']);
@@ -36,7 +35,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::resource('details', DetailsController::class);
 
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
-    Route::get('get-summary-by-sub-category', [TransactionsController::class, 'getSummaryBySubCategory']);
+    Route::get('get-summary-by-category', [TransactionsController::class, 'getSummaryByCategory']);
 
     Route::post('chat', [ChatGptController::class, 'chat']);
     Route::post('extract-pdf-data', [PdfController::class, 'extractData']);

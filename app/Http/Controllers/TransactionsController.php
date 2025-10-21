@@ -27,7 +27,7 @@ class TransactionsController extends Controller
         $type = $request->input('type', null);
         $amount = $request->input('amount', null);
         $search = $request->input('search', null);
-        $subCategory = $request->input('sub_category', null);
+        $category = $request->input('category', null);
         $userId = Auth::id();
         $recurring = filter_var($request->input('recurring', false), FILTER_VALIDATE_BOOLEAN);
         $weekend = filter_var($request->input('weekend', false), FILTER_VALIDATE_BOOLEAN);
@@ -43,7 +43,7 @@ class TransactionsController extends Controller
             $type,
             $amount,
             $search,
-            $subCategory,
+            $category,
             $userId,
             $recurring,
             $weekend,
@@ -74,7 +74,7 @@ class TransactionsController extends Controller
     }
 
 
-    public function getSummaryBySubCategory(Request $request): JsonResponse
+    public function getSummaryByCategory(Request $request): JsonResponse
     {
         $perPage = $request->input('per_page', 20);
         $page = $request->input('page', 1);
@@ -85,7 +85,7 @@ class TransactionsController extends Controller
 
         $query = DB::table('transactions as t')
             ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
-            ->leftJoin('sub_categories as sc', 'sc.id', '=', 't.sub_category_id')
+            ->leftJoin('categories as sc', 'sc.id', '=', 't.category_id')
             ->select(
                 DB::raw('COALESCE(sc.name, "Sin categorizar") as name'),
                 DB::raw('COUNT(*) as quantity'),

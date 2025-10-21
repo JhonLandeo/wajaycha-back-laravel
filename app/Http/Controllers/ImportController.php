@@ -28,8 +28,9 @@ class ImportController extends Controller
         $userId = Auth::id();
 
         $query = DB::table('imports as i')
-            ->select('i.*', 'fe.name as financial_name')
+            ->select('i.*', 'fe.name as financial_name', 'ps.name as payment_service_name')
             ->leftJoin('financial_entities as fe', 'financial_id', '=', 'fe.id')
+            ->leftJoin('payment_services as ps', 'i.financial_entity_id', '=', 'ps.id')
             ->where('user_id', $userId);
 
         $data = $query->paginate($perPage, ['*'], 'page', $page);

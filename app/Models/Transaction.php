@@ -17,7 +17,7 @@ class Transaction extends Model
     protected $fillable = [
         'name',
         'category_id',
-        'sub_category_id',
+        'category_id',
         'amount',
         'created_at',
         'updated_at',
@@ -36,6 +36,6 @@ class Transaction extends Model
 
     public function category(): HasOneThrough
     {
-        return $this->hasOneThrough(Category::class, SubCategory::class);
+        return $this->hasOneThrough(Category::class, Category::class);
     }
 }

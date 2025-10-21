@@ -40,26 +40,26 @@ class DetailsController extends Controller
                     ->first();
 
                 if ($yapeTransaction) {
-                    $yapeTransaction->sub_category_id = $request->sub_category_id;
+                    $yapeTransaction->category_id = $request->category_id;
                     $yapeTransaction->save();
                 }
 
                 Transaction::where('id', $item->id)
                     ->update([
-                        'sub_category_id' => $request->sub_category_id,
+                        'category_id' => $request->category_id,
                     ]);
             });
         } else {
             if ($request->source_type == 'yape_unmatched') {
                 TransactionYape::where('id', $request->transaction_id)
                     ->update([
-                        'sub_category_id' => $request->sub_category_id,
+                        'category_id' => $request->category_id,
                     ]);
             } else {
                 $transaction = Transaction::where('id', $request->transaction_id)
                     ->first();
                 if ($transaction) {
-                    $transaction->sub_category_id = $request->sub_category_id;
+                    $transaction->category_id = $request->category_id;
                     $transaction->save();
                     $monthTransaction = Carbon::parse($transaction->date_operation)->format('m');
                     $yearTransaction = Carbon::parse($transaction->date_operation)->format('Y');
@@ -72,7 +72,7 @@ class DetailsController extends Controller
                         ->whereDay('date_operation', $dayTransaction)
                         ->first();
                     if ($yapeTransaction) {
-                        $yapeTransaction->sub_category_id = $request->sub_category_id;
+                        $yapeTransaction->category_id = $request->category_id;
                         $yapeTransaction->save();
                     }
                 }

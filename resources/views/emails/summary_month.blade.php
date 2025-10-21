@@ -54,7 +54,7 @@
     <table>
         <thead>
             <tr>
-                <th>Subcategoria</th>
+                <th>Categoria</th>
                 <th>Presupuestado</th>
                 <th>Real</th>
                 <th>Varianza</th>
@@ -64,7 +64,7 @@
         <tbody>
             @foreach ($budgetDeviation as $item)
                 <tr class="{{ $item->status == 'Excedido' ? 'bg-red-500' : 'bg-green-500' }}" style="padding: 5px">
-                    <td>{{ $item->subcategory }}</td>
+                    <td>{{ $item->category }}</td>
                     <td>S/.{{ number_format($item->budgeted, 2) }}</td>
                     <td>S/.{{ number_format($item->real, 2) }}</td>
                     <td>S/.{{ number_format($item->variance, 2) }}</td>

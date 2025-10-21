@@ -32,8 +32,8 @@ return new class extends Migration
                     LANGUAGE sql
                     AS $$
                     SELECT * FROM (
-                        WITH RECURRING_SUB_CATEGORY_FREQUENCIES AS (
-                            -- CTE para calcular la frecuencia general de subcategorías por detail_id (equivalente a detail_sub_category_frequencies)
+                        WITH RECURRING_CATEGORY_FREQUENCIES AS (
+                            -- CTE para calcular la frecuencia general de categorías por detail_id (equivalente a detail_category_frequencies)
                             SELECT
                                 d.id AS detail_id,
                                 JSONB_AGG(
@@ -70,7 +70,7 @@ return new class extends Migration
                                 COUNT(t.id) OVER(PARTITION BY t.detail_id) AS frequency
                             FROM transactions t
                             JOIN details d ON d.id = t.detail_id
-                            LEFT JOIN RECURRING_SUB_CATEGORY_FREQUENCIES dsf ON dsf.detail_id = t.detail_id
+                            LEFT JOIN RECURRING_CATEGORY_FREQUENCIES dsf ON dsf.detail_id = t.detail_id
                             WHERE
                                 t.user_id = p_user_id
                                 -- Filtros de Fecha (YEAR, MONTH)
@@ -86,10 +86,10 @@ return new class extends Migration
                                 AND (p_type IS NULL OR t.type_transaction::type_transaction = p_type)
                                 AND (p_amount IS NULL OR p_amount = 0.00 OR t.amount = p_amount)
                                 
-                                -- Filtros de Subcategoría
+                                -- Filtros de categoría
                                 AND (CASE
-                                        WHEN p_category = 'without_sub_category' THEN t.category_id IS NULL
-                                        WHEN p_category IS NOT NULL AND p_category <> 'without_sub_category' THEN t.category_id = p_category::BIGINT -- Casting necesario
+                                        WHEN p_category = 'without_category' THEN t.category_id IS NULL
+                                        WHEN p_category IS NOT NULL AND p_category <> 'without_category' THEN t.category_id = p_category::BIGINT -- Casting necesario
                                         ELSE TRUE
                                     END)
                         ),
@@ -108,8 +108,8 @@ return new class extends Migration
                                 AND (p_type IS NULL OR ty.type_transaction::type_transaction = p_type)
                                 AND (p_amount IS NULL OR p_amount = 0.00 OR ty.amount = p_amount)
                                 AND (CASE
-                                        WHEN p_category = 'without_sub_category' THEN ty.category_id IS NULL
-                                        WHEN p_category IS NOT NULL AND p_category <> 'without_sub_category' THEN ty.category_id = p_category::BIGINT
+                                        WHEN p_category = 'without_category' THEN ty.category_id IS NULL
+                                        WHEN p_category IS NOT NULL AND p_category <> 'without_category' THEN ty.category_id = p_category::BIGINT
                                         ELSE TRUE
                                     END)
                         ),

@@ -13,11 +13,11 @@ class FinancialReportController extends Controller
     private $transactions;
     public function __construct()
     {
-        // $this->transactions = DB::table('transactions as t')
-        //     ->select('t.id', 't.amount', 't.date_operation', 't.type_transaction', 's.name as subcat_name', 'd.name as detail_name', 't.sub_category_id')
-        //     ->join('sub_categories as s', 's.id', '=', 't.sub_category_id')
-        //     ->join('details as d', 'd.id', '=', 't.detail_id')
-        //     ->get();
+        $this->transactions = DB::table('transactions as t')
+            ->select('t.id', 't.amount', 't.date_operation', 't.type_transaction', 's.name as cat_name', 'd.name as detail_name', 't.category_id')
+            ->join('categories as s', 's.id', '=', 't.category_id')
+            ->join('details as d', 'd.id', '=', 't.detail_id')
+            ->get();
     }
 
     public function getBalance()
@@ -30,7 +30,7 @@ class FinancialReportController extends Controller
 
     public function totalExpensesByCategory($month)
     {
-        return $this->transactions->groupBy('subcat_name')->map(function ($item) use ($month) {
+        return $this->transactions->groupBy('cat_name')->map(function ($item) use ($month) {
             return $item->where('type_transaction', 'expense')
                 ->filter(fn($sub) => Carbon::parse($sub->date_operation)->month == $month)
                 ->sum('amount') - $item->where('type_transaction', 'income')
@@ -41,7 +41,7 @@ class FinancialReportController extends Controller
 
     public function totalIncomeByCategory($month)
     {
-        return $this->transactions->groupBy('subcat_name')->map(function ($item) use ($month) {
+        return $this->transactions->groupBy('cat_name')->map(function ($item) use ($month) {
             return $item->where('type_transaction', 'income')
                 ->filter(fn($sub) => Carbon::parse($sub->date_operation)->month == $month)
                 ->sum('amount') - $item->where('type_transaction', 'expense')
@@ -98,7 +98,7 @@ class FinancialReportController extends Controller
     public function getExpenseByCategory($category)
     {
         return $this->transactions->where('type_transaction', 'expense')
-            ->where('sub_category_id', $category)
+            ->where('category_id', $category)
             ->sum('amount');
     }
 
@@ -143,7 +143,7 @@ class FinancialReportController extends Controller
     public function getOutlierTransactions()
     {
         return $this->transactions->where('type_transaction', 'expense')
-            ->groupBy('sub_category_id')
+            ->groupBy('category_id')
             ->map(function ($group, $index) {
                 $promedio = $group->avg('amount');
                 $total = $group->count();
@@ -162,12 +162,12 @@ class FinancialReportController extends Controller
 
     public function budgetDeviation($month)
     {
-        $monthlyBudget = DB::table('sub_categories')->get();
+        $monthlyBudget = DB::table('categories')->get();
         return $this->totalExpensesByCategory($month)->map(function ($item, $sub) use ($monthlyBudget) {
             $monthly_budget = $monthlyBudget->where('name', $sub)->value('monthly_budget');
             $variance =  $item - $monthly_budget;
             return (object) [
-                'subcategory' => $sub,
+                'category' => $sub,
                 'budgeted' => $monthly_budget,
                 'real' => $item,
                 'variance' => $variance,
@@ -323,11 +323,11 @@ class FinancialReportController extends Controller
         ];
     }
 
-    public function drillDown($subcategory)
+    public function drillDown($category)
     {
         $data = $this->transactions
             ->where('type_transaction', 'expense')
-            ->where('subcat_name', $subcategory)
+            ->where('cat_name', $category)
             ->groupBy('detail_name')
             ->map(function ($group, $detailName) {
                 return (object) [
@@ -340,16 +340,16 @@ class FinancialReportController extends Controller
             ->values();
 
         return (object) [
-            'categoria_analizada' => $subcategory,
+            'categoria_analizada' => $category,
             'desglose_por_descripcion' => $data
         ];
     }
 
-    public function correlationByCategory($subcategory)
+    public function correlationByCategory($category)
     {
 
         $base = $this->transactions
-            ->groupBy('subcat_name')
+            ->groupBy('cat_name')
             ->map(function ($group, $key) {
                 $month = $group->groupBy(function ($item) {
                     return Carbon::parse($item->date_operation)->monthName;
@@ -363,14 +363,14 @@ class FinancialReportController extends Controller
                 });
             });
 
-        $mainSubcategory = $base->get($subcategory);
-        $diferentSubcategory = $base->filter(function ($value, $key) use ($subcategory) {
-            return $key !== $subcategory;
+        $categormainCategoryy = $base->get($category);
+        $diferentCategory = $base->filter(function ($value, $key) use ($category) {
+            return $key !== $category;
         });
 
-        return $diferentSubcategory->map(function ($item, $key) use ($mainSubcategory) {
+        return $diferentCategory->map(function ($item, $key) use ($categormainCategoryy) {
 
-            return $mainSubcategory->flatMap(function ($sub, $subkey) use ($item) {
+            return $categormainCategoryy->flatMap(function ($sub, $subkey) use ($item) {
                 return [$subkey => [$sub, $item->get($subkey)]];
             })->values();
         })->map(function ($item) {
@@ -400,7 +400,7 @@ class FinancialReportController extends Controller
                 'data_points_used' => $n,
                 'correlation_coefficient' => $r
             ];
-        })->map(function ($item, $key) use ($subcategory) {
+        })->map(function ($item, $key) use ($category) {
             $correlation_coefficient = $item->correlation_coefficient;
             $strength = '';
             if ($correlation_coefficient >= 0.9) {
@@ -415,7 +415,7 @@ class FinancialReportController extends Controller
                 $strength = 'Nula o despreciable';
             }
             $varY = $key;
-            $varX = $subcategory;
+            $varX = $category;
             $direction = $correlation_coefficient > 0 ? 'Positiva' : 'Negativa';
             $interpretation = "Se ha encontrado una $strength correlación $direction entre $varX y $varY. ";
 
@@ -465,9 +465,9 @@ class FinancialReportController extends Controller
 
         return $amountCounts;
     }
-    public function getVolatileSubcategory()
+    public function getVolatileCategory()
     {
-        return $this->transactions->groupBy('subcat_name')
+        return $this->transactions->groupBy('cat_name')
             ->map(function ($group) {
                 $month = $group->groupBy(function ($item) {
                     return Carbon::parse($item->date_operation)->monthName;
@@ -514,15 +514,15 @@ class FinancialReportController extends Controller
     }
 
     public function getParetoCategory(){
-        $totalExpenseBySubcategory = $this->transactions->where('type_transaction', 'expense')
-        ->groupBy('subcat_name')
+        $totalExpenseByCategory = $this->transactions->where('type_transaction', 'expense')
+        ->groupBy('cat_name')
         ->map(function ($group) {
             $expense = $group->where('type_transaction', 'expense')->sum('amount');
             $income = $group->where('type_transaction', 'income')->sum('amount');
             return $expense - $income;
         })->sortDesc();
-        $total = $totalExpenseBySubcategory->values()->sum();
-        $percentages = $totalExpenseBySubcategory->map(function ($item) use ($total) {
+        $total = $totalExpenseByCategory->values()->sum();
+        $percentages = $totalExpenseByCategory->map(function ($item) use ($total) {
             return (object) [
                 'percentage' => $item * 100 / $total,
                 'amount' => $item
@@ -534,7 +534,7 @@ class FinancialReportController extends Controller
             $acc += $value->percentage;
             $pareto[] = (object) [
                 'acumulado_porc' => $acc,
-                'subcategory' => $key,
+                'category' => $key,
                 'gasto' => $value->amount
             ];
             if($acc >= 80) break;
@@ -543,7 +543,7 @@ class FinancialReportController extends Controller
         $quantity = $pareto->count();
         return (object) [
             'principio_pareto' => $pareto,
-            'conclusion' => "El $accPercentage% de todos tus gastos provienen de solo $quantity subcategorias",
+            'conclusion' => "El $accPercentage% de todos tus gastos provienen de solo $quantity categorias",
         ];
     }
 
