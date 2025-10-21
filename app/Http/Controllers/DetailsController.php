@@ -23,8 +23,12 @@ class DetailsController extends Controller
                 ->select('t.*', 'd.name')
                 ->join('details as d', 't.detail_id', '=', 'd.id')
                 ->where('d.name', $request->name)
-                ->whereMonth('t.date_operation', $request->month)
-                ->whereYear('t.date_operation', $request->year)
+                ->when($request->month, function ($query) use ($request) {
+                    $query->whereMonth('t.date_operation', $request->month);
+                })
+                ->when($request->year, function ($query) use ($request) {
+                    $query->whereYear('t.date_operation', $request->year);
+                })
                 ->get();
 
             $transactionCommon->each(function ($item) use ($request) {
