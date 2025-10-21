@@ -23,7 +23,7 @@ class CategoryController extends Controller
         $categories = Category::query()
         ->where('user_id', $userId)
         ->with('paretoClassification')
-        ->orderBy('created_at', 'desc')
+        ->orderBy('id', 'asc')
         ->paginate($per_page, ['*'], 'page', $page);
 
         return response()->json($categories);
