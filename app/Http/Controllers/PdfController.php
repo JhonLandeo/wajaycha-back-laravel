@@ -220,10 +220,7 @@ class PdfController extends Controller
             escapeshellarg($decryptedFilePath)
         );
 
-
         exec($command, $output, $returnVar);
-
-
         if ($returnVar !== 0) {
             Log::error('QPDF Output: ' . implode("\n", $output));
             Log::error('QPDF Return Code: ' . $returnVar);
