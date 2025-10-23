@@ -224,7 +224,7 @@ class PdfController extends Controller
         if ($returnVar !== 0) {
             Log::error('QPDF Output: ' . implode("\n", $output));
             Log::error('QPDF Return Code: ' . $returnVar);
-            throw new \Exception('No se pudo desencriptar el archivo PDF con qpdf.');
+            throw new \Exception('No se pudo desencriptar el archivo PDF con qpdf. Salida: ' . implode(' | ', $output));
         }
 
         return $decryptedFilePath;
