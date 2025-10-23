@@ -30,7 +30,6 @@ class PdfController extends Controller
     }
     public function extractData(PdfRequest $request): JsonResponse
     {
-
         // Obtener el archivo PDF desde la solicitud
         $file = $request->file('file');
         $userId = Auth::id();
@@ -210,12 +209,16 @@ class PdfController extends Controller
      */
     private function decryptPdf($filePath, $password)
     {
+        Log::info('File path que se usará: ' . $filePath);
+        Log::info('Existe el archivo? ' . (file_exists($filePath) ? 'Sí' : 'No'));
+        Log::info('Es legible? ' . (is_readable($filePath) ? 'Sí' : 'No'));
+
         $decryptedFilePath = storage_path('app/uploads/decrypted_' . basename($filePath));
 
         // Comando para usar qpdf y desencriptar el archivo
         $command = sprintf(
             'qpdf --decrypt --password=%s %s %s',
-            $password, // Aquí no se usa escapeshellarg() para la contraseña
+            $password,
             escapeshellarg($filePath),
             escapeshellarg($decryptedFilePath)
         );
