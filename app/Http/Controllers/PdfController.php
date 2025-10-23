@@ -34,7 +34,6 @@ class PdfController extends Controller
         $file = $request->file('file');
         $userId = Auth::id();
         $originalName = $file->getClientOriginalName();
-
         $year = (int)substr($originalName, 6, 4);
         $filePath = $file->getPathname();
 
@@ -222,7 +221,7 @@ class PdfController extends Controller
             escapeshellarg($filePath),
             escapeshellarg($decryptedFilePath)
         );
-
+        Log::info('Comando qpdf: ' . $command);
         exec($command, $output, $returnVar);
         if ($returnVar !== 0) {
             Log::error('QPDF Output: ' . implode("\n", $output));
