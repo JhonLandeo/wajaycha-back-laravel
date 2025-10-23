@@ -28,14 +28,14 @@ class PdfController extends Controller
         App::setLocale('es');
         Carbon::setLocale('es');
     }
-    public function extractData(PdfRequest $request): JsonResponse
+    public function extractData(PdfRequest $request, string $storedPath): JsonResponse
     {
+        $filePath = storage_path('app/private/' . $storedPath);
         // Obtener el archivo PDF desde la solicitud
         $file = $request->file('file');
         $userId = Auth::id();
         $originalName = $file->getClientOriginalName();
         $year = (int)substr($originalName, 6, 4);
-        $filePath = $file->getPathname();
 
         // Desencriptar el archivo PDF si está encriptado
         if ($this->isEncrypted($filePath)) {

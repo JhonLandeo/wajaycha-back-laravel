@@ -74,7 +74,7 @@ class ImportController extends Controller
             ]);
 
 
-            $this->pdfController->extractData($request);
+            $this->pdfController->extractData($request, $storedPath);
             DB::commit();
 
             return response()->json(['status' => 'ok']);
@@ -118,7 +118,7 @@ class ImportController extends Controller
 
     public function download($id)
     {
-        $import = DB::table('imports')->find($id); 
+        $import = DB::table('imports')->find($id);
         return Storage::download($import->path, $import->name);
     }
 }
