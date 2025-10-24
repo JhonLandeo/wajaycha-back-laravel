@@ -4,10 +4,13 @@ namespace App\Imports;
 
 use App\Models\TransactionYape;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Imports\HeadingRowFormatter;
+
+use function PHPUnit\Framework\isEmpty;
 
 HeadingRowFormatter::default('none');
 class TransactionYapeImport implements ToModel, WithHeadingRow
@@ -34,12 +37,14 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
      */
     public function model(array $row)
     {
+       if(empty($row['Fecha de operación']) || empty($row['Origen']) || empty($row['Destino']) || empty($row['Monto']) || empty($row['Tipo de Transacción'])){
+            return;
+       }
+
         $dateOperation = null;
 
         if (!empty($row['Fecha de operación'])) {
             $dateString = $row['Fecha de operación'];
-
-            // Intentar diferentes formatos de fecha
             if (Carbon::hasFormat($dateString, 'd/m/Y H:i:s')) {
                 $dateOperation = Carbon::createFromFormat('d/m/Y H:i:s', $dateString)->format('Y-m-d H:i:s');
             } elseif (Carbon::hasFormat($dateString, 'd/m/Y')) {
@@ -47,12 +52,10 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             }
         }
 
+        $userId = Auth::id();
         $toleranceInSeconds = 60;
         $startDate = Carbon::parse($dateOperation)->subSeconds($toleranceInSeconds);
         $endDate = Carbon::parse($dateOperation)->addSeconds($toleranceInSeconds);
-        Log::info('Date Operation: ' . $dateOperation);
-        Log::info('Start Date: ' . $startDate);
-        Log::info('End Date: ' . $endDate);
 
         $yapeRecord = TransactionYape::where('message', $row['Mensaje'])
             ->where('message', $row['Mensaje'])
@@ -61,7 +64,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             ->where('amount', (float) $row['Monto'])
             ->whereBetween('date_operation', [$startDate, $endDate])
             ->where('type_transaction', $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income')
-            ->where('user_id', 1)
+            ->where('user_id', $userId)
             ->first();
 
         if ($yapeRecord) {
@@ -74,25 +77,10 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
                 'amount' => (float) $row['Monto'],
                 'date_operation' => $dateOperation,
                 'type_transaction' => $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income',
-                'user_id' => 1,
+                'user_id' => $userId,
             ]);
         }
-
-        // return TransactionYape::firstOrCreate(
-        //     [
-        //         'message' => $row['Mensaje'],
-        //         'origin' => $row['Origen'],
-        //         'destination' => $row['Destino'],
-        //         'amount' => (float) $row['Monto'],
-        //         'date_operation' => $dateOperation,
-        //         'type_transaction' => $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income',
-        //         'user_id' => 1,
-        //     ]
-        // );
     }
-
-
-
 
 
     /**
