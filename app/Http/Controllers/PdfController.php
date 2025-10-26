@@ -31,29 +31,22 @@ class PdfController extends Controller
     public function extractData(PdfRequest $request, string $storedPath): JsonResponse
     {
         $filePath = storage_path('app/private/' . $storedPath);
-        // Obtener el archivo PDF desde la solicitud
         $file = $request->file('file');
         $userId = Auth::id();
         $originalName = $file->getClientOriginalName();
         $year = (int)substr($originalName, 6, 4);
 
-        // Desencriptar el archivo PDF si está encriptado
         if ($this->isEncrypted($filePath)) {
             $filePath = $this->decryptPdf($filePath, $request->password);
         }
 
-        // Intentar leer el archivo como un PDF basado en texto
         $text = $this->extractTextFromPdf($filePath);
 
-        // Si no se ha extraído texto, hacer OCR con Tesseract
         if (empty($text)) {
-            // Si el PDF no contiene texto, procesarlo con OCR
             $text = (new TesseractOCR($filePath))->run();
         }
 
-        // Procesar el texto extraído
         $lines = explode("\n", $text);
-
         $transactions = [];
         $details = [];
 
@@ -69,7 +62,6 @@ class PdfController extends Controller
                     $description .= $line_subtracted[$i] . ' ';
                 }
                 $description = trim($description);
-
                 $income = $expense = null;
 
                 foreach ($line_subtracted as $index => $item) {
@@ -102,6 +94,7 @@ class PdfController extends Controller
                 ];
                 $details[] = [
                     'name' => $description,
+                    'user_id' => $userId,
                     'created_at' => now(),
                     'updated_at' => now(),
 
@@ -187,7 +180,6 @@ class PdfController extends Controller
      */
     private function isEncrypted($filePath)
     {
-        // Usamos FPDI para intentar abrir el archivo PDF
         $pdf = new Fpdi();
 
         try {
@@ -195,7 +187,7 @@ class PdfController extends Controller
             return false;
         } catch (\setasign\Fpdi\PdfParser\PdfParserException $e) {
 
-            return true; // El archivo está encriptado
+            return true;
         }
     }
 
@@ -208,24 +200,16 @@ class PdfController extends Controller
      */
     private function decryptPdf($filePath, $password)
     {
-        Log::info('File path que se usará: ' . $filePath);
-        Log::info('Existe el archivo? ' . (file_exists($filePath) ? 'Sí' : 'No'));
-        Log::info('Es legible? ' . (is_readable($filePath) ? 'Sí' : 'No'));
-
+        mkdir(storage_path('app/uploads'), 0755, true);
         $decryptedFilePath = storage_path('app/uploads/decrypted_' . basename($filePath));
-
-        // Comando para usar qpdf y desencriptar el archivo
         $command = sprintf(
             'qpdf --decrypt --password=%s %s %s',
             $password,
             escapeshellarg($filePath),
             escapeshellarg($decryptedFilePath)
         );
-        Log::info('Comando qpdf: ' . $command);
         exec($command, $output, $returnVar);
         if ($returnVar !== 0) {
-            Log::error('QPDF Output: ' . implode("\n", $output));
-            Log::error('QPDF Return Code: ' . $returnVar);
             throw new \Exception('No se pudo desencriptar el archivo PDF con qpdf. Salida: ' . implode(' | ', $output));
         }
 

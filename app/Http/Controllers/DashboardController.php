@@ -76,7 +76,7 @@ class DashboardController extends Controller
             $month = $request->input('month', null);
             $userId = Auth::id();
             $queryBase = DB::table('transactions as t')
-                ->selectRaw("CAST(SUM(amount) AS DECIMAL(10,2)) as value, d.name as name")
+                ->selectRaw("CAST(SUM(amount) AS DECIMAL(10,2)) as value, d.description as name")
                 ->join('details as d', 't.detail_id', '=',  'd.id')
                 ->where('t.user_id', $userId);
 
@@ -92,7 +92,7 @@ class DashboardController extends Controller
             }
             $topIncomes = $queryIncomes
                 ->where('type_transaction', 'income')
-                ->groupBy('d.name')
+                ->groupBy('d.description')
                 ->orderBy('value', 'desc')
                 ->limit(5)
                 ->get()
@@ -103,7 +103,7 @@ class DashboardController extends Controller
 
             $topExpenses = $queryExpenses
                 ->where('type_transaction', 'expense')
-                ->groupBy('d.name')
+                ->groupBy('d.description')
                 ->orderBy('value', 'desc')
                 ->limit(5)
                 ->get()

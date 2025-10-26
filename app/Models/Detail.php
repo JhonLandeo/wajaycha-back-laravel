@@ -11,8 +11,10 @@ class Detail extends Model
     protected $guarded = [];
 
     protected $fillable = [
-        'name',
+        'description',
         'user_id',
+        'embedding',
+        'last_used_category_id'
     ];
 
     public function transactions(): HasMany

@@ -13,11 +13,11 @@ class FinancialReportController extends Controller
     private $transactions;
     public function __construct()
     {
-        $this->transactions = DB::table('transactions as t')
-            ->select('t.id', 't.amount', 't.date_operation', 't.type_transaction', 's.name as cat_name', 'd.name as detail_name', 't.category_id')
-            ->join('categories as s', 's.id', '=', 't.category_id')
-            ->join('details as d', 'd.id', '=', 't.detail_id')
-            ->get();
+        // $this->transactions = DB::table('transactions as t')
+        //     ->select('t.id', 't.amount', 't.date_operation', 't.type_transaction', 's.name as cat_name', 'd.description as detail_name', 't.category_id')
+        //     ->join('categories as s', 's.id', '=', 't.category_id')
+        //     ->join('details as d', 'd.id', '=', 't.detail_id')
+        //     ->get();
     }
 
     public function getBalance()
@@ -181,7 +181,7 @@ class FinancialReportController extends Controller
         $transactionsWithDetail = DB::table('transactions as t')
             ->selectRaw("
                 CASE
-                    WHEN t.yape_id IS NULL THEN d.name
+                    WHEN t.yape_id IS NULL THEN d.description
                     ELSE IF(ty.type_transaction = 'expense', ty.destination, ty.origin)
                 END AS detail_name,
                 t.amount,

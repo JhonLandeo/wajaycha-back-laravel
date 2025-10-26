@@ -43,7 +43,7 @@ return new class extends Migration
                     WITH FilteredData AS (
                         SELECT 
                             t.detail_id,
-                            d.name AS detail_name,
+                            d.description AS detail_name,
                             jsonb_agg(
                                 jsonb_build_object(
                                     'id', t.id,
@@ -53,7 +53,7 @@ return new class extends Migration
                                     'type_transaction', t.type_transaction,
                                     'category_id', t.category_id,
                                     'detail_id', t.detail_id,
-                                    'detail_name', d.name,
+                                    'detail_name', d.description,
                                     'yape_trans', (
                                         SELECT jsonb_agg(
                                             jsonb_build_object(
@@ -91,7 +91,7 @@ return new class extends Migration
                             AND (p_amount IS NULL OR p_amount = 0.00 OR t.amount = p_amount)
                             AND (
                                 p_search IS NULL 
-                                OR d.name ILIKE '%' || p_search || '%' 
+                                OR d.description ILIKE '%' || p_search || '%' 
                                 OR EXISTS (
                                     SELECT 1
                                     FROM transaction_yapes AS yape_trans
@@ -105,7 +105,7 @@ return new class extends Migration
                                     WHEN p_category IS NOT NULL THEN t.category_id = p_category::INT -- Puede ser necesario un cast
                                     ELSE TRUE
                                 END
-                        GROUP BY t.detail_id, d.name -- Es buena práctica incluir todas las columnas no agregadas en el GROUP BY
+                        GROUP BY t.detail_id, d.description -- Es buena práctica incluir todas las columnas no agregadas en el GROUP BY
                     )
                     SELECT 
                         fd.*,

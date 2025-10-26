@@ -27,7 +27,6 @@ class RegisteredUserController extends Controller
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
-        Log::info('User created');
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,

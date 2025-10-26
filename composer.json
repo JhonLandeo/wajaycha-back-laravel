@@ -6,6 +6,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "google-gemini-php/laravel": "^2.0",
         "guzzlehttp/guzzle": "^7.9",
         "laravel/framework": "^11.9",
         "laravel/horizon": "^5.31",
@@ -16,6 +17,7 @@
         "setasign/fpdf": "^1.8",
         "setasign/fpdi": "^2.6",
         "smalot/pdfparser": "^2.11",
+        "spatie/laravel-data": "^4.18",
         "thiagoalessio/tesseract_ocr": "^2.13",
         "tymon/jwt-auth": "^2.1"
     },

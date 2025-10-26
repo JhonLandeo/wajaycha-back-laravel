@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Details;
 use App\Models\Transaction;
@@ -20,9 +21,9 @@ class DetailsController extends Controller
     {
         if ($request->isUpdateAll) {
             $transactionCommon = DB::table('transactions as t')
-                ->select('t.*', 'd.name')
+                ->select('t.*', 'd.description')
                 ->join('details as d', 't.detail_id', '=', 'd.id')
-                ->where('d.name', $request->name)
+                ->where('d.description', $request->name)
                 ->when($request->month, function ($query) use ($request) {
                     $query->whereMonth('t.date_operation', $request->month);
                 })
@@ -90,7 +91,7 @@ class DetailsController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
-        $statement = 'call get_details(?, ?)';
+        $statement = 'SELECT * FROM get_details(?, ?)';
         $params = [$perPage, $page];
         $data = DB::select($statement, $params);
         if (count($data) > 0) {
@@ -103,8 +104,6 @@ class DetailsController extends Controller
 
     public function update(Request $request, Detail $detail): JsonResponse
     {
-        Log::info($detail);
-        Log::info($request->all());
         $data = $detail->update($request->all());
         return response()->json($data);
     }

@@ -15,12 +15,11 @@ class Transaction extends Model
     protected $table = 'transactions';
     protected $guarded = [];
     protected $fillable = [
-        'name',
-        'category_id',
         'category_id',
         'amount',
-        'created_at',
-        'updated_at',
+        'date_operation',
+        'type_transaction',
+        'user_id',
         'detail_id',
     ];
 
@@ -37,5 +36,16 @@ class Transaction extends Model
     public function category(): HasOneThrough
     {
         return $this->hasOneThrough(Category::class, Category::class);
+    }
+
+    public function splits()
+    {
+        return $this->hasMany(TransactionSplit::class);
+    }
+
+    // Un "Accessor" para obtener el monto total
+    public function getAmountAttribute()
+    {
+        return $this->splits->sum('amount');
     }
 }

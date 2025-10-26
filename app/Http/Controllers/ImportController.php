@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PdfRequest;
+use App\Jobs\ProcessPdfImport;
 use App\Models\FinancialEntity;
 use App\Models\Import;
 use App\Models\PaymentService;
@@ -50,38 +51,44 @@ class ImportController extends Controller
         try {
             $file = $request->file('file');
             $originalName = $file->getClientOriginalName();
-            $extension = $file->getClientOriginalExtension();
-            $size = $file->getSize();
             $financialCode = DB::table('financial_entities')
                 ->where('id', $request->financial)
                 ->value('code');
+
             $folder = 'files/' . $financialCode;
             $storedPath = $file->store($folder);
-            $mime = Storage::mimeType($file);
             $userId = Auth::id();
+            $year = (int)substr($originalName, 6, 4);
+            $accountId = $request->financial;
 
-            DB::beginTransaction();
-            DB::table('imports')->insert([
+            $import = DB::table('imports')->insertGetId([
                 'name' => $originalName,
-                'extension' => $extension,
+                'extension' => $file->getClientOriginalExtension(),
                 'path' => $storedPath,
-                'mime' => $mime,
-                'url' => null,
-                'size' => $size,
+                'mime' => $file->getMimeType(),
+                'size' => $file->getSize(),
                 'user_id' => $userId,
-                'financial_id' => $request->financial,
+                'financial_id' => $accountId,
+                'status' => 'pending',
                 'created_at' => now()
             ]);
 
+            ProcessPdfImport::dispatch(
+                $import,
+                $userId,
+                $storedPath,
+                $accountId,
+                $year,
+                $request->password
+            );
 
-            $this->pdfController->extractData($request, $storedPath);
-            DB::commit();
-
-            return response()->json(['status' => 'ok']);
+            return response()->json([
+                'status' => 'ok',
+                'message' => 'Tu archivo ha sido recibido y está siendo procesado.'
+            ]);
         } catch (\Throwable $th) {
-            DB::rollBack();
-            Log::error("Error al importar archivo: " . $th->getMessage());
-            throw $th;
+            Log::error("Error al despachar importación: " . $th->getMessage());
+            return response()->json(['status' => 'error', 'message' => 'No se pudo recibir el archivo.'], 500);
         }
     }
 

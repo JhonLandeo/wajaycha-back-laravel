@@ -64,7 +64,7 @@ return new class extends Migration
                                 t.type_transaction,
                                 t.category_id,
                                 t.detail_id,
-                                d.name AS detail_name,
+                                d.description AS detail_name,
                                 t.user_id,
                                 dsf.frequency_general_json AS frequency_general,
                                 COUNT(t.id) OVER(PARTITION BY t.detail_id) AS frequency
