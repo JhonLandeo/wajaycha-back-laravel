@@ -21,10 +21,11 @@ class CategoryController extends Controller
         $userId = Auth::id();
 
         $categories = Category::query()
-        ->where('user_id', $userId)
-        ->with('paretoClassification')
-        ->orderBy('id', 'desc')
-        ->paginate($per_page, ['*'], 'page', $page);
+            ->where('user_id', $userId)
+            ->with('paretoClassification')
+            ->withCount('categorizationRules')
+            ->orderBy('id', 'desc')
+            ->paginate($per_page, ['*'], 'page', $page);
 
         return response()->json($categories);
     }

@@ -22,9 +22,11 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained();
             $table->bigInteger('financial_id')->unsigned();
             $table->unsignedBigInteger('financial_entity_id')->nullable();
+            $table->unsignedBigInteger('account_id')->nullable();
             $table->enum('status', ['pending', 'processing', 'completed', 'failed'])->default('pending');
             $table->text('error_message')->nullable();
-
+            
+            $table->foreign('account_id')->references('id')->on('accounts');
             $table->foreign('financial_id')->references('id')->on('financial_entities');
             $table->foreign('financial_entity_id')->references('id')->on('financial_entities');
             $table->timestamps();

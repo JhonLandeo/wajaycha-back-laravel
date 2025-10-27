@@ -13,6 +13,8 @@ return new class extends Migration
     {
         Schema::create('transaction_splits', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('transaction_id')->constrained('transactions');
+            $table->decimal('amount', 10, 2);
             $table->timestamps();
         });
     }

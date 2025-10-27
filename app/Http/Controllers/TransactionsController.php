@@ -152,7 +152,6 @@ class TransactionsController extends Controller
         //    Usamos Eloquent para poder acceder a los modelos y sus relaciones
         $transactions = Transaction::query()
             ->join('details as d', 'transactions.detail_id', '=', 'd.id')
-            // Corregido: Asumo que 'name' en tu consulta era 'description'
             ->where('d.description', $request->name)
             ->when($request->month, fn($q) => $q->whereMonth('transactions.date_operation', $request->month))
             ->when($request->year, fn($q) => $q->whereYear('transactions.date_operation', $request->year))

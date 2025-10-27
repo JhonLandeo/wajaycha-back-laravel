@@ -13,4 +13,9 @@ class Category extends Model
     {
         return $this->belongsTo(ParetoClassification::class);
     }
+
+    public function categorizationRules()
+    {
+        return $this->hasMany(CategorizationRule::class);
+    }
 }

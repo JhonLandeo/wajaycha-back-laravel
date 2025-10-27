@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthJWT\JWTAuthController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CategoryRuleController;
 use App\Http\Controllers\ChatGptController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DetailsController;
@@ -44,4 +45,12 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::get('get-bank', [ImportController::class, 'getBank']);
     Route::get('get-service', [ImportController::class, 'getService']);
     Route::get('/imports/{id}/download', [ImportController::class, 'download']);
+
+    Route::prefix('categories')->middleware('auth')->group(function () {
+        Route::get('/{category}/rules', [CategoryRuleController::class, 'getRules']);
+
+        Route::get('/{category}/suggestions', [CategoryRuleController::class, 'getSuggestions']);
+
+        Route::post('/{category}/sync', [CategoryRuleController::class, 'syncRules']);
+    });
 });

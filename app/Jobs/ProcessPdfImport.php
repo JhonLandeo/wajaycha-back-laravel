@@ -94,7 +94,7 @@ class ProcessPdfImport implements ShouldQueue
                     $parsedTransactions[] = (object)[
                         'amount' => $income == 0 ? floatval(str_replace(',', '', $expense)) : floatval(str_replace(',', '', $income)),
                         'date_operation' => Carbon::createFromLocaleFormat('dM', 'es', $dayMonth)->setYear($this->year)->format('Y-m-d'),
-                        'type_transaction' => $income == 0 ? 'expense' : 'income', // Usar 'gasto'/'ingreso'
+                        'type_transaction' => $income == 0 ? 'expense' : 'income',
                         'description' => $description,
                     ];
                 }

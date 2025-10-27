@@ -23,7 +23,6 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained();
             $table->unsignedBigInteger('yape_id')->nullable()->after('user_id');
             $table->foreign('yape_id')->references('id')->on('transaction_yapes');
-            $table->foreignId('account_id')->constrained();
             $table->boolean('is_subscription')->default(false)->nullable();
             $table->timestamps();
         });
