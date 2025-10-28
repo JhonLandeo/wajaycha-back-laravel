@@ -46,11 +46,11 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::get('get-service', [ImportController::class, 'getService']);
     Route::get('/imports/{id}/download', [ImportController::class, 'download']);
 
-    Route::prefix('categories')->middleware('auth')->group(function () {
+    Route::prefix('categories')->group(function () {
         Route::get('/{category}/rules', [CategoryRuleController::class, 'getRules']);
 
         Route::get('/{category}/suggestions', [CategoryRuleController::class, 'getSuggestions']);
 
-        Route::post('/{category}/sync', [CategoryRuleController::class, 'syncRules']);
+        Route::post('/{category}/sync', [CategoryRuleController::class, 'syncRule']);
     });
 });

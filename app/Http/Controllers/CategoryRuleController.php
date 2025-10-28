@@ -10,6 +10,7 @@ use App\Jobs\GenerateEmbeddingForDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CategoryRuleController extends Controller
 {
@@ -41,12 +42,13 @@ class CategoryRuleController extends Controller
         $userId = Auth::id();
         $per_page = $request->input('per_page', 10);
         $page = $request->input('page', 1);
-
+        Log::info('userId: ' . $userId . ', categoryId: ' . $category->id);
         // 1. Necesitamos saber qué detalles YA son reglas
         //    para poder excluirlos de las sugerencias.
         $existingDetailIds = CategorizationRule::where('user_id', $userId)
             ->where('category_id', $category->id)
             ->pluck('detail_id');
+        Log::info('existingDetailIds: ' . var_export($existingDetailIds, true));
 
         // 2. Calculamos el "Vector Centroide"
         $centroidVector = Detail::query()
@@ -54,6 +56,7 @@ class CategoryRuleController extends Controller
             ->where('last_used_category_id', $category->id)
             ->whereNotNull('embedding')
             ->avg('embedding');
+        Log::info('centroidVector: ' . $centroidVector);
 
         // 3. Si no hay vector (categoría no "entrenada"),
         //    devolvemos un paginador vacío.
@@ -85,39 +88,18 @@ class CategoryRuleController extends Controller
      * TODOS los IDs seleccionados (de todas las páginas)
      * y enviarlo aquí.
      */
-    public function syncRules(Request $request, Category $category, CategorizationService $categorizationService)
+    public function syncRule(Request $request, Category $category, CategorizationService $categorizationService)
     {
         $userId = Auth::id();
-
         $request->validate([
-            'detail_ids' => 'required|array',
-            'detail_ids.*' => 'integer|exists:details,id',
+            'detail_id' => 'required|integer|exists:details,id',
         ]);
+        $detailIdToSync = $request->input('detail_id');
+        $categorizationService->createExactRule($userId, $detailIdToSync, $category->id);
+        $detail = Detail::find($detailIdToSync);
 
-        $detailIdsToSync = $request->input('detail_ids');
-
-        $currentRules = CategorizationRule::where('user_id', $userId)
-            ->where('category_id', $category->id)
-            ->pluck('detail_id')
-            ->all();
-
-        // --- Sincronización ---
-        $detailsToAdd = array_diff($detailIdsToSync, $currentRules);
-        foreach ($detailsToAdd as $detailId) {
-            $categorizationService->createExactRule($userId, $detailId, $category->id);
-
-            $detail = Detail::find($detailId);
-            if ($detail) {
-                GenerateEmbeddingForDetail::dispatch($detail, $category->id);
-            }
-        }
-
-        $detailsToRemove = array_diff($currentRules, $detailIdsToSync);
-        if (count($detailsToRemove) > 0) {
-            CategorizationRule::where('user_id', $userId)
-                ->where('category_id', $category->id)
-                ->whereIn('detail_id', $detailsToRemove)
-                ->delete();
+        if ($detail) {
+            GenerateEmbeddingForDetail::dispatch($detail, $category->id);
         }
 
         return response()->json(['status' => 'ok', 'message' => 'Reglas actualizadas']);

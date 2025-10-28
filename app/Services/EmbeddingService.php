@@ -19,7 +19,6 @@ class EmbeddingService
             // 1. Selecciona el modelo de embedding
             $model = Gemini::embeddingModel('models/embedding-001');
 
-            // --- ESTA ES LA CORRECCIÓN ---
             // 2. Llama a embedContent(), no embedText()
             $response = $model->embedContent($text);
 

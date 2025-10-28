@@ -65,7 +65,7 @@ class CategorizationService
         // 3. Decide si la similitud es "suficientemente buena"
         // Este umbral (0.25) es algo que tendrás que "tunear".
         // Un valor más bajo es más estricto.
-        $threshold = 0.3;
+        $threshold = 0.15;
 
         if ($result && $result->distance < $threshold) {
             // ¡Éxito! Lo encontramos.
