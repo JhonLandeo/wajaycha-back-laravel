@@ -2,6 +2,7 @@
 
 namespace App\Imports;
 
+use App\Models\Detail;
 use App\Models\TransactionYape;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -70,14 +71,25 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         if ($yapeRecord) {
             return;
         } else {
+            $typeTransaction = $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income';
+            $description = $typeTransaction == 'expense' ? $row['Destino'] : $row['Origen'];
+            $detailId = Detail::where('description', $description)->first()->id ?? null;
+            if(is_null( $detailId)){
+                $newDetail = Detail::create([
+                    'description' => $description,
+                    'user_id' => $userId,
+                ]);
+                $detailId = $newDetail->id;
+            }
             return  TransactionYape::create([
                 'message' => $row['Mensaje'],
                 'origin' => $row['Origen'],
                 'destination' => $row['Destino'],
                 'amount' => (float) $row['Monto'],
                 'date_operation' => $dateOperation,
-                'type_transaction' => $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income',
+                'type_transaction' => $typeTransaction,
                 'user_id' => $userId,
+                'detail_id' => $detailId,
             ]);
         }
     }

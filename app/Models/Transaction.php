@@ -43,9 +43,8 @@ class Transaction extends Model
         return $this->hasMany(TransactionSplit::class);
     }
 
-    // Un "Accessor" para obtener el monto total
-    public function getAmountAttribute()
-    {
-        return $this->splits->sum('amount');
-    }
+    // public function getAmountAttribute()
+    // {
+    //     return $this->splits->sum('amount');
+    // }
 }
