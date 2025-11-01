@@ -21,4 +21,9 @@ class Detail extends Model
     {
         return $this->hasMany(Transaction::class, 'detail_id');
     }
+
+    public function transactionYapes(): HasMany
+    {
+        return $this->hasMany(TransactionYape::class, 'detail_id');
+    }
 }

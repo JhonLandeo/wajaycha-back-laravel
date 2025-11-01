@@ -4,6 +4,7 @@ namespace App\Imports;
 
 use App\Models\Detail;
 use App\Models\TransactionYape;
+use App\Services\CategorizationService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -11,11 +12,19 @@ use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Imports\HeadingRowFormatter;
 
-use function PHPUnit\Framework\isEmpty;
 
 HeadingRowFormatter::default('none');
 class TransactionYapeImport implements ToModel, WithHeadingRow
 {
+    protected $userId; // <-- Propiedad para el ID
+
+    /**
+     * @param int $userId
+     */
+    public function __construct(int $userId)
+    {
+        $this->userId = $userId; // <-- Asigna el ID
+    }
     /**
      * Especificar la fila donde comienzan los encabezados
      *
@@ -38,9 +47,9 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
      */
     public function model(array $row)
     {
-       if(empty($row['Fecha de operación']) || empty($row['Origen']) || empty($row['Destino']) || empty($row['Monto']) || empty($row['Tipo de Transacción'])){
+        if (empty($row['Fecha de operación']) || empty($row['Origen']) || empty($row['Destino']) || empty($row['Monto']) || empty($row['Tipo de Transacción'])) {
             return;
-       }
+        }
 
         $dateOperation = null;
 
@@ -48,12 +57,9 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             $dateString = $row['Fecha de operación'];
             if (Carbon::hasFormat($dateString, 'd/m/Y H:i:s')) {
                 $dateOperation = Carbon::createFromFormat('d/m/Y H:i:s', $dateString)->format('Y-m-d H:i:s');
-            } elseif (Carbon::hasFormat($dateString, 'd/m/Y')) {
-                $dateOperation = Carbon::createFromFormat('d/m/Y', $dateString)->format('Y-m-d') . ' 00:00:00';
             }
         }
 
-        $userId = Auth::id();
         $toleranceInSeconds = 60;
         $startDate = Carbon::parse($dateOperation)->subSeconds($toleranceInSeconds);
         $endDate = Carbon::parse($dateOperation)->addSeconds($toleranceInSeconds);
@@ -65,7 +71,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             ->where('amount', (float) $row['Monto'])
             ->whereBetween('date_operation', [$startDate, $endDate])
             ->where('type_transaction', $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income')
-            ->where('user_id', $userId)
+            ->where('user_id', $this->userId)
             ->first();
 
         if ($yapeRecord) {
@@ -73,14 +79,12 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         } else {
             $typeTransaction = $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income';
             $description = $typeTransaction == 'expense' ? $row['Destino'] : $row['Origen'];
-            $detailId = Detail::where('description', $description)->first()->id ?? null;
-            if(is_null( $detailId)){
-                $newDetail = Detail::create([
-                    'description' => $description,
-                    'user_id' => $userId,
-                ]);
-                $detailId = $newDetail->id;
-            }
+            $detail = Detail::firstOrCreate(
+                ['user_id' =>  $this->userId, 'description' => $description],
+                ['merchant_id' => null]
+            );
+            $categorizationService = app(CategorizationService::class);
+            $categoryId = $categorizationService->findCategory($this->userId, $detail);
             return  TransactionYape::create([
                 'message' => $row['Mensaje'],
                 'origin' => $row['Origen'],
@@ -88,45 +92,10 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
                 'amount' => (float) $row['Monto'],
                 'date_operation' => $dateOperation,
                 'type_transaction' => $typeTransaction,
-                'user_id' => $userId,
-                'detail_id' => $detailId,
+                'user_id' => $this->userId,
+                'detail_id' => $detail->id,
+                'category_id' => $categoryId,
             ]);
         }
     }
-
-
-    /**
-     * Especificar la fila donde comienzan los encabezados
-     *
-     * @return int
-     */
-    // public function headingRow(): int
-    // {
-    //     return 3; // Empezar a leer encabezados desde la fila 5
-    // }
-
-    /**
-     * @param array $row
-     *
-     * @return \Illuminate\Database\Eloquent\Model|null
-     */
-    // public function model(array $row)
-    // {
-    //     // Convertir Fecha Operación
-    //     $fechaOperacion = Date::excelToDateTimeObject($row['Fecha Operación'])->format('Y-m-d');
-
-    //     // Convertir Hora Operación
-    //     $horaOperacion = gmdate('H:i:s', floor($row['Hora Operación'] * 86400)); // Fracción del día a HH:MM:SS
-
-    //     Log::info($row);
-
-    //     return new TransactionYape([
-    //         'message' => null,
-    //         'origin' => $row['NOMBRE Origen'],
-    //         'destination' => $row['NOMBRE Destino'],
-    //         'amount' => (float) $row['Monto'],
-    //         'date_operation' => $fechaOperacion . ' ' . $horaOperacion,
-    //         'type_transaction' => $row['Tipo de Operación'] == 'YAPEASTE' ? 'expense' : 'income',
-    //     ]);
-    // }
 }

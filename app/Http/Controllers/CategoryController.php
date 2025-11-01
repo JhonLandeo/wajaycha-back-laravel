@@ -24,7 +24,7 @@ class CategoryController extends Controller
             ->where('user_id', $userId)
             ->with('paretoClassification')
             ->withCount('categorizationRules')
-            ->orderBy('id', 'desc')
+            ->orderBy('categorization_rules_count', 'desc')
             ->paginate($per_page, ['*'], 'page', $page);
 
         return response()->json($categories);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Imports\TransactionYapeImport;
+use App\Jobs\ProcessExcelImport;
 use App\Models\TransactionYape;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Maatwebsite\Excel\Facades\Excel;
+
 
 class TransactionYapeController extends Controller
 {
@@ -29,7 +30,7 @@ class TransactionYapeController extends Controller
             $mime = Storage::mimeType($file);
 
             DB::beginTransaction();
-            DB::table('imports')->insert([
+            $import = DB::table('imports')->insert([
                 'name' => $originalName,
                 'extension' => $extension,
                 'path' => $storedPath,
@@ -41,7 +42,7 @@ class TransactionYapeController extends Controller
                 'financial_entity_id' => self::FINANCIAL_BCP_ID,
                 'created_at' => now()
             ]);
-            Excel::import(new TransactionYapeImport(), $file);
+            ProcessExcelImport::dispatch($import, $userId, $storedPath);
             DB::commit();
             return response()->json(['status' => 'ok']);
         } catch (\Throwable $th) {

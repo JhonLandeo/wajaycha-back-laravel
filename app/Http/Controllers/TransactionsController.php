@@ -7,6 +7,7 @@ use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\TransactionYape;
+use App\Services\CategorizationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -125,19 +126,19 @@ class TransactionsController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request): JsonResponse
+    public function update(Request $request, CategorizationService $categorizationService): JsonResponse
     {
         $request->validate([
             'category_id' => 'required|integer|exists:categories,id',
-            'isUpdateAll' => 'boolean',
+            'is_frequent' => 'boolean',
         ]);
 
         $newCategoryId = (int)$request->category_id;
 
-        if ($request->isUpdateAll) {
-            $this->handleBatchUpdate($request, $newCategoryId);
+        if ($request->is_frequent) {
+            $this->handleBatchUpdate($request, $newCategoryId, $categorizationService);
         } else {
-            $this->handleSingleUpdate($request, $newCategoryId);
+            $this->handleSingleUpdate($request, $newCategoryId, $categorizationService);
         }
 
         return response()->json(['status' => 'ok'], 201);
@@ -146,39 +147,60 @@ class TransactionsController extends Controller
     /**
      * Maneja la lógica de actualización masiva (isUpdateAll = true)
      */
-    private function handleBatchUpdate(Request $request, int $newCategoryId): void
+    private function handleBatchUpdate(Request $request, int $newCategoryId, $categorizationService): void
     {
-        // 1. Obtenemos todas las transacciones que coinciden
-        //    Usamos Eloquent para poder acceder a los modelos y sus relaciones
-        $transactions = Transaction::query()
-            ->join('details as d', 'transactions.detail_id', '=', 'd.id')
-            ->where('d.description', $request->name)
-            ->when($request->month, fn($q) => $q->whereMonth('transactions.date_operation', $request->month))
-            ->when($request->year, fn($q) => $q->whereYear('transactions.date_operation', $request->year))
-            ->select('transactions.*') // Solo necesitamos los datos de la transacción
-            ->get();
+        if ($request->source_type == 'yape_unmatched') {
+            $yapeTransaction = TransactionYape::find($request->transaction_id);
+            if($yapeTransaction){
+                $yapeTransaction->category_id = $newCategoryId;
+                $yapeTransaction->save();
 
-        $detailIdsToLearn = [];
+                $yapeTransaction->load('detail');
+                $detail = $yapeTransaction->detail;
 
-        foreach ($transactions as $transaction) {
-            // 2. Actualizamos la transacción principal
-            $transaction->category_id = $newCategoryId;
-            $transaction->save();
+                TransactionYape::query()
+                    ->join('details as d', 'transaction_yapes.detail_id', '=', 'd.id')
+                    ->where('d.description', $detail->description)
+                    ->whereNull('transaction_yapes.category_id')
+                    ->update(['category_id' => $newCategoryId]);
 
-            // 3. Registramos el detail_id para aprender de él (usamos keys para unicidad)
-            $detailIdsToLearn[$transaction->detail_id] = true;
+                 $categorizationService->createExactRule(
+                    $yapeTransaction->user_id,
+                    $detail->id,
+                    $newCategoryId
+                );
+            }
+        } else {
+            // 1. Obtenemos todas las transacciones que coinciden
+            $transactions = Transaction::query()
+                ->join('details as d', 'transactions.detail_id', '=', 'd.id')
+                ->where('d.description', $request->name)
+                ->when($request->month, fn($q) => $q->whereMonth('transactions.date_operation', $request->month))
+                ->when($request->year, fn($q) => $q->whereYear('transactions.date_operation', $request->year))
+                ->select('transactions.*')
+                ->get();
 
-            // 4. Actualizamos la transacción Yape correspondiente (tu lógica)
-            $this->updateMatchingYapeTransaction($transaction, $newCategoryId);
-        }
+            $detailIdsToLearn = [];
 
-        // --- 💡 MOMENTO DE APRENDIZAJE MASIVO ---
-        // Despachamos un Job por cada "Detail" único que actualizamos,
-        // no por cada "Transaction".
-        foreach (array_keys($detailIdsToLearn) as $detailId) {
-            $detail = Detail::find($detailId);
-            if ($detail) {
-                GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
+            foreach ($transactions as $transaction) {
+                // 2. Actualizamos la transacción principal
+                $transaction->category_id = $newCategoryId;
+                $transaction->save();
+
+                // 3. Registramos el detail_id para aprender de él (usamos keys para unicidad)
+                $detailIdsToLearn[$transaction->detail_id] = true;
+
+                // 4. Actualizamos la transacción Yape correspondiente (tu lógica)
+                $this->updateMatchingYapeTransaction($transaction, $newCategoryId);
+            }
+
+            // Despachamos un Job por cada "Detail" único que actualizamos,
+            // no por cada "Transaction".
+            foreach (array_keys($detailIdsToLearn) as $detailId) {
+                $detail = Detail::find($detailId);
+                if ($detail) {
+                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
+                }
             }
         }
     }
@@ -186,32 +208,35 @@ class TransactionsController extends Controller
     /**
      * Maneja la lógica de actualización única (isUpdateAll = false)
      */
-    private function handleSingleUpdate(Request $request, int $newCategoryId): void
+    private function handleSingleUpdate(Request $request, int $newCategoryId, $categorizationService): void
     {
         if ($request->source_type == 'yape_unmatched') {
-            // Caso especial: Solo actualiza Yape
-            TransactionYape::where('id', $request->transaction_id)
-                ->update(['category_id' => $newCategoryId]);
+            $yapeTransaction = TransactionYape::find($request->transaction_id);
+            if ($yapeTransaction) {
+                $yapeTransaction->category_id = $newCategoryId;
+                $yapeTransaction->save();
+
+                $yapeTransaction->load('detail');
+                $detail = $yapeTransaction->detail;
+
+                if ($detail && $newCategoryId) {
+                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
+                }
+            } 
         } else {
-            // Caso normal: Actualiza una transacción de la importación
             $transaction = Transaction::find($request->transaction_id);
 
             if ($transaction) {
-                // 1. Actualizamos la transacción (sin cambios)
                 $transaction->category_id = $newCategoryId;
                 $transaction->save();
 
-                // 2. Cargamos el 'detail' (sin cambios)
                 $transaction->load('detail');
                 $detail = $transaction->detail;
 
-                // 3. Despachamos el Job de aprendizaje vectorial
                 if ($detail && $newCategoryId) {
-                    // Despachamos el Job SOLO para detalles "buenos"
                     GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
                 }
 
-                // 4. Actualizamos Yape (sin cambios)
                 $this->updateMatchingYapeTransaction($transaction, $newCategoryId);
             }
         }
@@ -222,18 +247,12 @@ class TransactionsController extends Controller
      * Busca y actualiza una transacción Yape que coincida en fecha, monto y tipo.
      */
     private function updateMatchingYapeTransaction(Transaction $transaction, int $newCategoryId): void
-{
-        Log::info('transaction: ' . var_export($transaction, true));
-        Log::info('newCategoryId: ' . var_export($newCategoryId, true));
-        Log::info('date_operation: ' . Carbon::parse($transaction->date_operation)->toDateString());
-        Log::info('amount: ' . var_export($transaction->amount, true));
-        Log::info('type_transaction: ' . var_export($transaction->type_transaction, true));
+    {
         // Usar whereDate es más limpio y eficiente que D/M/Y por separado
         $yapeTransaction = TransactionYape::where('amount', $transaction->amount)
             ->where('type_transaction', $transaction->type_transaction)
             ->whereDate('date_operation', Carbon::parse($transaction->date_operation)->toDateString())
             ->first();
-        Log::info('yapeTransaction: ' . var_export($yapeTransaction, true));
 
         if ($yapeTransaction) {
             $yapeTransaction->category_id = $newCategoryId;

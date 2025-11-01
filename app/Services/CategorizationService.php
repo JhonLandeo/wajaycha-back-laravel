@@ -19,7 +19,7 @@ class CategorizationService
 
     public function findCategory(int $userId, Detail $detail): ?int
     {
-        // --- Prioridad 1: Regla Exacta (Sin cambios) ---
+        // --- Prioridad 1: Regla Exacta ---
         $exactRule = CategorizationRule::where('user_id', $userId)
             ->where('detail_id', $detail->id)
             ->first();
@@ -27,7 +27,7 @@ class CategorizationService
             return $exactRule->category_id;
         }
 
-        // --- Prioridad 2: Regla por Keyword (Sin cambios) ---
+        // --- Prioridad 2: Regla por Keyword ---
         $keywordRules = KeywordRule::where('user_id', $userId)->get();
         $descriptionLower = strtolower($detail->description);
 
@@ -38,7 +38,7 @@ class CategorizationService
             }
         }
 
-        // --- ¡NUEVO! Prioridad 3: Búsqueda Vectorial ---
+        // --- Prioridad 3: Búsqueda Vectorial ---
 
         // 1. Genera el vector para la *nueva* transacción
         $newEmbedding = $this->embeddingService->generate($detail->description);
@@ -46,17 +46,13 @@ class CategorizationService
             return null;
         }
 
-        // --- ESTA ES LA CORRECCIÓN ---
-        // 2. Convierte el array de PHP en un string de vector para Postgres
         $vectorString = '[' . implode(',', $newEmbedding) . ']';
 
         // 3. Busca el vector más cercano
-        // Ahora pasamos DOS parámetros: el string del vector y el ID del usuario
         $result = Detail::query()
             ->select('last_used_category_id')
-            // Usamos ->selectRaw con los dos bindings
             ->selectRaw('(embedding <=> ?) AS distance', [$vectorString])
-            ->where('user_id', $userId) // Este es el segundo binding
+            ->where('user_id', $userId)
             ->whereNotNull('embedding')
             ->whereNotNull('last_used_category_id')
             ->orderBy('distance', 'asc') // 0 es el más cercano
@@ -68,13 +64,11 @@ class CategorizationService
         $threshold = 0.15;
 
         if ($result && $result->distance < $threshold) {
-            // ¡Éxito! Lo encontramos.
-            // Creamos una regla exacta para no tener que buscar por vector la próxima vez.
             $this->createExactRule($userId, $detail->id, $result->last_used_category_id);
             return $result->last_used_category_id;
         }
 
-        return null; // No se pudo categorizar
+        return null;
     }
 
     public function createExactRule(int $userId, int $detailId, int $categoryId): void

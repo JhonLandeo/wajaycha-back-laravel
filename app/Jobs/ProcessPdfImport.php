@@ -106,7 +106,6 @@ class ProcessPdfImport implements ShouldQueue
             // 6. Marcar como 'completed'
             DB::table('imports')->where('id', $this->importId)->update(['status' => 'completed']);
         } catch (Throwable $th) {
-            // 7. Marcar como 'failed'
             Log::error("Error en Job ProcessPdfImport (ID: {$this->importId}): " . $th->getMessage());
             DB::table('imports')->where('id', $this->importId)->update([
                 'status' => 'failed',
@@ -117,12 +116,12 @@ class ProcessPdfImport implements ShouldQueue
 
     private function processParsedTransactions(array $transactionsData)
     {
-        $uniqueTransactions = []; // Para el filtro de duplicados
+        $uniqueTransactions = [];
 
         foreach ($transactionsData as $txData) {
             $detail = Detail::firstOrCreate(
                 ['user_id' => $this->userId, 'description' => $txData->description],
-                ['merchant_id' => null] // Puedes mejorar esto llamando a un servicio de limpieza
+                ['merchant_id' => null]
             );
 
             // 2. ¡Llamar al Servicio de Categorización!
@@ -178,7 +177,6 @@ class ProcessPdfImport implements ShouldQueue
     private function decryptPdf($filePath, $password)
     {
         // Crear la carpeta temporal si no existe
-        // Storage::makeDirectory('temp');
         $decryptedPath = storage_path('app/private/' . uniqid('decrypted_') . '.pdf');
 
         $command = sprintf(
