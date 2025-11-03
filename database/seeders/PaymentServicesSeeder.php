@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Models\FinancialEntity;
+use App\Models\PaymentService;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +18,7 @@ class PaymentServicesSeeder extends Seeder
         $services = [
             [
                 'name' => 'Yape',
-                'financial_entity_id' => DB::table('financial_entities')->where('name', 'Banco de Crédito del Perú')->value('id'),
+                'financial_entity_id' => FinancialEntity::where('name', 'Banco de Crédito del Perú')->value('id'),
                 'type' => 'Billetera Digital',
                 'website' => 'https://www.yape.com.pe',
             ],
@@ -28,6 +30,6 @@ class PaymentServicesSeeder extends Seeder
             ],
         ];
 
-        DB::table('payment_services')->insert($services);
+        PaymentService::insert($services);
     }
 }

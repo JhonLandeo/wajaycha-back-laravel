@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\AuthJWT;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
+use App\Models\ParetoClassification;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,13 +42,9 @@ class JWTAuthController extends Controller
             ['name' => 'Ahorro', 'percentage' => 20, 'user_id' => $user['id'], 'created_at' => now(), 'updated_at' => now()],
         ];
 
-        DB::table('pareto_classifications')->insert($paretoClassification);
+        $pareto = ParetoClassification::where('user_id', $user['id'])->pluck('id', 'name')->toArray();
 
-        $pareto = DB::table('pareto_classifications')
-            ->where('user_id', $user['id'])
-            ->pluck('id', 'name');
-
-        DB::table('categories')->insert([
+        $categories = [
             // Fijos
             ['name' => 'Vivienda', 'pareto_classification_id' => $pareto['Fijos'], 'user_id' => $user['id'], 'created_at' => now()],
             ['name' => 'Telefonia', 'pareto_classification_id' => $pareto['Fijos'], 'user_id' => $user['id'], 'created_at' => now()],
@@ -74,7 +72,9 @@ class JWTAuthController extends Controller
             // Ahorro
             ['name' => 'Inversiones', 'pareto_classification_id' => $pareto['Ahorro'], 'user_id' => $user['id'], 'created_at' => now()],
             ['name' => 'Fondo de emergencia', 'pareto_classification_id' => $pareto['Ahorro'], 'user_id' => $user['id'], 'created_at' => now()],
-        ]);
+        ];
+
+        Category::insert($categories);
 
         $token = JWTAuth::fromUser($user);
 

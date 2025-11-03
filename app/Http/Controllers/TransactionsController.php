@@ -87,15 +87,15 @@ class TransactionsController extends Controller
         $type = $request->input('type', null);
         $userId = Auth::id();
 
-        $query = DB::table('transactions as t')
-            ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
-            ->leftJoin('categories as sc', 'sc.id', '=', 't.category_id')
+        $query = Transaction::query()
+            ->leftJoin('details as d', 'd.id', '=', 'transactions.detail_id')
+            ->leftJoin('categories as sc', 'sc.id', '=', 'transactions.category_id')
             ->select(
                 DB::raw('COALESCE(sc.name, "Sin categorizar") as name'),
                 DB::raw('COUNT(*) as quantity'),
                 DB::raw(" SUM(CASE 
-                    WHEN t.type_transaction = 'expense' THEN t.amount 
-                    WHEN t.type_transaction = 'income' THEN -t.amount 
+                    WHEN transactions.type_transaction = 'expense' THEN transactions.amount 
+                    WHEN transactions.type_transaction = 'income' THEN -transactions.amount 
                     ELSE 0 
                 END) as total")
             );

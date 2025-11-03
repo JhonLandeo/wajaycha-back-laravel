@@ -27,11 +27,7 @@ class ImportController extends Controller
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
         $userId = Auth::id();
-
-        $query = DB::table('imports as i')
-            ->select('i.*', 'fe.name as financial_name', 'ps.name as payment_service_name')
-            ->leftJoin('financial_entities as fe', 'financial_id', '=', 'fe.id')
-            ->leftJoin('payment_services as ps', 'i.financial_entity_id', '=', 'ps.id')
+        $query = Import::with(['financialEntity', 'paymentService'])
             ->where('user_id', $userId);
 
         $data = $query->paginate($perPage, ['*'], 'page', $page);
@@ -51,8 +47,7 @@ class ImportController extends Controller
         try {
             $file = $request->file('file');
             $originalName = $file->getClientOriginalName();
-            $financialCode = DB::table('financial_entities')
-                ->where('id', $request->financial)
+            $financialCode = FinancialEntity::where('id', $request->financial)
                 ->value('code');
 
             $folder = 'files/' . $financialCode;
@@ -61,16 +56,15 @@ class ImportController extends Controller
             $year = (int)substr($originalName, 6, 4);
             $accountId = $request->financial;
 
-            $import = DB::table('imports')->insertGetId([
+            $import = Import::create([
                 'name' => $originalName,
                 'extension' => $file->getClientOriginalExtension(),
                 'path' => $storedPath,
                 'mime' => $file->getMimeType(),
                 'size' => $file->getSize(),
                 'user_id' => $userId,
-                'financial_id' => $accountId,
-                'status' => 'pending',
-                'created_at' => now()
+                'financial_entity_id' => $accountId,
+                'status' => 'pending'
             ]);
 
             ProcessPdfImport::dispatch(
@@ -125,7 +119,7 @@ class ImportController extends Controller
 
     public function download($id)
     {
-        $import = DB::table('imports')->find($id);
+        $import = Import::find($id);
         return Storage::download($import->path, $import->name);
     }
 }

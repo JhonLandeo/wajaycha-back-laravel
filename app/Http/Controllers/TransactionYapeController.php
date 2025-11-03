@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Imports\TransactionYapeImport;
 use App\Jobs\ProcessExcelImport;
+use App\Models\Import;
 use App\Models\TransactionYape;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,18 +31,18 @@ class TransactionYapeController extends Controller
             $mime = Storage::mimeType($file);
 
             DB::beginTransaction();
-            $import = DB::table('imports')->insert([
-                'name' => $originalName,
-                'extension' => $extension,
-                'path' => $storedPath,
-                'mime' => $mime,
-                'url' => null,
-                'size' => $size,
-                'user_id' => $userId,
-                'financial_id' => self::FINANCIAL_BCP_ID,
-                'financial_entity_id' => self::FINANCIAL_BCP_ID,
-                'created_at' => now()
-            ]);
+            
+            $import = new Import();
+            $import->name = $originalName;
+            $import->extension = $extension;
+            $import->path = $storedPath;
+            $import->mime = $mime;
+            $import->url = null;
+            $import->size = $size;
+            $import->user_id = $userId;
+            $import->financial_id = self::FINANCIAL_BCP_ID;
+            $import->financial_entity_id = self::FINANCIAL_BCP_ID;
+            $import->save();
             ProcessExcelImport::dispatch($import, $userId, $storedPath);
             DB::commit();
             return response()->json(['status' => 'ok']);

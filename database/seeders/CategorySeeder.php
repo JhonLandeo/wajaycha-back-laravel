@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Models\Category;
+use App\Models\ParetoClassification;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -13,9 +15,8 @@ class CategorySeeder extends Seeder
      */
     public function run(): void
     {
-        $pareto = DB::table('pareto_classifications')->pluck('id', 'name');
-
-        DB::table('categories')->insert([
+        $pareto = ParetoClassification::pluck('id', 'name')->toArray();
+        $categories = [
             // Fijos
             ['name' => 'Vivienda', 'pareto_classification_id' => $pareto['Fijos'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Telefonia', 'pareto_classification_id' => $pareto['Fijos'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
@@ -43,6 +44,8 @@ class CategorySeeder extends Seeder
             // Ahorro
             ['name' => 'Inversiones', 'pareto_classification_id' => $pareto['Ahorro'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Fondo de emergencia', 'pareto_classification_id' => $pareto['Ahorro'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-        ]);
+        ];
+
+        Category::insert($categories);
     }
 }

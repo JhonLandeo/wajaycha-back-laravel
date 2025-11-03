@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
+use App\Models\Transaction;
 use DateTime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -162,7 +164,7 @@ class FinancialReportController extends Controller
 
     public function budgetDeviation($month)
     {
-        $monthlyBudget = DB::table('categories')->get();
+        $monthlyBudget = Category::all();
         return $this->totalExpensesByCategory($month)->map(function ($item, $sub) use ($monthlyBudget) {
             $monthly_budget = $monthlyBudget->where('name', $sub)->value('monthly_budget');
             $variance =  $item - $monthly_budget;
@@ -178,7 +180,7 @@ class FinancialReportController extends Controller
 
     public function concurrentTransactions()
     {
-        $transactionsWithDetail = DB::table('transactions as t')
+        $transactionsWithDetail = Transaction::query()
             ->selectRaw("
                 CASE
                     WHEN t.yape_id IS NULL THEN d.description

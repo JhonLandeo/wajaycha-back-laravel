@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Detail;
+use App\Models\Import;
 use App\Models\Transaction;
 use App\Services\CategorizationService; // <-- Nuestro nuevo servicio
 use Illuminate\Bus\Queueable;
@@ -45,7 +46,7 @@ class ProcessPdfImport implements ShouldQueue
     public function handle(): void
     {
         // 1. Marcar el Job como 'processing'
-        DB::table('imports')->where('id', $this->importId)->update(['status' => 'processing']);
+        Import::where('id', $this->importId)->update(['status' => 'processing']);
         $filePath = Storage::path($this->storedPath); // Ruta absoluta
 
         try {
@@ -104,10 +105,10 @@ class ProcessPdfImport implements ShouldQueue
             $this->processParsedTransactions($parsedTransactions);
 
             // 6. Marcar como 'completed'
-            DB::table('imports')->where('id', $this->importId)->update(['status' => 'completed']);
+            Import::where('id', $this->importId)->update(['status' => 'completed']);
         } catch (Throwable $th) {
             Log::error("Error en Job ProcessPdfImport (ID: {$this->importId}): " . $th->getMessage());
-            DB::table('imports')->where('id', $this->importId)->update([
+            Import::where('id', $this->importId)->update([
                 'status' => 'failed',
                 'error_message' => $th->getMessage()
             ]);

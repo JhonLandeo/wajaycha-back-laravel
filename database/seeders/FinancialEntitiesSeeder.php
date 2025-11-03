@@ -2,9 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Models\FinancialEntity;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\Calculation\Financial;
 
 class FinancialEntitiesSeeder extends Seeder
 {
@@ -43,6 +45,6 @@ class FinancialEntitiesSeeder extends Seeder
             ['name' => 'Mi Banco', 'type' => 'Banco', 'code' => 'MIBANCO', 'address' => 'Av. Paseo de la República 4675, Lima', 'website' => 'https://www.mibanco.com.pe'],
         ];
 
-        DB::table('financial_entities')->insert($entities);
+        FinancialEntity::insert($entities);
     }
 }
