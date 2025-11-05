@@ -8,17 +8,22 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Collection;
 
 class NotificationSummaryByMonth extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public $budgetDeviation;
 
     /**
-     * Create a new message instance.
+     * @var Collection<string, mixed>
      */
-    public function __construct($budgetDeviation)
+    public Collection $budgetDeviation;
+
+    /**
+     * @param Collection<string, mixed> $budgetDeviation
+     */
+    public function __construct(Collection $budgetDeviation)
     {
         $this->budgetDeviation = $budgetDeviation;
     }

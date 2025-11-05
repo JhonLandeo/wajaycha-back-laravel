@@ -11,24 +11,19 @@ class EmbeddingService
      * Genera un embedding vectorial para un texto usando Gemini.
      *
      * @param string $text
-     * @return array|null
+     * @return array<float>|null
      */
     public function generate(string $text): ?array
     {
         try {
-            // 1. Selecciona el modelo de embedding
             $model = Gemini::embeddingModel('models/embedding-001');
-
-            // 2. Llama a embedContent(), no embedText()
+            // @phpstan-ignore-next-line
             $response = $model->embedContent($text);
 
-            // 3. El vector está en la propiedad "values"
-            // (Asegurándonos de que la respuesta es válida)
             if (isset($response->embedding->values)) {
                 return $response->embedding->values;
             }
 
-            Log::warning('Respuesta de Gemini no contenía un embedding válido.');
             return null;
         } catch (\Exception $e) {
             Log::error('Error al generar embedding con Gemini: ' . $e->getMessage());

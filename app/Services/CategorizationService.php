@@ -9,9 +9,8 @@ use Illuminate\Support\Facades\DB; // Importante
 
 class CategorizationService
 {
-    protected $embeddingService;
+    protected EmbeddingService $embeddingService;
 
-    // Inyectamos el nuevo servicio
     public function __construct(EmbeddingService $embeddingService)
     {
         $this->embeddingService = $embeddingService;

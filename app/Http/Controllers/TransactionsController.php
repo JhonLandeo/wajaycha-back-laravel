@@ -138,7 +138,7 @@ class TransactionsController extends Controller
         if ($request->is_frequent) {
             $this->handleBatchUpdate($request, $newCategoryId, $categorizationService);
         } else {
-            $this->handleSingleUpdate($request, $newCategoryId, $categorizationService);
+            $this->handleSingleUpdate($request, $newCategoryId);
         }
 
         return response()->json(['status' => 'ok'], 201);
@@ -147,11 +147,11 @@ class TransactionsController extends Controller
     /**
      * Maneja la lógica de actualización masiva (isUpdateAll = true)
      */
-    private function handleBatchUpdate(Request $request, int $newCategoryId, $categorizationService): void
+    private function handleBatchUpdate(Request $request, int $newCategoryId, CategorizationService $categorizationService): void
     {
         if ($request->source_type == 'yape_unmatched') {
             $yapeTransaction = TransactionYape::find($request->transaction_id);
-            if($yapeTransaction){
+            if ($yapeTransaction) {
                 $yapeTransaction->category_id = $newCategoryId;
                 $yapeTransaction->save();
 
@@ -164,7 +164,7 @@ class TransactionsController extends Controller
                     ->whereNull('transaction_yapes.category_id')
                     ->update(['category_id' => $newCategoryId]);
 
-                 $categorizationService->createExactRule(
+                $categorizationService->createExactRule(
                     $yapeTransaction->user_id,
                     $detail->id,
                     $newCategoryId
@@ -208,35 +208,26 @@ class TransactionsController extends Controller
     /**
      * Maneja la lógica de actualización única (isUpdateAll = false)
      */
-    private function handleSingleUpdate(Request $request, int $newCategoryId, $categorizationService): void
+    private function handleSingleUpdate(Request $request, int $newCategoryId): void
     {
         if ($request->source_type == 'yape_unmatched') {
             $yapeTransaction = TransactionYape::find($request->transaction_id);
             if ($yapeTransaction) {
                 $yapeTransaction->category_id = $newCategoryId;
                 $yapeTransaction->save();
-
                 $yapeTransaction->load('detail');
                 $detail = $yapeTransaction->detail;
-
-                if ($detail && $newCategoryId) {
-                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
-                }
-            } 
+                GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
+            }
         } else {
             $transaction = Transaction::find($request->transaction_id);
 
             if ($transaction) {
                 $transaction->category_id = $newCategoryId;
                 $transaction->save();
-
                 $transaction->load('detail');
                 $detail = $transaction->detail;
-
-                if ($detail && $newCategoryId) {
-                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
-                }
-
+                GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
                 $this->updateMatchingYapeTransaction($transaction, $newCategoryId);
             }
         }

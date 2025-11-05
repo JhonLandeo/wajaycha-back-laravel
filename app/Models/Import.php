@@ -8,7 +8,17 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Import extends Model
 {
-    protected $guarded = [];
+    protected $fillable = [
+        'name',
+        'extension',
+        'path',
+        'mime',
+        'size',
+        'user_id',
+        'payment_service_id',
+        'financial_entity_id',
+        'status'
+    ];
 
     public function financialEntity(): BelongsTo
     {

@@ -40,10 +40,10 @@ class TransactionYapeController extends Controller
             $import->url = null;
             $import->size = $size;
             $import->user_id = $userId;
-            $import->financial_id = self::FINANCIAL_BCP_ID;
+            $import->payment_service_id = self::PAYMENT_SERVICE_YAPE_ID;
             $import->financial_entity_id = self::FINANCIAL_BCP_ID;
             $import->save();
-            ProcessExcelImport::dispatch($import, $userId, $storedPath);
+            ProcessExcelImport::dispatch($import->id, $userId, $storedPath);
             DB::commit();
             return response()->json(['status' => 'ok']);
         } catch (\Throwable $th) {

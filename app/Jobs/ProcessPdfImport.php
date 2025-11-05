@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\DTOs\TransactionDataDTO;
 use App\Models\Detail;
 use App\Models\Import;
 use App\Models\Transaction;
@@ -24,13 +25,13 @@ class ProcessPdfImport implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $importId;
-    protected $userId;
-    protected $storedPath;
-    protected $accountId;
-    protected $year;
-    protected $password;
-    protected $categorizationService;
+    protected int $importId;
+    protected int $userId;
+    protected string $storedPath;
+    protected int $accountId;
+    protected int $year;
+    protected string $password;
+    protected CategorizationService $categorizationService;
 
     public function __construct(int $importId, int $userId, string $storedPath, int $accountId, int $year, ?string $password)
     {
@@ -91,15 +92,15 @@ class ProcessPdfImport implements ShouldQueue
                     $month = substr($line_subtracted[1], 2);
                     $monthFormat = $month == 'SET' ? 'SEP' : $month;
                     $dayMonth = $day . $monthFormat;
-
-                    $parsedTransactions[] = (object)[
-                        'amount' => $income == 0 ? floatval(str_replace(',', '', $expense)) : floatval(str_replace(',', '', $income)),
-                        'date_operation' => Carbon::createFromLocaleFormat('dM', 'es', $dayMonth)->setYear($this->year)->format('Y-m-d'),
-                        'type_transaction' => $income == 0 ? 'expense' : 'income',
-                        'description' => $description,
-                    ];
+                    $parsedTransactions[] = new TransactionDataDTO(
+                        amount: $income == 0 ? floatval(str_replace(',', '', $expense)) : floatval(str_replace(',', '', $income)),
+                        date_operation: Carbon::createFromLocaleFormat('dM', 'es', $dayMonth)->setYear($this->year)->format('Y-m-d'),
+                        type_transaction: $income == 0 ? 'expense' : 'income',
+                        description: $description
+                    );
                 }
             }
+
 
             // 5. Procesar e insertar transacciones
             $this->processParsedTransactions($parsedTransactions);
@@ -115,7 +116,10 @@ class ProcessPdfImport implements ShouldQueue
         }
     }
 
-    private function processParsedTransactions(array $transactionsData)
+    /**
+     * @param list<TransactionDataDTO> $transactionsData
+     */
+    private function processParsedTransactions(array $transactionsData): void
     {
         $uniqueTransactions = [];
 
@@ -152,9 +156,8 @@ class ProcessPdfImport implements ShouldQueue
         }
     }
 
-    // --- Métodos Helper (Movidos desde tu PdfController) ---
 
-    private function extractTextFromPdf($filePath)
+    private function extractTextFromPdf(string $filePath): string
     {
         $parser = new Parser();
         try {
@@ -164,7 +167,7 @@ class ProcessPdfImport implements ShouldQueue
         }
     }
 
-    private function isEncrypted($filePath)
+    private function isEncrypted(string $filePath): bool
     {
         $pdf = new Fpdi();
         try {
@@ -175,9 +178,8 @@ class ProcessPdfImport implements ShouldQueue
         }
     }
 
-    private function decryptPdf($filePath, $password)
+    private function decryptPdf(string $filePath, string $password): string
     {
-        // Crear la carpeta temporal si no existe
         $decryptedPath = storage_path('app/private/' . uniqid('decrypted_') . '.pdf');
 
         $command = sprintf(

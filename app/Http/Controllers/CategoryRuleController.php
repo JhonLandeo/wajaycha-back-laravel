@@ -7,6 +7,8 @@ use App\Models\Detail;
 use App\Models\CategorizationRule;
 use App\Services\CategorizationService;
 use App\Jobs\GenerateEmbeddingForDetail;
+use Illuminate\Http\Client\Response;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -14,11 +16,7 @@ use Illuminate\Support\Facades\Log;
 
 class CategoryRuleController extends Controller
 {
-    /**
-     * 2. ¡NUEVO! Obtiene la lista paginada de reglas existentes.
-     * (Responde a GET /categories/{category}/rules)
-     */
-    public function getRules(Request $request, Category $category)
+    public function getRules(Request $request, Category $category): JsonResponse
     {
         $per_page = $request->input('per_page', 10);
         $page = $request->input('page', 1);
@@ -33,62 +31,41 @@ class CategoryRuleController extends Controller
         return response()->json($rules);
     }
 
-    /**
-     * 3. ¡NUEVO! Obtiene la lista paginada de sugerencias.
-     * (Responde a GET /categories/{category}/suggestions)
-     */
-    public function getSuggestions(Request $request, Category $category)
+    public function getSuggestions(Request $request, Category $category): JsonResponse
     {
         $userId = Auth::id();
         $per_page = $request->input('per_page', 10);
         $page = $request->input('page', 1);
         Log::info('userId: ' . $userId . ', categoryId: ' . $category->id);
-        // 1. Necesitamos saber qué detalles YA son reglas
-        //    para poder excluirlos de las sugerencias.
         $existingDetailIds = CategorizationRule::where('user_id', $userId)
             ->where('category_id', $category->id)
             ->pluck('detail_id');
         Log::info('existingDetailIds: ' . var_export($existingDetailIds, true));
 
-        // 2. Calculamos el "Vector Centroide"
         $centroidVector = Detail::query()
             ->where('user_id', $userId)
             ->where('last_used_category_id', $category->id)
             ->whereNotNull('embedding')
             ->avg('embedding');
-        Log::info('centroidVector: ' . $centroidVector);
 
-        // 3. Si no hay vector (categoría no "entrenada"),
-        //    devolvemos un paginador vacío.
         if (!$centroidVector) {
-            // Un truco limpio para devolver un Paginator vacío
             return response()->json(Detail::whereRaw('1=0')->paginate(25));
         }
 
-        // 4. Buscamos detalles "huérfanos" y los paginamos
         $suggestions = Detail::query()
             ->where('user_id', $userId)
-            ->whereNull('last_used_category_id') // Huérfanos
+            ->whereNull('last_used_category_id')
             ->whereNotNull('embedding')
-            ->whereNotIn('id', $existingDetailIds) // Excluir reglas existentes
+            ->whereNotIn('id', $existingDetailIds)
             ->orderByRaw('embedding <=> ?', [$centroidVector])
-            ->limit(100) // Optimizacion: solo buscar en los 100 más cercanos
+            ->limit(100)
             ->select('id', 'description')
             ->paginate($per_page, ['*'], 'page', $page);
 
         return response()->json($suggestions);
     }
 
-    /**
-     * 4. Guarda los cambios del modal (sincroniza las reglas).
-     * (Responde a POST /categories/{category}/sync)
-     *
-     * ¡IMPORTANTE! Esta lógica no cambia.
-     * Tu frontend es responsable de mantener un array con
-     * TODOS los IDs seleccionados (de todas las páginas)
-     * y enviarlo aquí.
-     */
-    public function syncRule(Request $request, Category $category, CategorizationService $categorizationService)
+    public function syncRule(Request $request, Category $category, CategorizationService $categorizationService): JsonResponse
     {
         $userId = Auth::id();
         $request->validate([

@@ -14,8 +14,8 @@ class GenerateEmbeddingForDetail implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $detail;
-    protected $categoryId;
+    protected Detail $detail;
+    protected int $categoryId;
 
     public function __construct(Detail $detail, int $categoryId)
     {

@@ -5,15 +5,33 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Detail;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 /**
  * @property-read Detail $detail
+ *
+ * @property float $value                
+ * @property string $name               
+ * @property float $avg_daily_income    
+ * @property float $avg_daily_expense   
+ * @property float $total_income
+ * @property float $total_expense       
+ * @property float $balance             
+ * @property string $name_month
+ * @property int $month
+ * @property string $name_day
+ * @property int $day
+ * @property string $detail_name
+ * @property float $monto_promedio
+ * @property string $cat_name // Asumo que esta existe por tu groupBy('cat_name')
+ * @property float $amount
+ * @property string $date_operation
+ * @property string $type_transaction
  */
 class Transaction extends Model
 {
     protected $table = 'transactions';
-    protected $guarded = [];
     protected $fillable = [
         'category_id',
         'amount',
@@ -24,7 +42,7 @@ class Transaction extends Model
     ];
 
     protected $casts = [
-        'value' => 'float',
+        // 'value' => 'float',
     ];
 
     public function detail(): BelongsTo
@@ -38,7 +56,7 @@ class Transaction extends Model
         return $this->hasOneThrough(Category::class, Category::class);
     }
 
-    public function splits()
+    public function splits(): HasMany
     {
         return $this->hasMany(TransactionSplit::class);
     }

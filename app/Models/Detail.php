@@ -8,7 +8,6 @@ use App\Models\Transaction;
 class Detail extends Model
 {
     protected $table = 'details';
-    protected $guarded = [];
 
     protected $fillable = [
         'description',
@@ -16,6 +15,8 @@ class Detail extends Model
         'embedding',
         'last_used_category_id'
     ];
+
+    public int $distance;
 
     public function transactions(): HasMany
     {

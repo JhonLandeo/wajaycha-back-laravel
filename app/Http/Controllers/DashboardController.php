@@ -24,15 +24,14 @@ class DashboardController extends Controller
             $userId = Auth::id();
             $avgBase = Transaction::query()
                 ->selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
-            ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense")
+                ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense")
                 ->join('details as d', 'transactions.detail_id', '=',  'd.id');
 
-
             if ($month) {
-                $avg = $avgBase->whereMonth('date_operation', $month);
+                $avgBase->whereMonth('date_operation', $month);
             }
             if ($year) {
-                $avg = $avgBase->whereYear('date_operation', $year);
+                $avgBase->whereYear('date_operation', $year);
             }
 
             $avg = $avgBase->where('transactions.user_id', $userId)
@@ -97,6 +96,7 @@ class DashboardController extends Controller
                 ->limit(5)
                 ->get()
                 ->map(function ($item) {
+                    /** @var \App\Models\Transaction $item */
                     $item->value = (float) $item->value;
                     return $item;
                 });
@@ -108,6 +108,7 @@ class DashboardController extends Controller
                 ->limit(5)
                 ->get()
                 ->map(function ($item) {
+                    /** @var \App\Models\Transaction $item */
                     $item->value = (float) $item->value;
                     return $item;
                 });
@@ -158,7 +159,7 @@ class DashboardController extends Controller
             $results = $query
                 ->where('t.user_id', $userId)
                 ->groupByRaw("{$dayOfWeekExpression}, {$dayNameExpression}")
-                ->orderByRaw($dayOfWeekExpression) // Usamos orderByRaw para consistencia.
+                ->orderByRaw($dayOfWeekExpression)
                 ->get();
 
             foreach ($results as $result) {

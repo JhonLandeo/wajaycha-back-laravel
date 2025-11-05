@@ -13,11 +13,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ImportController extends Controller
 {
 
-    public function __construct(private PdfController $pdfController) {}
+    public function __construct() {}
 
     /**
      * Display a listing of the resource.
@@ -68,7 +69,7 @@ class ImportController extends Controller
             ]);
 
             ProcessPdfImport::dispatch(
-                $import,
+                $import->id,
                 $userId,
                 $storedPath,
                 $accountId,
@@ -117,7 +118,7 @@ class ImportController extends Controller
         return response()->json($data);
     }
 
-    public function download($id)
+    public function download(int $id): StreamedResponse
     {
         $import = Import::find($id);
         return Storage::download($import->path, $import->name);

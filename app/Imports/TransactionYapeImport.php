@@ -16,14 +16,14 @@ use Maatwebsite\Excel\Imports\HeadingRowFormatter;
 HeadingRowFormatter::default('none');
 class TransactionYapeImport implements ToModel, WithHeadingRow
 {
-    protected $userId; // <-- Propiedad para el ID
+    protected int $userId;
 
     /**
      * @param int $userId
      */
     public function __construct(int $userId)
     {
-        $this->userId = $userId; // <-- Asigna el ID
+        $this->userId = $userId;
     }
     /**
      * Especificar la fila donde comienzan los encabezados
@@ -44,6 +44,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
      *     'Monto': string,
      *     'Tipo de Transacción': string
      * } $row
+     * @return \App\Models\TransactionYape|void
      */
     public function model(array $row)
     {
@@ -53,11 +54,9 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
 
         $dateOperation = null;
 
-        if (!empty($row['Fecha de operación'])) {
-            $dateString = $row['Fecha de operación'];
-            if (Carbon::hasFormat($dateString, 'd/m/Y H:i:s')) {
-                $dateOperation = Carbon::createFromFormat('d/m/Y H:i:s', $dateString)->format('Y-m-d H:i:s');
-            }
+        $dateString = $row['Fecha de operación'];
+        if (Carbon::hasFormat($dateString, 'd/m/Y H:i:s')) {
+            $dateOperation = Carbon::createFromFormat('d/m/Y H:i:s', $dateString)->format('Y-m-d H:i:s');
         }
 
         $toleranceInSeconds = 60;

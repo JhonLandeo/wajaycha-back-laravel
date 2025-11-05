@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\SendEmailSummary;
 use App\Mail\NotificationSummaryByDay;
 use Carbon\Carbon;
 use DateTime;
@@ -30,7 +29,7 @@ class SendSummaryTransactionsByDay extends Command
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(): void
     {
         try {
             $summary = DB::select('CALL get_summary_transaction_by_day()');
@@ -40,6 +39,5 @@ class SendSummaryTransactionsByDay extends Command
             error_log($th);
             throw $th;
         }
-
     }
 }

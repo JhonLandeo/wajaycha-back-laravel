@@ -13,12 +13,12 @@ class NotificationSummaryByDay extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public $summary;
+    public object $summary;
 
     /**
      * Create a new message instance.
      */
-    public function __construct($summary)
+    public function __construct(object $summary)
     {
         $this->summary = $summary;
     }
