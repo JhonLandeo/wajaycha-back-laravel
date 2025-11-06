@@ -57,16 +57,16 @@ class ImportController extends Controller
             $year = (int)substr($originalName, 6, 4);
             $accountId = $request->financial;
 
-            $import = Import::create([
-                'name' => $originalName,
-                'extension' => $file->getClientOriginalExtension(),
-                'path' => $storedPath,
-                'mime' => $file->getMimeType(),
-                'size' => $file->getSize(),
-                'user_id' => $userId,
-                'financial_entity_id' => $accountId,
-                'status' => 'pending'
-            ]);
+            $import = new Import();
+            $import->name = $originalName;
+            $import->extension = $file->getClientOriginalExtension();
+            $import->path =  $storedPath;
+            $import->mime = $file->getMimeType();
+            $import->size = $file->getSize();
+            $import->user_id = $userId;
+            $import->financial_entity_id = $accountId;
+            $import->status = 'pending';
+            $import->save();
 
             ProcessPdfImport::dispatch(
                 $import->id,

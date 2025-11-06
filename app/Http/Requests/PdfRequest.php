@@ -23,7 +23,8 @@ class PdfRequest extends FormRequest
     {
         return [
             'file' => 'required|file|max:10240',
-            'user_id' => 'required|integer',
+            'financial' => 'required|int|exists:financial_entities,id',
+            'password' => 'required'
         ];
     }
 }

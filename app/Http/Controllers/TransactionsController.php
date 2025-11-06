@@ -171,37 +171,25 @@ class TransactionsController extends Controller
                 );
             }
         } else {
-            // 1. Obtenemos todas las transacciones que coinciden
-            $transactions = Transaction::query()
-                ->join('details as d', 'transactions.detail_id', '=', 'd.id')
-                ->where('d.description', $request->name)
-                ->when($request->month, fn($q) => $q->whereMonth('transactions.date_operation', $request->month))
-                ->when($request->year, fn($q) => $q->whereYear('transactions.date_operation', $request->year))
-                ->select('transactions.*')
-                ->get();
-
-            $detailIdsToLearn = [];
-
-            foreach ($transactions as $transaction) {
-                // 2. Actualizamos la transacción principal
-                $transaction->category_id = $newCategoryId;
+            $transaction = Transaction::find($request->transaction_id);
+            if ($transaction) {
+                $transaction->category_id =  $newCategoryId;;
                 $transaction->save();
-
-                // 3. Registramos el detail_id para aprender de él (usamos keys para unicidad)
-                $detailIdsToLearn[$transaction->detail_id] = true;
-
-                // 4. Actualizamos la transacción Yape correspondiente (tu lógica)
-                $this->updateMatchingYapeTransaction($transaction, $newCategoryId);
             }
+            $transaction->load('detail');
+            $detail = $transaction->detail;
 
-            // Despachamos un Job por cada "Detail" único que actualizamos,
-            // no por cada "Transaction".
-            foreach (array_keys($detailIdsToLearn) as $detailId) {
-                $detail = Detail::find($detailId);
-                if ($detail) {
-                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
-                }
-            }
+            Transaction::query()
+                ->join('details as d', 'transactions.detail_id', '=', 'd.id')
+                ->where('d.description', $detail->description)
+                ->whereNull('transactions.category_id')
+                ->update(['category_id' => $newCategoryId]);
+
+            $categorizationService->createExactRule(
+                $transaction->user_id,
+                $detail->id,
+                $newCategoryId
+            );
         }
     }
 

@@ -20,8 +20,8 @@ return new class extends Migration
             $table->string('url')->nullable();
             $table->bigInteger('size');
             $table->foreignId('user_id')->constrained();
-            $table->bigInteger('payment_service_id')->unsigned();
-            $table->unsignedBigInteger('financial_entity_id')->nullable();
+            $table->unsignedBigInteger('financial_entity_id');
+            $table->unsignedBigInteger('payment_service_id')->nullable();
             $table->unsignedBigInteger('account_id')->nullable();
             $table->enum('status', ['pending', 'processing', 'completed', 'failed'])->default('pending');
             $table->text('error_message')->nullable();
