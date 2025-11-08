@@ -13,10 +13,9 @@ class Detail extends Model
         'description',
         'user_id',
         'embedding',
-        'last_used_category_id'
+        'last_used_category_id',
+        'distance'
     ];
-
-    public int $distance;
 
     public function transactions(): HasMany
     {

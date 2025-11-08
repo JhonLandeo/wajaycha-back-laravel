@@ -6,6 +6,7 @@ use App\DTOs\TransactionDataDTO;
 use App\Models\Detail;
 use App\Models\Import;
 use App\Models\Transaction;
+use App\Models\TransactionYape;
 use App\Services\CategorizationService; // <-- Nuestro nuevo servicio
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -121,36 +122,45 @@ class ProcessPdfImport implements ShouldQueue
      */
     private function processParsedTransactions(array $transactionsData): void
     {
-        $uniqueTransactions = [];
-
         foreach ($transactionsData as $txData) {
             $detail = Detail::firstOrCreate(
                 ['user_id' => $this->userId, 'description' => $txData->description],
                 ['merchant_id' => null]
             );
 
-            // 2. ¡Llamar al Servicio de Categorización!
-            $categoryId = $this->categorizationService->findCategory($this->userId, $detail);
+            $finalCategoryId = null;
+            $finalYapeId = null;
 
-            // 3. Revisar duplicados (tu lógica, pero mejorada)
-            $uniqueKey = $this->userId . $detail->id . $txData->date_operation . $txData->amount;
-            if (isset($uniqueTransactions[$uniqueKey])) {
-                continue; // Duplicado dentro del mismo PDF
+            // 2. --- Prioridad 0: Yape Matcher
+            //    Buscamos un Yape que ya esté categorizado por el usuario.
+            $transactionYape = TransactionYape::where('user_id', $this->userId)
+                ->whereDate('date_operation', Carbon::parse($txData->date_operation)->toDateString())
+                ->where('amount', $txData->amount)
+                ->where('type_transaction', $txData->type_transaction)
+                ->whereNotNull('category_id')
+                ->first();
+
+            if ($transactionYape) {
+                $finalCategoryId = $transactionYape->category_id;
+                $finalYapeId = $transactionYape->id;
+            } else {
+                $finalCategoryId = $this->categorizationService->findCategory($this->userId, $detail);
             }
-            $uniqueTransactions[$uniqueKey] = true;
 
-            // 4. Insertar usando `firstOrCreate` para evitar duplicados de importaciones pasadas
             Transaction::firstOrCreate(
                 [
+                    // --- ARRAY DE BÚSQUEDA ---
                     'user_id' => $this->userId,
                     'detail_id' => $detail->id,
                     'date_operation' => $txData->date_operation,
                     'amount' => $txData->amount,
-                    'type_transaction' => $txData->type_transaction
+                    'type_transaction' => $txData->type_transaction,
                 ],
-                [ // Datos que se insertarán si no se encuentra
+                [
+                    // --- ARRAY DE CREACIÓN ---
                     // 'account_id' => $this->accountId,
-                    'category_id' => $categoryId,
+                    'category_id' => $finalCategoryId, // La categoría que gan_ó (de P0 o P1-P3)
+                    'yape_id' => $finalYapeId,       // El ID del Yape (será null si P0 falló)
                 ]
             );
         }

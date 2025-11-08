@@ -15,8 +15,6 @@ class TransactionYape extends Model
     protected $fillable = [
         'date_operation',
         'message',
-        'origin',
-        'destination',
         'amount',
         'type_transaction',
         'user_id',

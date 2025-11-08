@@ -59,13 +59,13 @@ return new class extends Migration
                                             jsonb_build_object(
                                                 'date_operation', yape_trans.date_operation,
                                                 'amount', yape_trans.amount,
-                                                'origin', yape_trans.origin,
-                                                'destination', yape_trans.destination,
+                                                'detail_name', yape_trans.description,
                                                 'type_transaction', yape_trans.type_transaction,
                                                 'message', yape_trans.message
                                             )
                                         )
                                         FROM transaction_yapes AS yape_trans
+                                        JOIN details d ON d.id = yape_trans.detail_id
                                         WHERE 
                                             yape_trans.amount = t.amount
                                             AND yape_trans.user_id = p_user_id
@@ -95,9 +95,10 @@ return new class extends Migration
                                 OR EXISTS (
                                     SELECT 1
                                     FROM transaction_yapes AS yape_trans
+                                    JOIN details d ON d.id = yape_trans.detail_id
                                     WHERE yape_trans.amount = t.amount
                                     AND yape_trans.date_operation::date = t.date_operation::date
-                                    AND yape_trans.destination ILIKE '%' || p_search || '%'
+                                    AND yape_trans.description ILIKE '%' || p_search || '%'
                                 )
                             )
                             AND CASE

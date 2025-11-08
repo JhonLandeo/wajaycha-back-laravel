@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PdfRequest;
 use App\Jobs\ProcessPdfImport;
+use App\Jobs\ProcessYapeImport;
 use App\Models\FinancialEntity;
 use App\Models\Import;
 use App\Models\PaymentService;
@@ -85,6 +86,19 @@ class ImportController extends Controller
             Log::error("Error al despachar importación: " . $th->getMessage());
             return response()->json(['status' => 'error', 'message' => 'No se pudo recibir el archivo.'], 500);
         }
+    }
+
+    public function storeYape(Request $request)
+    {
+        $request->validate(['file' => 'required|mimes:pdf']);
+        $user = Auth::user();
+        $file = $request->file('file');
+        $userName = $user->name;
+        $path = $file->store('yape_imports', 'private');
+
+        ProcessYapeImport::dispatch($user, $path, $userName);
+
+        return response()->json(['message' => 'Tu reporte de Yape está siendo procesado.'], 202);
     }
 
     /**

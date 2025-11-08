@@ -63,10 +63,11 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         $startDate = Carbon::parse($dateOperation)->subSeconds($toleranceInSeconds);
         $endDate = Carbon::parse($dateOperation)->addSeconds($toleranceInSeconds);
 
-        $yapeRecord = TransactionYape::where('message', $row['Mensaje'])
+        $yapeRecord = TransactionYape::query()
+            ->from('transaction_yapes as ty')
+            ->join('details as d', 'ty.detail_id', '=', 'd.id')
             ->where('message', $row['Mensaje'])
-            ->where('origin', $row['Origen'])
-            ->where('destination', $row['Destino'])
+            ->where('d.name', $row['Tipo de Transacción'] == 'PAGASTE' ? $row['Destino'] : $row['Origen'])
             ->where('amount', (float) $row['Monto'])
             ->whereBetween('date_operation', [$startDate, $endDate])
             ->where('type_transaction', $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income')
@@ -86,8 +87,6 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             $categoryId = $categorizationService->findCategory($this->userId, $detail);
             return  TransactionYape::create([
                 'message' => $row['Mensaje'],
-                'origin' => $row['Origen'],
-                'destination' => $row['Destino'],
                 'amount' => (float) $row['Monto'],
                 'date_operation' => $dateOperation,
                 'type_transaction' => $typeTransaction,

@@ -8,6 +8,7 @@ use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\TransactionYape;
 use App\Services\CategorizationService;
+use App\Services\ClassificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -126,7 +127,7 @@ class TransactionsController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, CategorizationService $categorizationService): JsonResponse
+    public function update(Request $request, CategorizationService $categorizationService, ClassificationService $classifier): JsonResponse
     {
         $request->validate([
             'category_id' => 'required|integer|exists:categories,id',
@@ -136,9 +137,9 @@ class TransactionsController extends Controller
         $newCategoryId = (int)$request->category_id;
 
         if ($request->is_frequent) {
-            $this->handleBatchUpdate($request, $newCategoryId, $categorizationService);
+            $this->updateTransactionFrequent($request, $newCategoryId, $categorizationService);
         } else {
-            $this->handleSingleUpdate($request, $newCategoryId);
+            $this->updateTransactionWithoutFrequent($request, $newCategoryId, $classifier);
         }
 
         return response()->json(['status' => 'ok'], 201);
@@ -147,7 +148,7 @@ class TransactionsController extends Controller
     /**
      * Maneja la lógica de actualización masiva (isUpdateAll = true)
      */
-    private function handleBatchUpdate(Request $request, int $newCategoryId, CategorizationService $categorizationService): void
+    private function updateTransactionFrequent(Request $request, int $newCategoryId, CategorizationService $categorizationService): void
     {
         if ($request->source_type == 'yape_unmatched') {
             $yapeTransaction = TransactionYape::find($request->transaction_id);
@@ -193,10 +194,8 @@ class TransactionsController extends Controller
         }
     }
 
-    /**
-     * Maneja la lógica de actualización única (isUpdateAll = false)
-     */
-    private function handleSingleUpdate(Request $request, int $newCategoryId): void
+
+    private function updateTransactionWithoutFrequent(Request $request, int $newCategoryId, ClassificationService $classifier): void
     {
         if ($request->source_type == 'yape_unmatched') {
             $yapeTransaction = TransactionYape::find($request->transaction_id);
@@ -205,7 +204,9 @@ class TransactionsController extends Controller
                 $yapeTransaction->save();
                 $yapeTransaction->load('detail');
                 $detail = $yapeTransaction->detail;
-                GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
+                if ($detail && $classifier->isDetailUsefulForLearning($detail->description)) {
+                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
+                }
             }
         } else {
             $transaction = Transaction::find($request->transaction_id);
@@ -215,8 +216,10 @@ class TransactionsController extends Controller
                 $transaction->save();
                 $transaction->load('detail');
                 $detail = $transaction->detail;
-                GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
                 $this->updateMatchingYapeTransaction($transaction, $newCategoryId);
+                if ($detail && $classifier->isDetailUsefulForLearning($detail->description)) {
+                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
+                }
             }
         }
     }
@@ -229,6 +232,7 @@ class TransactionsController extends Controller
     {
         // Usar whereDate es más limpio y eficiente que D/M/Y por separado
         $yapeTransaction = TransactionYape::where('amount', $transaction->amount)
+            ->where('user_id', Auth::id())
             ->where('type_transaction', $transaction->type_transaction)
             ->whereDate('date_operation', Carbon::parse($transaction->date_operation)->toDateString())
             ->first();

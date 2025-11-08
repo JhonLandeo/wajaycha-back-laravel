@@ -97,8 +97,9 @@ return new class extends Migration
                             -- CTE para transaction_yapes filtradas base
                             SELECT
                                 ty.id, ty.message, ty.amount, ty.date_operation, ty.type_transaction,
-                                ty.origin, ty.destination, ty.user_id, ty.category_id
+                                d.description detail_name, ty.user_id, ty.category_id
                             FROM transaction_yapes ty
+                            JOIN details d ON d.id = ty.detail_id
                             WHERE
                                 ty.user_id = p_user_id
                                 AND (p_year IS NULL OR EXTRACT(YEAR FROM ty.date_operation) = p_year)
@@ -123,8 +124,7 @@ return new class extends Migration
                                     JSONB_BUILD_OBJECT(
                                         'date_operation', ty.date_operation,
                                         'amount', ty.amount,
-                                        'origin', ty.origin,
-                                        'destination', ty.destination,
+                                        'detail_name', ty.detail_name,
                                         'type_transaction', ty.type_transaction,
                                         'message', ty.message
                                     )
@@ -168,7 +168,7 @@ return new class extends Migration
                                         WHERE search_yapes.amount = tylc.amount
                                         AND search_yapes.date_operation::DATE = tylc.date_operation::DATE
                                         AND search_yapes.user_id = tylc.user_id
-                                        AND search_yapes.destination ILIKE ('%' || p_search || '%')
+                                        AND search_yapes.detail_name ILIKE ('%' || p_search || '%')
                                     )
                                 )
                         ),
@@ -178,7 +178,7 @@ return new class extends Migration
                                 pfy.id, pfy.message, pfy.amount, pfy.date_operation, pfy.type_transaction,
                                 pfy.category_id,
                                 NULL::BIGINT AS detail_id,
-                                pfy.destination AS detail_name,
+                                pfy.detail_name AS detail_name,
                                 NULL::JSONB AS frequency_general,
                                 NULL::BIGINT AS frequency,
                                 NULL::JSONB AS yape_trans,
@@ -192,7 +192,7 @@ return new class extends Migration
                                     FROM UNIQUE_TRANSACTION_MATCHES utm
                                     WHERE utm.matched_yape_id = pfy.id
                                 )
-                                AND (p_search IS NULL OR p_search = '' OR pfy.destination ILIKE ('%' || p_search || '%'))
+                                AND (p_search IS NULL OR p_search = '' OR pfy.detail_name ILIKE ('%' || p_search || '%'))
                         ),
                         FINAL_UNION_WITH_TOTAL_COUNT AS (
                             -- Unir ambos conjuntos de resultados

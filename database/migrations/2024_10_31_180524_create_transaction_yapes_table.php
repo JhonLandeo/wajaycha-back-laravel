@@ -14,8 +14,6 @@ return new class extends Migration
         Schema::create('transaction_yapes', function (Blueprint $table) {
             $table->id();
             $table->string('message')->nullable();
-            $table->string('origin');
-            $table->string('destination');
             $table->decimal('amount');
             $table->timestamp('date_operation');
             $table->foreignId('user_id')->constrained();
