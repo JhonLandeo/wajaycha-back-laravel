@@ -15,9 +15,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('pareto_classification_id')->constrained();
             $table->string('name');
-            $table->decimal('monthly_budget')->nullable()->after('name');
+            $table->decimal('monthly_budget')->default(0.0)->after('name');
+            $table->enum('type', ['income', 'expense', 'transfer']);
             $table->unsignedBigInteger('user_id');
             $table->foreign('user_id')->references('id')->on('users');
+            $table->foreignId('parent_id')->nullable()->constrained('categories');
             $table->timestamps();
         });
     }

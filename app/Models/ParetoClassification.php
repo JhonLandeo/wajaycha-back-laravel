@@ -7,7 +7,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ParetoClassification extends Model
 {
-    protected $guarded = [];
+    protected $fillable = [
+        'name',
+        'percentage',
+        'user_id'
+    ];
 
     public function categories(): HasMany
     {

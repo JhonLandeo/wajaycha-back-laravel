@@ -8,7 +8,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Category extends Model
 {
-    protected $guarded = [];
+    protected $fillable = [
+        'pareto_classification_id',
+        'type',
+        'parent_id',
+        'name',
+        'user_id',
+        'monthly_budget'
+    ];
 
     public function paretoClassification(): BelongsTo
     {
