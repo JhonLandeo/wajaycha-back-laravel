@@ -70,7 +70,6 @@ class ProcessYapeImport implements ShouldQueue
      */
     private function processTransaction(array $matches): void
     {
-        Log::info('matches: ' . var_export($matches, true));
         // 1. Limpia los datos extraídos
         $date = Carbon::createFromFormat('d/m/Y', trim($matches[1]))->format('Y-m-d');
         $time = trim($matches[2]);

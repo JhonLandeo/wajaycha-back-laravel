@@ -49,7 +49,6 @@ class UserObserver implements ShouldHandleEventsAfterCommit
         ParetoClassification::insert($defaultParetoClassifications);
 
         $pareto = ParetoClassification::pluck('id', 'name')->toArray();
-        Log::info('pareto: ' . var_export($pareto, true));
         $defaultCategories = [
             // --- TIPO: INGRESO ---
             [

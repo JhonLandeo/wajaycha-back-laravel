@@ -21,7 +21,6 @@ class ClassificationService
             $response = $model->generateContent($prompt);
             
             $result = strtolower(trim($response->text()));
-            Log::info('result: ' . $result);
 
             // 3. Devuelve 'true' solo si la respuesta es "UTIL"
             return $result === 'util';

@@ -36,11 +36,9 @@ class CategoryRuleController extends Controller
         $userId = Auth::id();
         $per_page = $request->input('per_page', 10);
         $page = $request->input('page', 1);
-        Log::info('userId: ' . $userId . ', categoryId: ' . $category->id);
         $existingDetailIds = CategorizationRule::where('user_id', $userId)
             ->where('category_id', $category->id)
             ->pluck('detail_id');
-        Log::info('existingDetailIds: ' . var_export($existingDetailIds, true));
 
         $centroidVector = Detail::query()
             ->where('user_id', $userId)
