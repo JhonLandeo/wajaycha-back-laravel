@@ -19,7 +19,6 @@ class CategoryController extends Controller
         $per_page = $request->input('per_page', 10);
         $page = $request->input('page', 1);
         $userId = Auth::id();
-        logger($userId);
         $categories = Category::query()
             ->where('user_id', $userId)
             ->with('paretoClassification')
