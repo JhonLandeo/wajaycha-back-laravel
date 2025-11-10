@@ -21,6 +21,7 @@ class CategoryController extends Controller
         $userId = Auth::id();
         $categories = Category::query()
             ->where('user_id', $userId)
+            ->whereNull('parent_id')
             ->with('paretoClassification')
             ->withCount('categorizationRules')
             ->orderBy('categorization_rules_count', 'desc')
