@@ -47,6 +47,8 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::get('get-service', [ImportController::class, 'getService']);
     Route::get('/imports/{id}/download', [ImportController::class, 'download']);
 
+    Route::post('/yape/find-suggestions', [TransactionYapeController::class, 'findSuggestions'])->name('yape.findSuggestions');
+
     Route::prefix('categories')->group(function () {
         Route::get('/{category}/rules', [CategoryRuleController::class, 'getRules']);
 

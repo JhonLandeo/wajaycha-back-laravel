@@ -121,6 +121,7 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                     ['name' => '💊 Salud (Farmacia/Citas)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
                     ['name' => '📺 Suscripciones (Netflix, etc.)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
                     ['name' => '🏋️‍♀️ Gimnasio', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '⚽ Deporte (Fútbol, etc.)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
                     ['name' => '💅 Cuidado Personal', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
                     ['name' => '👕 Ropa y Calzado', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
                     ['name' => '🎬 Entretenimiento (Cine, etc.)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],

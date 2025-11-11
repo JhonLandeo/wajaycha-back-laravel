@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Imports\TransactionYapeImport;
 use App\Jobs\ProcessExcelImport;
+use App\Jobs\SuggestYapeCategoriesJob;
 use App\Models\Import;
 use App\Models\TransactionYape;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +32,7 @@ class TransactionYapeController extends Controller
             $mime = Storage::mimeType($file);
 
             DB::beginTransaction();
-            
+
             $import = new Import();
             $import->name = $originalName;
             $import->extension = $extension;
@@ -49,5 +50,11 @@ class TransactionYapeController extends Controller
         } catch (\Throwable $th) {
             throw $th;
         }
+    }
+
+    public function findSuggestions()
+    {
+        SuggestYapeCategoriesJob::dispatch(Auth::id());
+        return response()->json(['status' => 'ok', 'message' => 'Estamos buscando sugerencias. ¡Actualiza en un minuto!']);
     }
 }
