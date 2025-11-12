@@ -67,7 +67,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             ->from('transaction_yapes as ty')
             ->join('details as d', 'ty.detail_id', '=', 'd.id')
             ->where('message', $row['Mensaje'])
-            ->where('d.name', $row['Tipo de Transacción'] == 'PAGASTE' ? $row['Destino'] : $row['Origen'])
+            ->where('d.description', $row['Tipo de Transacción'] == 'PAGASTE' ? $row['Destino'] : $row['Origen'])
             ->where('amount', (float) $row['Monto'])
             ->whereBetween('date_operation', [$startDate, $endDate])
             ->where('type_transaction', $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income')
