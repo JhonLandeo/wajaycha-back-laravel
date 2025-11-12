@@ -71,7 +71,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             ->where('amount', (float) $row['Monto'])
             ->whereBetween('date_operation', [$startDate, $endDate])
             ->where('type_transaction', $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income')
-            ->where('user_id', $this->userId)
+            ->where('ty.user_id', $this->userId)
             ->first();
 
         if ($yapeRecord) {
