@@ -14,10 +14,10 @@ return new class extends Migration
     {
         $this->down();
         $sql = <<<SQL
-                    CREATE OR REPLACE FUNCTION get_transactions_by_detail(p_per_page integer, p_page integer, p_year integer, p_month integer, p_type type_transaction, p_amount numeric, p_search character varying, p_category character varying, p_user_id integer, p_recurring boolean, p_weekend boolean, p_workday boolean)
-                    RETURNS TABLE(detail_id bigint, detail_name character varying, child_transactions jsonb, frequency bigint, amount numeric, total_count bigint)
-                    LANGUAGE plpgsql
-                    AS $$
+                        CREATE OR REPLACE FUNCTION get_transactions_by_detail(p_per_page integer, p_page integer, p_year integer, p_month integer, p_type type_transaction, p_amount numeric, p_search character varying, p_category character varying, p_user_id integer, p_recurring boolean, p_weekend boolean, p_workday boolean)
+                        RETURNS TABLE(detail_id bigint, detail_name character varying, child_transactions jsonb, frequency bigint, amount numeric, total_count bigint)
+                        LANGUAGE plpgsql
+                        AS $$
                             BEGIN
                                 RETURN QUERY
                                 WITH MatchedYapes AS (
@@ -66,7 +66,7 @@ return new class extends Migration
                                         t.type_transaction, t.category_id,
                                         'transaction' AS source_type,
                                         COALESCE(my.yape_trans_json, '[]'::jsonb) AS yape_trans,
-                                        t.user_id
+                                        t.user_id, null::BIGINT AS suggested_category_id
                                     FROM 
                                         transactions AS t
                                     LEFT JOIN 
@@ -84,7 +84,8 @@ return new class extends Migration
                                         uy.type_transaction, uy.category_id,
                                         'yape_unmatched' AS source_type,
                                         '[]'::jsonb AS yape_trans,
-                                        uy.user_id
+                                        uy.user_id,
+                                        uy.suggested_category_id
                                     FROM 
                                         UnmatchedYapes AS uy
                                     WHERE CASE
@@ -102,13 +103,17 @@ return new class extends Migration
                                                 'id', a.id,
                                                 'message', a.message,
                                                 'amount', a.amount,
-                                                'date_operation', a.date_operation,
+                                                'date_operation', TO_CHAR(
+                                                    a.date_operation::timestamp, 
+                                                    'Dy DD Mon YYYY HH12:MI AM'
+                                                ),
                                                 'type_transaction', a.type_transaction,
                                                 'category_id', a.category_id,
                                                 'detail_id', a.detail_id,
                                                 'detail_name', d.description,
                                                 'yape_trans', a.yape_trans,
-                                                'source_type', a.source_type
+                                                'source_type', a.source_type,
+                                                'suggest_name', c.name
                                             )
                                         ) AS child_transactions,
                                         COUNT(a.id) AS frequency,
@@ -118,6 +123,7 @@ return new class extends Migration
                                         AllData AS a
                                     JOIN 
                                         details AS d ON d.id = a.detail_id
+                                    LEFT JOIN categories c ON c.id = a.suggested_category_id
                                     WHERE 
                                     a.user_id = p_user_id
                                     AND (p_year IS NULL OR EXTRACT(YEAR FROM a.date_operation) = p_year)
@@ -153,7 +159,7 @@ return new class extends Migration
                                 OFFSET (p_page - 1) * p_per_page;
                             END;
                             $$
-                    ;
+                        ;
         SQL;
         DB::unprepared($sql);
     }
