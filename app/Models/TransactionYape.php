@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property-read \App\Models\Detail $detail
@@ -25,5 +26,10 @@ class TransactionYape extends Model
     public function detail(): BelongsTo
     {
         return $this->belongsTo(Detail::class, 'detail_id');
+    }
+
+    public function tags(): HasMany
+    {
+        return $this->hasMany(TransactionTag::class, 'transaction_yape_id');
     }
 }

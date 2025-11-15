@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\Category;
 use App\Models\ParetoClassification;
+use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
 use Illuminate\Support\Facades\DB;
@@ -203,6 +204,39 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                 ]);
             }
         }
+
+        $defaultTags = [
+            // Por Persona
+            'Pareja',
+            'Familia',
+            'Amigos',
+            'Mascotas',
+            // Por Evento
+            'Vacaciones',
+            'Cumpleaños',
+            'Aniversario',
+            'Celebración',
+            // Por Contexto
+            'Trabajo',
+            'Reembolsable',
+            'Gasto Hormiga'
+        ];
+
+        // Prepara un array para una inserción masiva (más rápido)
+        $tagsToInsert = [];
+        $now = now();
+
+        foreach ($defaultTags as $tagName) {
+            $tagsToInsert[] = [
+                'user_id' => $user->id,
+                'name' => $tagName,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        // Inserta todos los tags en una sola consulta
+        Tag::insert($tagsToInsert);
     }
 
     /**

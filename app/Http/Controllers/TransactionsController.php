@@ -6,6 +6,7 @@ use App\Exports\TransactionsExport;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
+use App\Models\TransactionTag;
 use App\Models\TransactionYape;
 use App\Services\CategorizationService;
 use App\Services\ClassificationService;
@@ -39,9 +40,9 @@ class TransactionsController extends Controller
         $weekend = filter_var($request->input('weekend', false), FILTER_VALIDATE_BOOLEAN);
         $workday = filter_var($request->input('workday', false), FILTER_VALIDATE_BOOLEAN);
 
-        $procedure = $recurring ? 'get_transactions_by_detail' : 'get_transactions';
+        $function = $recurring ? 'get_transactions_by_detail' : 'get_transactions';
 
-        $statement = DB::select("select * from $procedure(?,?,?,?,?,?,?,?,?,?,?,?)", [
+        $statement = DB::select("select * from $function(?,?,?,?,?,?,?,?,?,?,?,?)", [
             $perPage,
             $page,
             $year,
@@ -59,6 +60,7 @@ class TransactionsController extends Controller
         foreach ($statement as $key => $value) {
             if (!$recurring) {
                 $statement[$key]->yape_trans = json_decode($value->yape_trans);
+                $statement[$key]->tags = json_decode($value->tags);
             } else {
                 $statement[$key]->child_transactions = json_decode($value->child_transactions);
             }
@@ -156,9 +158,16 @@ class TransactionsController extends Controller
                 $yapeTransaction->category_id = $newCategoryId;
                 $yapeTransaction->save();
 
+                // Guardar el tag asociado
+                if ($request->reason === 'with_reason') {
+                    $transactionTag = new TransactionTag();
+                    $transactionTag->transaction_yape_id = $yapeTransaction->id;
+                    $transactionTag->tag_id = $request->tag_id;
+                    $transactionTag->save();
+                }
+
                 $yapeTransaction->load('detail');
                 $detail = $yapeTransaction->detail;
-
                 TransactionYape::query()
                     ->join('details as d', 'transaction_yapes.detail_id', '=', 'd.id')
                     ->where('d.description', $detail->description)
@@ -202,9 +211,16 @@ class TransactionsController extends Controller
             if ($yapeTransaction) {
                 $yapeTransaction->category_id = $newCategoryId;
                 $yapeTransaction->save();
+                // Guardar el tag asociado
+                if ($request->reason === 'with_reason') {
+                    $transactionTag = new TransactionTag();
+                    $transactionTag->transaction_yape_id = $yapeTransaction->id;
+                    $transactionTag->tag_id = $request->tag_id;
+                    $transactionTag->save();
+                }
                 $yapeTransaction->load('detail');
                 $detail = $yapeTransaction->detail;
-                if ($detail && $classifier->isDetailUsefulForLearning($detail->description)) {
+                if ($classifier->isDetailUsefulForLearning($detail->description)) {
                     GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
                 }
             }
@@ -217,7 +233,7 @@ class TransactionsController extends Controller
                 $transaction->load('detail');
                 $detail = $transaction->detail;
                 $this->updateMatchingYapeTransaction($transaction, $newCategoryId);
-                if ($detail && $classifier->isDetailUsefulForLearning($detail->description)) {
+                if ($classifier->isDetailUsefulForLearning($detail->description)) {
                     GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
                 }
             }

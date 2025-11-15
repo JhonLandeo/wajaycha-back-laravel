@@ -52,7 +52,7 @@ class TransactionYapeController extends Controller
         }
     }
 
-    public function findSuggestions()
+    public function findSuggestions(): JsonResponse
     {
         SuggestYapeCategoriesJob::dispatch(Auth::id());
         return response()->json(['status' => 'ok', 'message' => 'Estamos buscando sugerencias. ¡Actualiza en un minuto!']);

@@ -88,7 +88,7 @@ class ImportController extends Controller
         }
     }
 
-    public function storeYape(Request $request)
+    public function storeYape(Request $request): JsonResponse
     {
         $request->validate(['file' => 'required|mimes:pdf']);
         $user = Auth::user();

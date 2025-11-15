@@ -61,8 +61,4 @@ class Transaction extends Model
         return $this->hasMany(TransactionSplit::class);
     }
 
-    // public function getAmountAttribute()
-    // {
-    //     return $this->splits->sum('amount');
-    // }
 }

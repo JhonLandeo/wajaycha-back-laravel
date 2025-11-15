@@ -16,10 +16,9 @@ class SuggestYapeCategoriesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    // Aumentamos el timeout. Este job puede ser lento.
-    public $timeout = 600; // 10 minutos
+    public int $timeout = 600;
 
-    protected $userId;
+    protected int $userId;
 
     public function __construct(int $userId)
     {

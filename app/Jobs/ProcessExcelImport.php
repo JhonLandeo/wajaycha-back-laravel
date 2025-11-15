@@ -35,6 +35,7 @@ class ProcessExcelImport implements ShouldQueue
         Import::where('id', $this->importId)->update(['status' => 'processing']);
         try {
             Excel::import(new TransactionYapeImport($this->userId), $this->filePath);
+            Import::where('id', $this->importId)->update(['status' => 'completed']);
         } catch (\Throwable $th) {
             Log::error('Error processing Excel import for user ' . $this->userId . ': ' . $th->getMessage());
             Import::where('id', $this->importId)->update([

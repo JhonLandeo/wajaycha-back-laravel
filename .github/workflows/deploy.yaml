@@ -19,12 +19,11 @@ jobs:
         script: |
           cd ${{ secrets.PROJECT_PATH }}
           
-          # 1. (CRÍTICO) Arreglar la propiedad de los archivos ANTES de hacer nada
-          # Este comando es ejecutado por 'jhon' usando sus nuevos poderes de sudo
+          # 1. Arreglar la propiedad de los archivos
           sudo chown -R www-data:www-data .
           
-          # 2. Poner en modo mantenimiento
-          php artisan down || true
+          # 2. Poner en modo mantenimiento COMO www-data
+          sudo -u www-data php artisan down || true
           
           # 3. Obtener el código más reciente COMO www-data
           sudo -u www-data git pull
@@ -39,11 +38,16 @@ jobs:
           sudo -u www-data php artisan route:cache
           sudo -u www-data php artisan view:cache
           
-          # 6. Reiniciar PHP-FPM (ejecutado por 'jhon' usando sudo)
-          echo "Reiniciando PHP-FPM para aplicar los cambios..."
-          sudo systemctl restart php8.4-fpm
+          # 6. Recargar PHP-FPM (Zero Downtime)
+          echo "Recargando PHP-FPM para aplicar los cambios (Zero Downtime)..."
+          # CAMBIO: Usamos 'reload' en lugar de 'restart'
+          sudo systemctl reload php8.4-fpm
           
-          # 7. Sacar del modo mantenimiento
-          php artisan up
+          # 7.  Reiniciar Horizon COMO www-data
+          echo "Reiniciando los workers de Horizon..."
+          sudo -u www-data php artisan horizon:terminate
+          
+          # 8. Sacar del modo mantenimiento COMO www-data
+          sudo -u www-data php artisan up
           
           echo "✅ ¡Despliegue completado exitosamente!"

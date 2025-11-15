@@ -11,6 +11,7 @@ use App\Http\Controllers\ImportController;
 use App\Http\Controllers\ParetoClassificationController;
 use App\Http\Controllers\PdfController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\TagsController;
 use App\Http\Controllers\TransactionsController;
 use App\Http\Controllers\TransactionYapeController;
 use App\Http\Middleware\JwtMiddleware;
@@ -35,6 +36,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::resource('transactions', TransactionsController::class);
     Route::resource('imports', ImportController::class);
     Route::resource('details', DetailsController::class);
+     Route::resource('tags', TagsController::class);
 
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
     Route::get('get-summary-by-category', [TransactionsController::class, 'getSummaryByCategory']);

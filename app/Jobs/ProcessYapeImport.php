@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Detail;
 use App\Models\TransactionYape; // Tu tabla de Yapes
+use App\Models\User;
 use App\Services\CategorizationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,13 +20,13 @@ use Carbon\Carbon;
 class ProcessYapeImport implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-    public $timeout = 600;
-    protected $user;
-    protected $filePath;
-    protected $userNameToFilter;
-    protected $categorizationService;
+    public int $timeout = 600;
+    protected User $user;
+    protected string $filePath;
+    protected string $userNameToFilter;
+    protected CategorizationService $categorizationService;
 
-    public function __construct($user, string $filePath, string $userNameToFilter)
+    public function __construct(User $user, string $filePath, string $userNameToFilter)
     {
         $this->user = $user;
         $this->filePath = $filePath;
@@ -45,12 +46,12 @@ class ProcessYapeImport implements ShouldQueue
             $this->parseLines($lines);
         } catch (\Exception $e) {
             Log::error("Error al procesar Yape: " . $e->getMessage());
-            // (Opcional) Notificar al usuario que la importación falló
         }
     }
 
     /**
      * Lógica principal para parsear el texto del PDF.
+     * @param array<string> $lines
      */
     private function parseLines(array $lines): void
     {
@@ -67,6 +68,7 @@ class ProcessYapeImport implements ShouldQueue
 
     /**
      * Procesa una transacción parseada.
+     * @param array<string> $matches
      */
     private function processTransaction(array $matches): void
     {

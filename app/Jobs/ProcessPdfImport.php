@@ -6,6 +6,7 @@ use App\DTOs\TransactionDataDTO;
 use App\Models\Detail;
 use App\Models\Import;
 use App\Models\Transaction;
+use App\Models\TransactionTag;
 use App\Models\TransactionYape;
 use App\Services\CategorizationService; // <-- Nuestro nuevo servicio
 use Illuminate\Bus\Queueable;
@@ -147,7 +148,7 @@ class ProcessPdfImport implements ShouldQueue
                 $finalCategoryId = $this->categorizationService->findCategory($this->userId, $detail);
             }
 
-            Transaction::firstOrCreate(
+            $transasction = Transaction::firstOrCreate(
                 [
                     // --- ARRAY DE BÚSQUEDA ---
                     'user_id' => $this->userId,
@@ -163,6 +164,16 @@ class ProcessPdfImport implements ShouldQueue
                     'yape_id' => $finalYapeId,       // El ID del Yape (será null si P0 falló)
                 ]
             );
+
+            // 3. Actualizar las etiquetas si es necesario
+            if ($finalYapeId) {
+                $yapeTag = TransactionYape::find($finalYapeId)->tags()->first();
+                if ($yapeTag) {
+                    $transactionTag = new TransactionTag();
+                    $transactionTag->transaction_id = $transasction->id;
+                    $transactionTag->save();
+                }
+            }
         }
     }
 
