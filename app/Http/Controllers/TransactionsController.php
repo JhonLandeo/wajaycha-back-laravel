@@ -133,7 +133,7 @@ class TransactionsController extends Controller
     {
         $request->validate([
             'category_id' => 'required|integer|exists:categories,id',
-            'is_frequent' => 'boolean',
+            'is_frequent' => 'required|boolean',
         ]);
 
         $newCategoryId = (int)$request->category_id;
