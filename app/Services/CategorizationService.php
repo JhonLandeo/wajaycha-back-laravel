@@ -28,7 +28,7 @@ class CategorizationService
         // Buscar el mas semejante por descripción
         $similarDetail = Detail::where('user_id', $userId)
             ->where('id', '!=', $detail->id)
-            ->where('description', 'like', `%$detail->description%`)
+            ->where('description', 'like', '%' . $detail->description . '%')
             ->whereNotNull('last_used_category_id')
             ->first();
 
@@ -37,7 +37,7 @@ class CategorizationService
             $exactSimilarRule = CategorizationRule::where('user_id', $userId)
                 ->where('detail_id', $similarDetail->id)
                 ->first();
-                
+
             if ($exactSimilarRule) {
                 $this->createExactRule($userId, $detail->id, $exactSimilarRule->category_id);
                 return $exactSimilarRule->category_id;
