@@ -28,7 +28,7 @@ class CategorizationService
         // Buscar el mas semejante por descripción
         $similarDetail = Detail::where('user_id', $userId)
             ->where('id', '!=', $detail->id)
-            ->where('description', 'like', '%' . $detail->description . '%')
+            ->whereRaw('description ILIKE ?', ["%{$detail->description}%"])
             ->whereNotNull('last_used_category_id')
             ->first();
 
