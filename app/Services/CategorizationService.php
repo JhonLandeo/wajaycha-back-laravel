@@ -25,6 +25,29 @@ class CategorizationService
         if ($exactRule) {
             return $exactRule->category_id;
         }
+        // Buscar el mas semejante por descripción
+        $similarDetail = Detail::where('user_id', $userId)
+            ->where('id', '!=', $detail->id)
+            ->where('description', 'like', `%$detail->description%`)
+            ->whereNotNull('last_used_category_id')
+            ->first();
+
+        // Buscar la regla exacta para el detalle similar encontrado
+        if ($similarDetail) {
+            $exactSimilarRule = CategorizationRule::where('user_id', $userId)
+                ->where('detail_id', $similarDetail->id)
+                ->first();
+                
+            if ($exactSimilarRule) {
+                $this->createExactRule($userId, $detail->id, $exactSimilarRule->category_id);
+                return $exactSimilarRule->category_id;
+            }
+        }
+
+        if ($similarDetail) {
+            $this->createExactRule($userId, $detail->id, $similarDetail->last_used_category_id);
+            return $similarDetail->last_used_category_id;
+        }
 
         // --- Prioridad 2: Regla por Keyword ---
         $keywordRules = KeywordRule::where('user_id', $userId)->get();
@@ -38,16 +61,13 @@ class CategorizationService
         }
 
         // --- Prioridad 3: Búsqueda Vectorial ---
-
-        // 1. Genera el vector para la *nueva* transacción
+        // Genera el vector para la *nueva* transacción
         $newEmbedding = $this->embeddingService->generate($detail->description);
         if (!$newEmbedding) {
             return null;
         }
 
         $vectorString = '[' . implode(',', $newEmbedding) . ']';
-
-        // 3. Busca el vector más cercano
         $result = Detail::query()
             ->select('last_used_category_id')
             ->selectRaw('(embedding <=> ?) AS distance', [$vectorString])
@@ -57,7 +77,7 @@ class CategorizationService
             ->orderBy('distance', 'asc') // 0 es el más cercano
             ->first();
 
-        // 3. Decide si la similitud es "suficientemente buena"
+        // Decide si la similitud es "suficientemente buena"
         // Este umbral (0.25) es algo que tendrás que "tunear".
         // Un valor más bajo es más estricto.
         $threshold = 0.15;
