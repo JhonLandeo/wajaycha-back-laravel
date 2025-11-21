@@ -128,7 +128,6 @@ class ProcessYapeImport implements ShouldQueue
     private function getCleanDescription(string $movementRaw): string
     {
         // Reemplaza el nombre del usuario (y variantes comunes) con nada.
-        // str_ireplace no es sensible a mayúsculas/minúsculas.
 
         // Lista de filtros: el nombre completo, y tal vez abreviaciones
         $filters = [
@@ -140,6 +139,6 @@ class ProcessYapeImport implements ShouldQueue
         $cleanName = str_ireplace($filters, '', $movementRaw);
 
         // Limpia espacios extra y guiones
-        return trim(preg_replace('/\s+/', ' ', $cleanName));
+        return strtoupper(trim(preg_replace('/\s+/', ' ', $cleanName)));
     }
 }

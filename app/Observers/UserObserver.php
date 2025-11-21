@@ -63,6 +63,7 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                     ['name' => '🔙 Reembolsos', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
                     ['name' => '🎁 Regalos Recibidos', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
                     ['name' => '🪙 Otros Ingresos', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
+                    ['name' => '💸 Deudas / Préstamos Recibidos', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
                 ]
             ],
 
@@ -80,6 +81,7 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                     ['name' => '🔥 Gas', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
                     ['name' => '🔧 Mantenimiento (Reparaciones)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
                     ['name' => '🛋️ Muebles y Electrodomésticos', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '🧹 Artículos de Limpieza', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
                 ]
             ],
             [
@@ -180,6 +182,7 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                     ['name' => '💳 Pago de Tarjeta de Crédito', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Deuda']],
                     ['name' => '↔️ Entre Cuentas Propias', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']],
                     ['name' => '💸 Préstamos (a terceros)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Ahorro']],
+                    ['name' => '🔙 Favores (Por Reembolsar)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']],
                 ]
             ],
         ];
