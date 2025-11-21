@@ -12,6 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Habilitar la extensión pg_trgm y unaccebt si no está habilitada
+        DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm;');
+        DB::statement('CREATE EXTENSION IF NOT EXISTS unaccent;');
+        
         $sql = <<<SQL
                     WITH cleaned AS (
                         SELECT 
