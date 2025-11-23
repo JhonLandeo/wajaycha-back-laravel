@@ -30,6 +30,24 @@ class CategoryController extends Controller
         return response()->json($categories);
     }
 
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function all(): JsonResponse
+    {
+        $userId = Auth::id();
+        $categories = Category::query()
+            ->where('user_id', $userId)
+            ->whereNotNull('parent_id')
+            ->with('paretoClassification')
+            ->withCount('categorizationRules')
+            ->orderBy('categorization_rules_count', 'desc')
+            ->get();
+
+        return response()->json($categories);
+    }
+
     /**
      * Store a newly created resource in storage.
      */

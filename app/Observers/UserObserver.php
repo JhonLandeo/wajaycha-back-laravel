@@ -51,23 +51,27 @@ class UserObserver implements ShouldHandleEventsAfterCommit
 
         $pareto = ParetoClassification::pluck('id', 'name')->toArray();
         $defaultCategories = [
-            // --- TIPO: INGRESO ---
+            // ------------------------------------------------
+            // 🟢 TIPO: INGRESO
+            // ------------------------------------------------
             [
-                'name' => '📈 Ingresos', // Emoji actualizado para el padre
+                'name' => '📈 Ingresos',
                 'type' => 'income',
                 'pareto_classification_id' => $pareto['Ingreso Fijo'],
                 'children' => [
                     ['name' => '💵 Salario', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Fijo']],
                     ['name' => '💼 Freelance / Negocio', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
-                    ['name' => '📈 Intereses Ganados', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
+                    ['name' => '📈 Intereses / Rentas', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
                     ['name' => '🔙 Reembolsos', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
                     ['name' => '🎁 Regalos Recibidos', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
+                    ['name' => '💸 Préstamos Recibidos (Deuda)', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
                     ['name' => '🪙 Otros Ingresos', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
-                    ['name' => '💸 Deudas / Préstamos Recibidos', 'type' => 'income', 'pareto_classification_id' => $pareto['Ingreso Variable']],
                 ]
             ],
 
-            // --- TIPO: GASTO ---
+            // ------------------------------------------------
+            // 🔴 TIPO: GASTO
+            // ------------------------------------------------
             [
                 'name' => '🏠 Hogar y Servicios',
                 'type' => 'expense',
@@ -78,10 +82,10 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                     ['name' => '📱 Telefonía / Celular', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
                     ['name' => '💡 Luz', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
                     ['name' => '💧 Agua', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
-                    ['name' => '🔥 Gas', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
-                    ['name' => '🔧 Mantenimiento (Reparaciones)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
-                    ['name' => '🛋️ Muebles y Electrodomésticos', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
-                    ['name' => '🧹 Artículos de Limpieza', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '🔥 Gas', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']], // Balón de gas
+                    ['name' => '🔧 Mantenimiento Hogar', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
+                    ['name' => '🧹 Artículos de Limpieza', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']], // Tu detergente, etc.
+                    ['name' => '🛋️ Muebles y Deco', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
                 ]
             ],
             [
@@ -106,30 +110,27 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                 ]
             ],
             [
-                'name' => '🛡️ Seguros',
-                'type' => 'expense',
-                'pareto_classification_id' => $pareto['Fijos'],
-                'children' => [
-                    ['name' => '❤️‍🩹 Seguro de Salud (Prima)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
-                    ['name' => '🚗 Seguro Vehicular', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
-                    ['name' => '👨‍👩‍👧‍👦 Seguro de Vida', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
-                    ['name' => '🏡 Seguro de Hogar', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
-                ]
-            ],
-            [
                 'name' => '❤️ Vida Personal y Ocio',
                 'type' => 'expense',
                 'pareto_classification_id' => $pareto['Variables No Esenciales'],
                 'children' => [
                     ['name' => '💊 Salud (Farmacia/Citas)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
-                    ['name' => '📺 Suscripciones (Netflix, etc.)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
-                    ['name' => '🏋️‍♀️ Gimnasio', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
-                    ['name' => '⚽ Deporte (Fútbol, etc.)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '📺 Suscripciones (Netflix)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
+                    ['name' => '⚽ Deporte y Gimnasio', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']], // Rehidratante va aquí
                     ['name' => '💅 Cuidado Personal', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
-                    ['name' => '👕 Ropa y Calzado', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
-                    ['name' => '🎬 Entretenimiento (Cine, etc.)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
-                    ['name' => '🎁 Regalos y Detalles (Dados)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '🎬 Entretenimiento (Cine)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '🎁 Regalos (Dados)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']], // Gastos enamorada (sin retorno)
                     ['name' => '🕊️ Donaciones', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                ]
+            ],
+            [
+                'name' => '🛍️ Compras y Tecnología', // NUEVO GRUPO RECOMENDADO
+                'type' => 'expense',
+                'pareto_classification_id' => $pareto['Variables No Esenciales'],
+                'children' => [
+                    ['name' => '👕 Ropa y Calzado', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '💻 Tecnología y Electrónicos', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']], // Tu laptop va aquí
+                    ['name' => '📦 Gastos Misceláneos', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
                 ]
             ],
             [
@@ -137,9 +138,9 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                 'type' => 'expense',
                 'pareto_classification_id' => $pareto['Variables Esenciales'],
                 'children' => [
-                    ['name' => '🎓 Hijos (Colegio/Universidad)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
-                    ['name' => '👶 Hijos (Útiles/Ropa/Otros)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
-                    ['name' => '🐾 Mascotas (Comida/Veterinario)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
+                    ['name' => '🎓 Hijos (Colegio/Uni)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
+                    ['name' => '👶 Hijos (Ropa/Útiles)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
+                    ['name' => '🐾 Mascotas', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables Esenciales']],
                 ]
             ],
             [
@@ -147,8 +148,8 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                 'type' => 'expense',
                 'pareto_classification_id' => $pareto['Variables No Esenciales'],
                 'children' => [
-                    ['name' => '📚 Educación (Cursos/Libros)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
-                    ['name' => '✈️ Viajes (Pasajes/Hoteles)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '📚 Educación (Cursos)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
+                    ['name' => '✈️ Viajes y Turismo', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']], // Paseos grandes
                 ]
             ],
             [
@@ -157,32 +158,26 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                 'pareto_classification_id' => $pareto['Fijos'],
                 'children' => [
                     ['name' => '🏦 Comisiones Bancarias', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
-                    ['name' => '🧾 Pago de Préstamos (Cuotas)', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
+                    ['name' => '🧾 Intereses de Deuda', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
                     ['name' => '🏛️ Impuestos', 'type' => 'expense', 'pareto_classification_id' => $pareto['Fijos']],
                 ]
             ],
-            [
-                'name' => '📎 Otros Gastos',
-                'type' => 'expense',
-                'pareto_classification_id' => $pareto['Variables No Esenciales'],
-                'children' => [
-                    ['name' => '✨ Gastos Únicos', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
-                    ['name' => '📦 Gastos Misceláneos', 'type' => 'expense', 'pareto_classification_id' => $pareto['Variables No Esenciales']],
-                ]
-            ],
 
-            // --- TIPO: TRANSFERENCIA (NO SON GASTOS NI INGRESOS) ---
+            // ------------------------------------------------
+            // 🔵 TIPO: TRANSFERENCIA (OCULTAS)
+            // ------------------------------------------------
             [
                 'name' => '🔵 Transferencias (Ocultas)',
                 'type' => 'transfer',
                 'pareto_classification_id' => $pareto['Transferencia'],
                 'children' => [
+                    ['name' => '💳 Pago de Tarjeta de Crédito', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Deuda']], // Pagar la TC
+                    ['name' => '💵 Pago de Capital (Préstamos)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Deuda']], // Pagar cuota al banco
+                    ['name' => '↔️ Entre Cuentas Propias', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']], // El favor de efectivo
                     ['name' => '💹 Inversiones', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Ahorro']],
                     ['name' => '🛡️ Fondo de Emergencia', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Ahorro']],
-                    ['name' => '💳 Pago de Tarjeta de Crédito', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Deuda']],
-                    ['name' => '↔️ Entre Cuentas Propias', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']],
-                    ['name' => '💸 Préstamos (a terceros)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Ahorro']],
-                    ['name' => '🔙 Favores (Por Reembolsar)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']],
+                    ['name' => '💸 Préstamos (a terceros)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Ahorro']], // Dinero que prestas
+                    ['name' => '🔙 Favores (Por Reembolsar)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']], // Favores que te van a pagar
                 ]
             ],
         ];
