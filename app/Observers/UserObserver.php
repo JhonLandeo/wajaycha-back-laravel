@@ -124,7 +124,7 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                 ]
             ],
             [
-                'name' => '🛍️ Compras y Tecnología', // NUEVO GRUPO RECOMENDADO
+                'name' => '🛍️ Compras y Tecnología',
                 'type' => 'expense',
                 'pareto_classification_id' => $pareto['Variables No Esenciales'],
                 'children' => [
@@ -174,10 +174,21 @@ class UserObserver implements ShouldHandleEventsAfterCommit
                     ['name' => '💳 Pago de Tarjeta de Crédito', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Deuda']], // Pagar la TC
                     ['name' => '💵 Pago de Capital (Préstamos)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Deuda']], // Pagar cuota al banco
                     ['name' => '↔️ Entre Cuentas Propias', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']], // El favor de efectivo
+                    ['name' => '💸 Préstamos (a terceros)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']], // Dinero que prestas
+                    ['name' => '🔙 Favores (Por Reembolsar)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']], // Favores que te van a pagar
+                ]
+            ],
+
+            // ------------------------------------------------
+            // 🟡 TIPO: AHORRO
+            // ------------------------------------------------
+            [
+                'name' => '🛡️ Ahorro',
+                'type' => 'transfer',
+                'pareto_classification_id' => $pareto['Ahorro'],
+                'children' => [
                     ['name' => '💹 Inversiones', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Ahorro']],
                     ['name' => '🛡️ Fondo de Emergencia', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Ahorro']],
-                    ['name' => '💸 Préstamos (a terceros)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Ahorro']], // Dinero que prestas
-                    ['name' => '🔙 Favores (Por Reembolsar)', 'type' => 'transfer', 'pareto_classification_id' => $pareto['Transferencia']], // Favores que te van a pagar
                 ]
             ],
         ];
