@@ -148,7 +148,7 @@ class ProcessPdfImport implements ShouldQueue
                 $finalCategoryId = $this->categorizationService->findCategory($this->userId, $detail);
             }
 
-            $transasction = Transaction::firstOrCreate(
+            $transaction = Transaction::firstOrCreate(
                 [
                     // --- ARRAY DE BÚSQUEDA ---
                     'user_id' => $this->userId,
@@ -167,11 +167,22 @@ class ProcessPdfImport implements ShouldQueue
 
             // 3. Actualizar las etiquetas si es necesario
             if ($finalYapeId) {
-                $yapeTag = TransactionYape::find($finalYapeId)->tags()->first();
+                $yapeTag = TransactionYape::find($finalYapeId)->tags()->first(); // De momento solo una etiqueta por Yape
                 if ($yapeTag) {
-                    $transactionTag = new TransactionTag();
-                    $transactionTag->transaction_id = $transasction->id;
-                    $transactionTag->save();
+                    $tag = TransactionTag::where('tag_id', $yapeTag->tag_id)
+                        ->where('transaction_yape_id', $yapeTag->transaction_yape_id)
+                        ->first();
+                    if ($tag) {
+                        $tag->update([
+                            'transaction_id' => $transaction->id,
+                        ]);
+                    } else {
+                        TransactionTag::create([
+                            'tag_id' => $yapeTag->tag_id,
+                            'transaction_yape_id' => $yapeTag->transaction_yape_id,
+                            'transaction_id' => $transaction->id,
+                        ]);
+                    }
                 }
             }
         }

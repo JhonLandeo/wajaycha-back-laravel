@@ -12,6 +12,10 @@ class TransactionTag extends Model
 
     public $timestamps = false;
 
+    protected $primaryKey = null;
+
+    protected $keyType = 'string';
+
     protected $fillable = [
         'transaction_id',
         'transaction_yape_id',
