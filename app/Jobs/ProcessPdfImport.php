@@ -53,6 +53,7 @@ class ProcessPdfImport implements ShouldQueue
         $filePath = Storage::path($this->storedPath); // Ruta absoluta
 
         try {
+            DB::beginTransaction();
             // 2. Desencriptar si es necesario
             if ($this->isEncrypted($filePath)) {
                 $filePath = $this->decryptPdf($filePath, $this->password);
@@ -109,8 +110,10 @@ class ProcessPdfImport implements ShouldQueue
 
             // 6. Marcar como 'completed'
             Import::where('id', $this->importId)->update(['status' => 'completed']);
+            DB::commit();
         } catch (Throwable $th) {
             Log::error("Error en Job ProcessPdfImport (ID: {$this->importId}): " . $th->getMessage());
+            DB::rollBack();
             Import::where('id', $this->importId)->update([
                 'status' => 'failed',
                 'error_message' => $th->getMessage()
@@ -150,7 +153,6 @@ class ProcessPdfImport implements ShouldQueue
 
             $transaction = Transaction::firstOrCreate(
                 [
-                    // --- ARRAY DE BÚSQUEDA ---
                     'user_id' => $this->userId,
                     'detail_id' => $detail->id,
                     'date_operation' => $txData->date_operation,
@@ -158,10 +160,8 @@ class ProcessPdfImport implements ShouldQueue
                     'type_transaction' => $txData->type_transaction,
                 ],
                 [
-                    // --- ARRAY DE CREACIÓN ---
-                    // 'account_id' => $this->accountId,
-                    'category_id' => $finalCategoryId, // La categoría que gan_ó (de P0 o P1-P3)
-                    'yape_id' => $finalYapeId,       // El ID del Yape (será null si P0 falló)
+                    'category_id' => $finalCategoryId,
+                    'yape_id' => $finalYapeId,
                 ]
             );
 
@@ -173,9 +173,10 @@ class ProcessPdfImport implements ShouldQueue
                         ->where('transaction_yape_id', $yapeTag->transaction_yape_id)
                         ->first();
                     if ($tag) {
-                        $tag->update([
-                            'transaction_id' => $transaction->id,
-                        ]);
+                        DB::table('transaction_tag')
+                            ->where('transaction_yape_id', $yapeTag->transaction_yape_id)
+                            ->where('tag_id', $yapeTag->tag_id)
+                            ->update(['transaction_id' => $transaction->id]);
                     } else {
                         TransactionTag::create([
                             'tag_id' => $yapeTag->tag_id,
