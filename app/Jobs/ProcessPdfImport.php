@@ -8,7 +8,7 @@ use App\Models\Import;
 use App\Models\Transaction;
 use App\Models\TransactionTag;
 use App\Models\TransactionYape;
-use App\Services\CategorizationService; // <-- Nuestro nuevo servicio
+use App\Services\CategorizationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,6 +27,8 @@ class ProcessPdfImport implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public $timeout = 600;
+    public $tries = 3;
     protected int $importId;
     protected int $userId;
     protected string $storedPath;
@@ -126,6 +128,7 @@ class ProcessPdfImport implements ShouldQueue
      */
     private function processParsedTransactions(array $transactionsData): void
     {
+        $yapeIdsFounds = [];
         foreach ($transactionsData as $txData) {
             $detail = Detail::firstOrCreate(
                 ['user_id' => $this->userId, 'description' => $txData->description],
@@ -141,12 +144,19 @@ class ProcessPdfImport implements ShouldQueue
                 ->whereDate('date_operation', Carbon::parse($txData->date_operation)->toDateString())
                 ->where('amount', $txData->amount)
                 ->where('type_transaction', $txData->type_transaction)
-                ->whereNotNull('category_id')
+                ->whereNotIn('id', $yapeIdsFounds)
                 ->first();
 
             if ($transactionYape) {
-                $finalCategoryId = $transactionYape->category_id;
+                $yapeIdsFounds[] = $transactionYape->id;
+            }
+
+            if ($transactionYape) {
                 $finalYapeId = $transactionYape->id;
+            }
+
+            if ($transactionYape && $transactionYape->category_id) {
+                $finalCategoryId = $transactionYape->category_id;
             } else {
                 $finalCategoryId = $this->categorizationService->findCategory($this->userId, $detail);
             }
@@ -186,6 +196,7 @@ class ProcessPdfImport implements ShouldQueue
                     }
                 }
             }
+
         }
     }
 

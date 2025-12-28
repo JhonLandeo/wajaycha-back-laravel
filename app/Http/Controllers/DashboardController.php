@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Imports\ExpensesImport;
 use App\Imports\TransactionYapeImport;
-use App\Models\Transaction;
+use App\Models\UnifyTransactions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,10 +22,10 @@ class DashboardController extends Controller
             $year = $request->input('year', null);
             $month = $request->input('month', null);
             $userId = Auth::id();
-            $avgBase = Transaction::query()
+            $avgBase = UnifyTransactions::query()
                 ->selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
                 ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense")
-                ->join('details as d', 'transactions.detail_id', '=',  'd.id');
+                ->join('details as d', 'mv_unified_transactions.detail_id', '=',  'd.id');
 
             if ($month) {
                 $avgBase->whereMonth('date_operation', $month);
@@ -34,10 +34,10 @@ class DashboardController extends Controller
                 $avgBase->whereYear('date_operation', $year);
             }
 
-            $avg = $avgBase->where('transactions.user_id', $userId)
+            $avg = $avgBase->where('mv_unified_transactions.user_id', $userId)
                 ->first();
 
-            $balanceBase = Transaction::query()
+            $balanceBase = UnifyTransactions::query()
                 ->selectRaw("SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) AS total_income,
             SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS total_expense,
             SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) 
@@ -50,7 +50,7 @@ class DashboardController extends Controller
                 $balance = $balanceBase->whereYear('date_operation', $year);
             }
 
-            $balance = $balanceBase->where('transactions.user_id', $userId)
+            $balance = $balanceBase->where('mv_unified_transactions.user_id', $userId)
                 ->first();
 
 
@@ -74,41 +74,40 @@ class DashboardController extends Controller
             $year = $request->input('year', null);
             $month = $request->input('month', null);
             $userId = Auth::id();
-            $queryBase = Transaction::query()
-                ->joinRelation('detail')
-                ->selectRaw("CAST(SUM(transactions.amount) AS DECIMAL(10,2)) as value, details.description as name")
-                ->where('transactions.user_id', $userId);
+            $queryBase = UnifyTransactions::query()
+                ->selectRaw("CAST(SUM(amount) AS DECIMAL(10,2)) as value, detail_name as name")
+                ->where('user_id', $userId);
 
             $queryIncomes = clone $queryBase;
             $queryExpenses = clone $queryBase;
             if ($month) {
-                $queryIncomes->whereMonth('transactions.date_operation', $month);
-                $queryExpenses->whereMonth('transactions.date_operation', $month);
+                $queryIncomes->whereMonth('date_operation', $month);
+                $queryExpenses->whereMonth('date_operation', $month);
             }
             if ($year) {
-                $queryIncomes->whereYear('transactions.date_operation', $year);
-                $queryExpenses->whereYear('transactions.date_operation', $year);
+                $queryIncomes->whereYear('date_operation', $year);
+                $queryExpenses->whereYear('date_operation', $year);
             }
             $topIncomes = $queryIncomes
-                ->where('transactions.type_transaction', 'income')
-                ->groupBy('details.description')
+                ->where('type_transaction', 'income')
+                ->groupBy('detail_name')
                 ->orderBy('value', 'desc')
                 ->limit(5)
                 ->get()
                 ->map(function ($item) {
-                    /** @var \App\Models\Transaction $item */
+                    /** @var \App\Models\UnifyTransactions $item */
                     $item->value = (float) $item->value;
                     return $item;
                 });
 
             $topExpenses = $queryExpenses
-                ->where('transactions.type_transaction', 'expense')
-                ->groupBy('details.description')
+                ->where('type_transaction', 'expense')
+                ->groupBy('detail_name')
                 ->orderBy('value', 'desc')
                 ->limit(5)
                 ->get()
                 ->map(function ($item) {
-                    /** @var \App\Models\Transaction $item */
+                    /** @var \App\Models\UnifyTransactions $item */
                     $item->value = (float) $item->value;
                     return $item;
                 });
@@ -137,11 +136,10 @@ class DashboardController extends Controller
                 "ROUND(SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_weekly_income,
              ROUND(SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_weekly_expense";
 
-            $dayOfWeekExpression = "EXTRACT(ISODOW FROM t.date_operation)"; // Lunes=1, Domingo=7
-            $dayNameExpression = "TRIM(to_char(t.date_operation, 'Day'))"; // 'Day' para el nombre del día, TRIM para quitar espacios
-
-            $query = Transaction::query()
-                ->from('transactions as t')
+            $dayOfWeekExpression = "EXTRACT(ISODOW FROM t.date_operation)";
+            $dayNameExpression = "TRIM(to_char(t.date_operation, 'Day'))";
+            $query = UnifyTransactions::query()
+                ->from('mv_unified_transactions as t')
                 ->join('details as d', 't.detail_id', '=', 'd.id')
                 ->selectRaw("
                 {$selectAggregate},
@@ -176,13 +174,13 @@ class DashboardController extends Controller
     {
         try {
             $userId = Auth::id();
-            $data = Transaction::selectRaw("
+            $data = UnifyTransactions::selectRaw("
             ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END), 2) AS avg_daily_income,
             ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END), 2) AS avg_daily_expense,
             EXTRACT(HOUR FROM date_operation) AS hour  -- CAMBIO 1: Se usa EXTRACT en lugar de HOUR()
         ")
-                ->join('details as d', 'transactions.detail_id', '=', 'd.id')
-                ->where('transactions.user_id', $userId)
+                ->join('details as d', 'mv_unified_transactions.detail_id', '=', 'd.id')
+                ->where('mv_unified_transactions.user_id', $userId)
                 ->whereYear('date_operation', $request->year)
                 ->groupByRaw('EXTRACT(HOUR FROM date_operation)')
                 ->orderBy('hour')
@@ -207,8 +205,8 @@ class DashboardController extends Controller
 
             $monthNumberExpression = "EXTRACT(MONTH FROM t.date_operation)";
 
-            $baseQuery = Transaction::query()
-                ->from('transactions as t')
+            $baseQuery = UnifyTransactions::query()
+                ->from('mv_unified_transactions as t')
                 ->join('details as d', 't.detail_id', '=',  'd.id')
                 ->selectRaw("
                 {$selectAggregate},
@@ -264,8 +262,8 @@ class DashboardController extends Controller
         ELSE 0 
         END)";
 
-        $query = Transaction::query()
-            ->from('transactions as t')
+        $query = UnifyTransactions::query()
+            ->from('mv_unified_transactions as t')
             ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
             ->leftJoin('categories as c', 'c.id', '=', 't.category_id')
             ->select(

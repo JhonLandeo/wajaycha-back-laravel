@@ -39,6 +39,7 @@ class Transaction extends Model
         'type_transaction',
         'user_id',
         'detail_id',
+        'yape_id',
     ];
 
     protected $casts = [

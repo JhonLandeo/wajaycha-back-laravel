@@ -3,11 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Js;
+use Illuminate\Support\Facades\DB;
 
 class CategoryController extends Controller
 {
@@ -16,18 +17,25 @@ class CategoryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $per_page = $request->input('per_page', 10);
+        $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
+        $month = $request->input('month', date('m'));
+        $year = $request->input('year', date('Y'));
         $userId = Auth::id();
-        $categories = Category::query()
-            ->where('user_id', $userId)
-            ->whereNotNull('parent_id')
-            ->with('paretoClassification')
-            ->withCount('categorizationRules')
-            ->orderBy('categorization_rules_count', 'desc')
-            ->paginate($per_page, ['*'], 'page', $page);
-
-        return response()->json($categories);
+        $statement = DB::select("select * from get_monthly_category_budget_report(?,?,?,?,?)", [
+            $page,
+            $perPage,
+            $userId,
+            $month,
+            $year
+        ]);
+        $paginator = new LengthAwarePaginator(
+            $statement,
+            $statement[0]->total_records,
+            $perPage,
+            $page
+        );
+        return response()->json($paginator);
     }
 
 
@@ -46,6 +54,11 @@ class CategoryController extends Controller
             ->get();
 
         return response()->json($categories);
+    }
+
+    public function show(Category $category): JsonResponse
+    {
+        return response()->json($category);
     }
 
     /**

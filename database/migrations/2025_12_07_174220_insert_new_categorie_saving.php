@@ -12,16 +12,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::table('categories')->insert([
-            [
-                'pareto_classification_id' => 4,
-                'name' => '🛡️ Ahorro',
-                'type' => 'transfer',
-                'user_id' => 1,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ]);
+        // DB::table('categories')->insert([
+        //     [
+        //         'pareto_classification_id' => 4,
+        //         'name' => '🛡️ Ahorro',
+        //         'type' => 'transfer',
+        //         'user_id' => 1,
+        //         'created_at' => now(),
+        //         'updated_at' => now(),
+        //     ],
+        // ]);
     }
 
     /**
