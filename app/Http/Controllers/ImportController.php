@@ -8,6 +8,7 @@ use App\Jobs\ProcessYapeImport;
 use App\Models\FinancialEntity;
 use App\Models\Import;
 use App\Models\PaymentService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -29,17 +30,40 @@ class ImportController extends Controller
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
         $userId = Auth::id();
-        $query = Import::with(['financialEntity', 'paymentService'])
+
+        $query = Import::select([
+            'id',
+            'name',
+            'financial_entity_id',
+            'payment_service_id',
+            'status',
+            'extension',
+            'created_at',
+        ])
+            ->with([
+                'financialEntity:id,name',
+                'paymentService:id,name',
+            ])
             ->where('user_id', $userId);
 
         $data = $query->paginate($perPage, ['*'], 'page', $page);
 
-        foreach ($data->items() as $item) {
-            $item->url = Storage::url('files/' . $item->name);
-        }
+        $data->getCollection()->transform(function ($item) {
+            return [
+                'id' => $item->id,
+                'name' => $item->name,
+                'financial_entity' => $item->financialEntity?->name,
+                'payment_service' => $item->paymentService?->name,
+                'url' => Storage::url('files/' . $item->name),
+                'created_at' => Carbon::parse($item->created_at)->format('Y-m-d H:i:s'),
+                'status' => $item->status,
+                'extension' => $item->extension
+            ];
+        });
 
         return response()->json($data);
     }
+
 
     /**
      * Store a newly created resource in storage.

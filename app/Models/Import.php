@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Storage;
 
 class Import extends Model
 {
@@ -28,5 +29,26 @@ class Import extends Model
     public function paymentService(): BelongsTo
     {
         return $this->belongsTo(PaymentService::class);
+    }
+
+    protected $appends = [
+        'financial_entity_name',
+        'payment_service_name',
+        'url'
+    ];
+
+    public function getFinancialEntityNameAttribute()
+    {
+        return $this->financialEntity?->name;
+    }
+
+    public function getPaymentServiceNameAttribute()
+    {
+        return $this->paymentService?->name;
+    }
+
+    public function getUrlAttribute()
+    {
+        return Storage::url('files/' . $this->name);
     }
 }

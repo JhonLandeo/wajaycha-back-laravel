@@ -3,9 +3,10 @@
 namespace App\Jobs;
 
 use App\Models\Detail;
-use App\Models\TransactionYape; // Tu tabla de Yapes
+use App\Models\TransactionYape;
 use App\Models\User;
 use App\Services\CategorizationService;
+use App\Services\TransactionAnalyzer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -25,12 +26,14 @@ class ProcessYapeImport implements ShouldQueue
     protected string $filePath;
     protected string $userNameToFilter;
     protected CategorizationService $categorizationService;
+    protected TransactionAnalyzer $transactionAnalyzer;
 
     public function __construct(User $user, string $filePath, string $userNameToFilter)
     {
         $this->user = $user;
         $this->filePath = $filePath;
         $this->userNameToFilter = $userNameToFilter;
+        $this->transactionAnalyzer = app(TransactionAnalyzer::class);
     }
 
     public function handle(CategorizationService $categorizationService): void
@@ -95,10 +98,34 @@ class ProcessYapeImport implements ShouldQueue
         // 4. --- LÓGICA DE BASE DE DATOS ---
 
         // a. Busca o crea el "Detail" (el cerebro de la IA)
-        $detail = Detail::firstOrCreate([
-            'user_id' => $this->user->id,
-            'description' => $goodDescription
-        ]);
+        $features = $this->transactionAnalyzer->analyze($goodDescription);
+
+        $detail = null;
+
+        // Intento A: Si tenemos una entidad limpia válida, buscamos por ella (Deduplicación fuerte)
+        if ($features['entity']) {
+            $detail = Detail::where('user_id', $this->user->id)
+                ->where('operation_type', $features['type'])
+                ->where('entity_clean', $features['entity'])
+                ->first();
+        }
+
+        // Intento B: Si no encontramos por entidad limpia (o es nula), buscamos por descripción exacta
+        if (!$detail) {
+            $detail = Detail::where('user_id', $this->user->id)
+                ->where('description', $goodDescription)
+                ->first();
+        }
+
+        // Si aún no existe, lo creamos llenando TODO
+        if (!$detail) {
+            $detail = Detail::create([
+                'user_id' => $this->user->id,
+                'description' => $goodDescription,
+                'operation_type' => $features['type'],
+                'entity_clean' => $features['entity']
+            ]);
+        }
 
         // b. Intenta auto-categorizar usando tu IA y Reglas
         // $categoryId = $this->categorizationService
@@ -127,9 +154,7 @@ class ProcessYapeImport implements ShouldQueue
      */
     private function getCleanDescription(string $movementRaw): string
     {
-        // Reemplaza el nombre del usuario (y variantes comunes) con nada.
 
-        // Lista de filtros: el nombre completo, y tal vez abreviaciones
         $filters = [
             $this->userNameToFilter, // "JHON PERCY LANDEO SANCHEZ"
             "JHON PERCY LANDEO SANCHEZ", // Detecté un typo en tus datos 

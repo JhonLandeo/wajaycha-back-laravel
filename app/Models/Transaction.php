@@ -42,15 +42,10 @@ class Transaction extends Model
         'yape_id',
     ];
 
-    protected $casts = [
-        // 'value' => 'float',
-    ];
-
     public function detail(): BelongsTo
     {
         return $this->belongsTo(Detail::class, 'detail_id');
     }
-
 
     public function category(): HasOneThrough
     {
@@ -61,5 +56,4 @@ class Transaction extends Model
     {
         return $this->hasMany(TransactionSplit::class);
     }
-
 }

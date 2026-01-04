@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Models\TransactionTag;
 use App\Models\TransactionYape;
 use App\Services\CategorizationService;
+use App\Services\TransactionAnalyzer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,8 +28,8 @@ class ProcessPdfImport implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 600;
-    public $tries = 3;
+    public int $timeout = 600;
+    public int $tries = 3;
     protected int $importId;
     protected int $userId;
     protected string $storedPath;
@@ -36,6 +37,7 @@ class ProcessPdfImport implements ShouldQueue
     protected int $year;
     protected string $password;
     protected CategorizationService $categorizationService;
+    protected TransactionAnalyzer $transactionAnalyzer;
 
     public function __construct(int $importId, int $userId, string $storedPath, int $accountId, int $year, ?string $password)
     {
@@ -46,22 +48,20 @@ class ProcessPdfImport implements ShouldQueue
         $this->year = $year;
         $this->password = $password;
         $this->categorizationService = app(CategorizationService::class);
+        $this->transactionAnalyzer = app(TransactionAnalyzer::class);
     }
 
     public function handle(): void
     {
-        // 1. Marcar el Job como 'processing'
         Import::where('id', $this->importId)->update(['status' => 'processing']);
-        $filePath = Storage::path($this->storedPath); // Ruta absoluta
+        $filePath = Storage::path($this->storedPath);
 
         try {
             DB::beginTransaction();
-            // 2. Desencriptar si es necesario
             if ($this->isEncrypted($filePath)) {
                 $filePath = $this->decryptPdf($filePath, $this->password);
             }
 
-            // 3. Extraer texto (PDF o OCR)
             $text = $this->extractTextFromPdf($filePath);
             if (empty($text)) {
                 $text = (new TesseractOCR($filePath))->run();
@@ -70,7 +70,6 @@ class ProcessPdfImport implements ShouldQueue
             $lines = explode("\n", $text);
             $parsedTransactions = [];
 
-            // 4. Parsear líneas (tu lógica)
             foreach ($lines as $line) {
                 if (preg_match('/(\d{2}[A-Z]{3})\s+(\d{2}[A-Z]{3})/', $line, $matches)) {
                     $line_subtracted = explode(" ", substr($line, 0, -1));
@@ -107,10 +106,8 @@ class ProcessPdfImport implements ShouldQueue
             }
 
 
-            // 5. Procesar e insertar transacciones
             $this->processParsedTransactions($parsedTransactions);
 
-            // 6. Marcar como 'completed'
             Import::where('id', $this->importId)->update(['status' => 'completed']);
             DB::commit();
         } catch (Throwable $th) {
@@ -130,10 +127,34 @@ class ProcessPdfImport implements ShouldQueue
     {
         $yapeIdsFounds = [];
         foreach ($transactionsData as $txData) {
-            $detail = Detail::firstOrCreate(
-                ['user_id' => $this->userId, 'description' => $txData->description],
-                ['merchant_id' => null]
-            );
+            $features = $this->transactionAnalyzer->analyze($txData->description);
+
+            $detail = null;
+
+            // Intento A: Si tenemos una entidad limpia válida, buscamos por ella (Deduplicación fuerte)
+            if ($features['entity']) {
+                $detail = Detail::where('user_id', $this->userId)
+                    ->where('operation_type', $features['type'])
+                    ->where('entity_clean', $features['entity'])
+                    ->first();
+            }
+
+            // Intento B: Si no encontramos por entidad limpia (o es nula), buscamos por descripción exacta
+            if (!$detail) {
+                $detail = Detail::where('user_id', $this->userId)
+                    ->where('description', $txData->description)
+                    ->first();
+            }
+
+            // Si aún no existe, lo creamos llenando TODO
+            if (!$detail) {
+                $detail = Detail::create([
+                    'user_id' => $this->userId,
+                    'description' => $txData->description,
+                    'operation_type' => $features['type'],
+                    'entity_clean' => $features['entity']
+                ]);
+            }
 
             $finalCategoryId = null;
             $finalYapeId = null;
@@ -196,7 +217,6 @@ class ProcessPdfImport implements ShouldQueue
                     }
                 }
             }
-
         }
     }
 

@@ -28,6 +28,9 @@ class TransactionYape extends Model
         return $this->belongsTo(Detail::class, 'detail_id');
     }
 
+    /**
+     * @return HasMany<TransactionTag, $this>
+     */
     public function tags(): HasMany
     {
         return $this->hasMany(TransactionTag::class, 'transaction_yape_id');

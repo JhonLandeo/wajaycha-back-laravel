@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Detail;
 use App\Models\KeywordRule;
 use App\Models\CategorizationRule;
-use Illuminate\Support\Facades\DB; // Importante
 
 class CategorizationService
 {

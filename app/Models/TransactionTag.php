@@ -4,6 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int|null $transaction_id
+ * @property int $transaction_yape_id
+ * @property int $tag_id
+ */
 class TransactionTag extends Model
 {
     protected $table = 'transaction_tag';

@@ -31,7 +31,7 @@ class CategoryController extends Controller
         ]);
         $paginator = new LengthAwarePaginator(
             $statement,
-            $statement[0]->total_records,
+            $statement[0]->total_records ?? 0,
             $perPage,
             $page
         );
@@ -71,6 +71,7 @@ class CategoryController extends Controller
             'name' => 'required|string|max:255',
             'pareto_classification_id' => 'required|exists:pareto_classifications,id',
             'monthly_budget' => 'required|numeric|min:0',
+            'type' => 'required|in:income,expense',
         ]);
         $validatedData['user_id'] = $userId;
         $categories = Category::create($validatedData);
@@ -86,6 +87,7 @@ class CategoryController extends Controller
             'name' => 'required|string|max:255',
             'pareto_classification_id' => 'required|exists:pareto_classifications,id',
             'monthly_budget' => 'required|numeric|min:0',
+            'type' => 'required|in:income,expense',
         ]);
         $category->update($validatedData);
         return response()->json($category);

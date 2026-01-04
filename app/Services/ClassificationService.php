@@ -14,20 +14,15 @@ class ClassificationService
         try {
            $prompt = $this->createPrompt($description);
 
-            // 2. --- ¡ESTA ES LA CORRECCIÓN! ---
-            // En lugar de ::geminiPro(), usamos ::generativeModel()
-            // y especificamos un modelo rápido y moderno.
             $model = Gemini::generativeModel('gemini-2.5-flash-lite');
             $response = $model->generateContent($prompt);
             
             $result = strtolower(trim($response->text()));
 
-            // 3. Devuelve 'true' solo si la respuesta es "UTIL"
             return $result === 'util';
 
         } catch (\Exception $e) {
             Log::error('Error en ClassificationService: ' . $e->getMessage());
-            // Si la API falla, es más seguro no aprender
             return false;
         }
     }

@@ -25,7 +25,6 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('kpi-data', [DashboardController::class, 'kpiData']);
     Route::post('top-data', [DashboardController::class, 'topFiveData']);
     Route::post('weekly-data', [DashboardController::class, 'getWeeklyData']);
-    Route::post('hourly-data', [DashboardController::class, 'getHourlyData']);
     Route::post('monthly-data', [DashboardController::class, 'getMonthlyData']);
     Route::post('import-yape', [TransactionYapeController::class, 'import']);
     Route::post('transaction-by-category', [DashboardController::class, 'getTransactionByCategory']);
@@ -42,7 +41,6 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
     Route::get('get-summary-by-category', [TransactionsController::class, 'getSummaryByCategory']);
 
-    Route::post('chat', [ChatGptController::class, 'chat']);
     Route::post('extract-pdf-data', [PdfController::class, 'extractData']);
     Route::post('export-transactions', [TransactionsController::class, 'exportTransaction']);
 

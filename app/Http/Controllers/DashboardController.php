@@ -19,50 +19,18 @@ class DashboardController extends Controller
     public function kpiData(Request $request): JsonResponse
     {
         try {
-            $year = $request->input('year', null);
-            $month = $request->input('month', null);
+            $year = $request->input('year');
+            $month = $request->input('month');
             $userId = Auth::id();
-            $avgBase = UnifyTransactions::query()
-                ->selectRaw("ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS avg_daily_income,
-                ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS avg_daily_expense")
-                ->join('details as d', 'mv_unified_transactions.detail_id', '=',  'd.id');
 
-            if ($month) {
-                $avgBase->whereMonth('date_operation', $month);
-            }
-            if ($year) {
-                $avgBase->whereYear('date_operation', $year);
-            }
+            $result = DB::select('SELECT get_kpi_data(?, ?, ?) as data', [
+                $userId,
+                $year,
+                $month
+            ]);
 
-            $avg = $avgBase->where('mv_unified_transactions.user_id', $userId)
-                ->first();
-
-            $balanceBase = UnifyTransactions::query()
-                ->selectRaw("SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) AS total_income,
-            SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS total_expense,
-            SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END) 
-            - SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END) AS balance");
-
-            if ($month) {
-                $balance = $balanceBase->whereMonth('date_operation', $month);
-            }
-            if ($year) {
-                $balance = $balanceBase->whereYear('date_operation', $year);
-            }
-
-            $balance = $balanceBase->where('mv_unified_transactions.user_id', $userId)
-                ->first();
-
-
-            $data = [
-                'avg_daily_income' => ['amount' => (float) $avg->avg_daily_income, 'title' => 'AVG Ingreso diario', 'type' => 'income'],
-                'avg_daily_expense' => ['amount' => (float) $avg->avg_daily_expense, 'title' => 'AVG Gasto diario', 'type' => 'expense'],
-                'total_income' => ['amount' => (float) $balance->total_income, 'title' => 'Total de ingresos', 'type' => 'income'],
-                'total_expense' => ['amount' => (float) $balance->total_expense, 'title' => 'Total de gastos', 'type' => 'expense'],
-                'balance' => ['amount' => (float) $balance->balance, 'title' => 'Balance'],
-            ];
-
-            return response()->json($data);
+            $jsonString = $result[0]->data;
+            return response()->json(json_decode($jsonString));
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -71,54 +39,17 @@ class DashboardController extends Controller
     public function topFiveData(Request $request): JsonResponse
     {
         try {
-            $year = $request->input('year', null);
-            $month = $request->input('month', null);
+            $year = $request->input('year');
+            $month = $request->input('month');
             $userId = Auth::id();
-            $queryBase = UnifyTransactions::query()
-                ->selectRaw("CAST(SUM(amount) AS DECIMAL(10,2)) as value, detail_name as name")
-                ->where('user_id', $userId);
 
-            $queryIncomes = clone $queryBase;
-            $queryExpenses = clone $queryBase;
-            if ($month) {
-                $queryIncomes->whereMonth('date_operation', $month);
-                $queryExpenses->whereMonth('date_operation', $month);
-            }
-            if ($year) {
-                $queryIncomes->whereYear('date_operation', $year);
-                $queryExpenses->whereYear('date_operation', $year);
-            }
-            $topIncomes = $queryIncomes
-                ->where('type_transaction', 'income')
-                ->groupBy('detail_name')
-                ->orderBy('value', 'desc')
-                ->limit(5)
-                ->get()
-                ->map(function ($item) {
-                    /** @var \App\Models\UnifyTransactions $item */
-                    $item->value = (float) $item->value;
-                    return $item;
-                });
+            $result = DB::select('SELECT get_top_five_data(?, ?, ?) as data', [
+                $userId,
+                $year,
+                $month
+            ]);
 
-            $topExpenses = $queryExpenses
-                ->where('type_transaction', 'expense')
-                ->groupBy('detail_name')
-                ->orderBy('value', 'desc')
-                ->limit(5)
-                ->get()
-                ->map(function ($item) {
-                    /** @var \App\Models\UnifyTransactions $item */
-                    $item->value = (float) $item->value;
-                    return $item;
-                });
-
-
-            $data = [
-                'top_five_expenses' => $topExpenses,
-                'top_five_incomes' => $topIncomes,
-            ];
-
-            return response()->json($data);
+            return response()->json(json_decode($result[0]->data));
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -127,66 +58,19 @@ class DashboardController extends Controller
     public function getWeeklyData(Request $request): JsonResponse
     {
         try {
-            $isChecked = $request->input('isChecked', false);
+            $isChecked = $request->boolean('isChecked');
+            $year = $request->input('year');
+            $month = $request->input('month');
             $userId = Auth::id();
 
-            $selectAggregate = $isChecked ?
-                "COUNT(CASE WHEN type_transaction = 'income' THEN t.id END) AS count_weekly_income,
-             COUNT(CASE WHEN type_transaction = 'expense' THEN t.id END) AS count_weekly_expense" :
-                "ROUND(SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_weekly_income,
-             ROUND(SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_weekly_expense";
+            $result = DB::select('SELECT get_weekly_data(?, ?, ?, ?) as data', [
+                $userId,
+                $isChecked,
+                $year,
+                $month
+            ]);
 
-            $dayOfWeekExpression = "EXTRACT(ISODOW FROM t.date_operation)";
-            $dayNameExpression = "TRIM(to_char(t.date_operation, 'Day'))";
-            $query = UnifyTransactions::query()
-                ->from('mv_unified_transactions as t')
-                ->join('details as d', 't.detail_id', '=', 'd.id')
-                ->selectRaw("
-                {$selectAggregate},
-                {$dayOfWeekExpression} AS day,
-                {$dayNameExpression} AS name_day
-            ");
-
-            if ($request->filled('year')) {
-                $query->whereYear('t.date_operation', $request->year);
-            }
-            if ($request->filled('month')) {
-                $query->whereMonth('t.date_operation', $request->month);
-            }
-
-            $results = $query
-                ->where('t.user_id', $userId)
-                ->groupByRaw("{$dayOfWeekExpression}, {$dayNameExpression}")
-                ->orderByRaw($dayOfWeekExpression)
-                ->get();
-
-            foreach ($results as $result) {
-                $result->name_day = mb_convert_case($result->name_day, MB_CASE_TITLE, "UTF-8");
-            }
-
-            return response()->json($results);
-        } catch (\Throwable $th) {
-            throw $th;
-        }
-    }
-
-    public function getHourlyData(Request $request): JsonResponse
-    {
-        try {
-            $userId = Auth::id();
-            $data = UnifyTransactions::selectRaw("
-            ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END), 2) AS avg_daily_income,
-            ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END), 2) AS avg_daily_expense,
-            EXTRACT(HOUR FROM date_operation) AS hour  -- CAMBIO 1: Se usa EXTRACT en lugar de HOUR()
-        ")
-                ->join('details as d', 'mv_unified_transactions.detail_id', '=', 'd.id')
-                ->where('mv_unified_transactions.user_id', $userId)
-                ->whereYear('date_operation', $request->year)
-                ->groupByRaw('EXTRACT(HOUR FROM date_operation)')
-                ->orderBy('hour')
-                ->get();
-
-            return response()->json($data);
+            return response()->json(json_decode($result[0]->data));
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -195,55 +79,17 @@ class DashboardController extends Controller
     public function getMonthlyData(Request $request): JsonResponse
     {
         try {
-            $isChecked = $request->input('isChecked', false);
+            $isChecked = $request->boolean('isChecked');
+            $year = $request->input('year');
             $userId = Auth::id();
-            $selectAggregate = $isChecked ?
-                "COUNT(CASE WHEN type_transaction = 'income' THEN t.id END) AS count_monthly_income,
-             COUNT(CASE WHEN type_transaction = 'expense' THEN t.id END) AS count_monthly_expense" :
-                "ROUND(SUM(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END),2) AS sum_monthly_income,
-             ROUND(SUM(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END),2) AS sum_monthly_expense";
 
-            $monthNumberExpression = "EXTRACT(MONTH FROM t.date_operation)";
+            $result = DB::select('SELECT get_monthly_data(?, ?, ?) as data', [
+                $userId,
+                $isChecked,
+                $year
+            ]);
 
-            $baseQuery = UnifyTransactions::query()
-                ->from('mv_unified_transactions as t')
-                ->join('details as d', 't.detail_id', '=',  'd.id')
-                ->selectRaw("
-                {$selectAggregate},
-                {$monthNumberExpression} AS month")
-                ->where('t.user_id', $userId);
-
-            if ($request->filled('year')) {
-                $baseQuery->whereYear('t.date_operation', $request->year);
-            }
-
-            $data = $baseQuery
-                ->groupByRaw($monthNumberExpression)
-                ->orderByRaw($monthNumberExpression)
-                ->get();
-
-
-            $monthMap = [
-                1 => 'Enero',
-                2 => 'Febrero',
-                3 => 'Marzo',
-                4 => 'Abril',
-                5 => 'Mayo',
-                6 => 'Junio',
-                7 => 'Julio',
-                8 => 'Agosto',
-                9 => 'Septiembre',
-                10 => 'Octubre',
-                11 => 'Noviembre',
-                12 => 'Diciembre',
-            ];
-
-            $formattedData = $data->map(function ($item) use ($monthMap) {
-                $item->name_month = $monthMap[$item->month] ?? 'Desconocido';
-                return $item;
-            });
-
-            return response()->json($formattedData);
+            return response()->json(json_decode($result[0]->data));
         } catch (\Throwable $th) {
             throw $th;
         }

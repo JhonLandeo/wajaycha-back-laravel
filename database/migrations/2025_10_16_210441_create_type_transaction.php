@@ -12,9 +12,23 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // $this->down();
-        // DB::unprepared("CREATE TYPE public.type_transaction AS ENUM ('income', 'expense');");
+        DB::unprepared("
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                WHERE t.typname = 'type_transaction'
+                AND n.nspname = 'public'
+            ) THEN
+                CREATE TYPE public.type_transaction AS ENUM ('income', 'expense');
+            END IF;
+        END
+        $$;
+    ");
     }
+
 
     /**
      * Reverse the migrations.

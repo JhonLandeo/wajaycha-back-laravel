@@ -5,16 +5,22 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Transaction;
+/**
+ * @property float|null $distance
+ */
+
 class Detail extends Model
 {
-    protected $table = 'details';
-
     protected $fillable = [
         'description',
         'user_id',
         'embedding',
         'last_used_category_id',
-        'distance'
+        'distance',
+        'operation_type',
+        'entity_clean',
+        'ai_reviewed_at',
+        'ai_verdict'
     ];
 
     public function transactions(): HasMany
