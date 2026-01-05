@@ -10,131 +10,179 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Gemini\Laravel\Facades\Gemini;
+use Gemini\Data\GenerationConfig;
+use Gemini\Enums\ResponseMimeType;
 
 class SmartMergeJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    private int $timeLimit = 100; // Segundos
+
     public function handle(): void
     {
-        Log::info("--- INICIANDO JUEZ IA (Modo Asimétrico + Sin Yape) ---");
+        $startTime = time();
+        Log::info("🏁 [START] JUEZ IA - MODO RACIMO (CLUSTER) ----------------");
 
-        $candidates = DB::select("
-            WITH new_incoming AS (
-                SELECT id, description, entity_clean, operation_type
-                FROM details 
-                WHERE ai_reviewed_at IS NULL
-                AND operation_type != 'YAPE'
-                AND length(entity_clean) > 2
-                LIMIT 50
-            )
-            SELECT 
-                c1.id as id_old, c1.description as desc_old, 
-                c2.id as id_new, c2.description as desc_new
-            FROM details c1
-            JOIN new_incoming c2 ON c1.id < c2.id
-            WHERE 
-                c1.operation_type = c2.operation_type
-                AND c1.operation_type != 'YAPE'
-                AND (
-                    similarity(c1.entity_clean, c2.entity_clean) BETWEEN 0.45 AND 0.95
-                )
-            ORDER BY c2.id DESC
-            LIMIT 15
-        ");
+        do {
+            $pivot = DB::table('details')
+                ->whereNull('ai_reviewed_at')
+                ->where('operation_type', '!=', 'YAPE')
+                ->where('operation_type', '!=', 'MANTENIMIENTO')
+                ->whereRaw('length(entity_clean) > 2')
+                ->orderBy('id', 'desc')
+                ->first();
 
-        if (empty($candidates)) {
-            Log::info("No hay nuevos candidatos pendientes (excluyendo Yapes).");
-            return;
-        }
+            if (!$pivot) {
+                Log::info("🛑 [STOP] No quedan registros líderes por revisar.");
+                break;
+            }
 
-        $pairs = [];
-        foreach ($candidates as $row) {
-            $pairs[] = [
-                'id' => "{$row->id_old}|{$row->id_new}",
-                'A' => $row->desc_old,
-                'B' => $row->desc_new
+            $candidates = DB::select("
+                SELECT id, description, entity_clean
+                FROM details
+                WHERE 
+                    id != ? 
+                    AND length(entity_clean) > 2
+                    AND similarity(entity_clean, ?) BETWEEN 0.3 AND 1
+                LIMIT 15
+            ", [$pivot->id, $pivot->entity_clean]);
+
+
+            if (empty($candidates)) {
+                $this->markAsReviewed($pivot->id);
+                Log::info("⏩ [SKIP] Líder ID {$pivot->id} es único. Avanzando...");
+            } else {
+                Log::info("🔍 [CLUSTER] Líder ID {$pivot->id} ('{$pivot->description}') vs " . count($candidates) . " candidatos.");
+                Log::info('candidates: ' . var_export($candidates, true));
+                $this->processCluster($pivot, $candidates);
+            }
+        } while (time() - $startTime < $this->timeLimit);
+        Log::info("⏱️ [TIEMPO] Transcurrido: " . (time() - $startTime) . "s");
+
+        Log::info("🏁 [END] Trabajo finalizado.");
+    }
+
+    private function processCluster($pivot, array $candidates): void
+    {
+        $candidatesData = [];
+        foreach ($candidates as $cand) {
+            $candidatesData[] = [
+                'id' => $cand->id,
+                'desc' => $cand->description
             ];
         }
 
-        $prompt = $this->buildExpertPrompt(json_encode($pairs));
+        $prompt = $this->buildClusterPrompt($pivot->description, json_encode($candidatesData));
 
         try {
-            $modelName = 'gemini-1.5-flash';
-            $response = Gemini::generativeModel($modelName)->generateContent($prompt);
+            $modelName = 'gemini-2.0-flash';
+
+            $response = Gemini::generativeModel($modelName)
+                ->withGenerationConfig(
+                    new GenerationConfig(responseMimeType: ResponseMimeType::APPLICATION_JSON),
+                )
+                ->generateContent($prompt);
+
+            Log::info("🤖 [IA RESPUESTA] " . $response->text());
+
             $jsonText = str_replace(['```json', '```'], '', $response->text());
             $decisions = json_decode($jsonText, true);
         } catch (\Exception $e) {
-            Log::error("Gemini Error: " . $e->getMessage());
+            Log::error("❌ [API ERROR] " . $e->getMessage());
             return;
         }
 
-        foreach ($candidates as $row) {
-            $key = "{$row->id_old}|{$row->id_new}";
-            $shouldMerge = false;
+        // ------------------------------------------------------------
+        // PROCESAMIENTO DE RESPUESTA
+        // ------------------------------------------------------------
+        $duplicates = $decisions['duplicates'] ?? [];
 
-            if (isset($decisions['matches'])) {
-                foreach ($decisions['matches'] as $match) {
-                    if ($match['id'] === $key && $match['is_duplicate'] === true) {
-                        $shouldMerge = true;
-                        break;
-                    }
-                }
-            }
+        Log::info("📥 [IA] Encontró " . count($duplicates) . " duplicados para el líder.");
 
-            if ($shouldMerge) {
-                $this->mergeDetails($row->id_old, $row->id_new);
-                Log::info("FUSIONADO: '{$row->desc_new}' -> '{$row->desc_old}'");
-            } else {
-                DB::table('details')
-                    ->where('id', $row->id_new)
-                    ->update(['ai_reviewed_at' => now(), 'ai_verdict' => 'DISTINCT']);
+        foreach ($duplicates as $match) {
+            $duplicateId = $match['id'];
+
+            if ($duplicateId != $pivot->id && DB::table('details')->where('id', $duplicateId)->exists()) {
+                $this->mergeDetails($pivot->id, $duplicateId);
+
+                Log::info("✨ [FUSION] ID $duplicateId -> Líder {$pivot->id}. Razón: " . ($match['reason'] ?? 'IA'));
             }
         }
+
+        $this->markAsReviewed($pivot->id);
     }
 
-    /**
-     * El Prompt Maestro ajustado a tus datos peruanos
-     */
-    private function buildExpertPrompt(string $jsonData): string
+    private function buildClusterPrompt(string $masterDesc, string $candidatesJson): string
     {
         return <<<EOT
-        Eres un experto auditor de datos bancarios de Perú. Tu objetivo es deduplicar descripciones de transacciones.
-        Recibirás pares de textos (A y B). Decide si se refieren a la misma entidad/persona.
+        Actúa como un Motor de Comparación de Textos Bancarios (Strict Logic Mode).
+        Compara un MAESTRO contra CANDIDATOS.
 
-        REGLAS DE ORO (Estrictas):
-        1. **Nombres Enmascarados:** Si uno tiene asteriscos o está cortado (ej: "Rosa Ney*", "Juan P.", "Lidia Meg*") y el otro es el nombre completo que coincide al inicio (ej: "Rosa E. Neyra A.", "Juan Perez", "Lidia Mego"), **SON DUPLICADOS (true)**.
-        2. **Variaciones de Nombres:** "Juan M. Gomez Q." es igual a "Juan Manuel Gomez Quispe". (true)
-        3. **Negocios con Prefijos:** "IZI*BAGUETERIA SOLANGE" es igual a "BAGUETERIA SOLANGE EIRL". Ignora "IZI", "NIUBIZ", "CULQI". (true)
-        4. **Yape/Plin:** - Si tienen el mismo nombre (o variación), son true.
-        - Si tienen números de teléfono DIFERENTES visibles (ej: "Yape a 999" vs "Yape a 888"), son **FALSE**.
-        5. **Mantenimiento:** "MANT. CUENTA SET24" es el mismo concepto que "MANT. CUENTA AGO24". (true)
+        MAESTRO: "$masterDesc"
 
-        FORMATO DE SALIDA (JSON Puro):
+        ALGORITMO DE VERIFICACIÓN (Ejecuta en orden estricto):
+
+        PASO 1: LIMPIEZA
+        - Ignora: "PLIN", "YQ-", "IZI*", "CULQI", "NIUBIZ".
+        - "PLIN - Juan Manuel" -> "Juan Manuel".
+
+        PASO 2: PRIMER NOMBRE (EL FILTRO MAYOR)
+        - Si el primer nombre limpio es distinto ("Ada" vs "America"), **FALSO**.
+        - Si es igual ("Juan" vs "Juan"), CONTINÚA al Paso 3.
+
+        PASO 3: SEGUNDO NOMBRE / INICIAL (EL DETALLE MORTAL ⛔)
+        - Aquí es donde NO debes fallar. Busca conflictos en el segundo nombre o inicial.
+        - **Caso A (Conflicto de Iniciales):** "Juan P." vs "Juan M." -> **FALSO** (Pedro no es Manuel).
+        - **Caso B (Conflicto Nombre-Inicial):** "Juan P." vs "Juan Manuel" -> **FALSO** (P no es M).
+        - **Caso C (Coincidencia):** "Juan P." vs "Juan Pedro" -> **VERDADERO** (P es Pedro).
+        - **Caso D (Ausencia):** "Juan Gomez" (sin inicial) vs "Juan P. Gomez" -> **VERDADERO** (Se asume falta de datos).
+
+        PASO 4: APELLIDOS
+        - Si pasó el Paso 3, verifica que los apellidos coincidan fonéticamente o por truncamiento.
+
+        SALIDA JSON (Solo los que sobreviven al Paso 3):
         {
-            "matches": [
-                { "id": "id|id", "is_duplicate": true, "reason": "Nombre enmascarado coincide" },
-                { "id": "id|id", "is_duplicate": false, "reason": "Apellidos distintos" }
+            "duplicates": [
+                { "id": 37, "reason": "Juan P. coincide con Juan PEDRO (P=Pedro)" }
             ]
         }
+        
+        NOTA: Si el maestro es 'Juan P.' y el candidato es 'Juan M.', NO LO AGREGUES.
 
-        DATOS A ANALIZAR:
-        $jsonData
+        CANDIDATOS:
+        $candidatesJson
         EOT;
+    }
+
+    private function markAsReviewed(int $id): void
+    {
+        DB::table('details')
+            ->where('id', $id)
+            ->update([
+                'ai_reviewed_at' => now(),
+                'ai_verdict' => DB::raw("COALESCE(ai_verdict, 'DISTINCT')")
+            ]);
     }
 
     private function mergeDetails(int $masterId, int $duplicateId): void
     {
         DB::transaction(function () use ($masterId, $duplicateId) {
-            DB::table('transactions')->where('detail_id', $duplicateId)->update(['detail_id' => $masterId]);
-            DB::table('transaction_yapes')->where('detail_id', $duplicateId)->update(['detail_id' => $masterId]);
+            // 1. Heredar Categoría si el maestro tiene
+            $masterCat = DB::table('categorization_rules')->where('detail_id', $masterId)->value('category_id');
+            $updateData = ['detail_id' => $masterId];
+            if ($masterCat) $updateData['category_id'] = $masterCat;
 
+            // 2. Mover data
+            DB::table('transactions')->where('detail_id', $duplicateId)->update($updateData);
+
+            $yapeData = $updateData;
+            $yapeData['updated_at'] = now();
+            DB::table('transaction_yapes')->where('detail_id', $duplicateId)->update($yapeData);
+
+            // 3. Borrar duplicado
             DB::table('categorization_rules')->where('detail_id', $duplicateId)->delete();
-
             DB::table('details')->where('id', $duplicateId)->delete();
-
-            DB::table('details')->where('id', $masterId)
-                ->update(['ai_reviewed_at' => now(), 'ai_verdict' => 'MERGED']);
         });
     }
 }

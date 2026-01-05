@@ -12,7 +12,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Smalot\PdfParser\Parser;
@@ -58,8 +57,6 @@ class ProcessYapeImport implements ShouldQueue
      */
     private function parseLines(array $lines): void
     {
-        // El Regex para encontrar la línea principal de una transacción Yape
-        // Captura: 1:Fecha, 2:Hora, 3:Movimientos, 4:Tipo, 5:Monto
         $regex = '/^(\d{1,2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2}:\d{2})\s+(.+?)\s+(YAPEASTE|TE YAPEARON|RECARGA|YAPFASTE)\s+(.+)$/i';
 
         foreach ($lines as $line) {
@@ -75,34 +72,25 @@ class ProcessYapeImport implements ShouldQueue
      */
     private function processTransaction(array $matches): void
     {
-        // 1. Limpia los datos extraídos
+        Log::info('Matches: ' . var_export($matches, true));
         $date = Carbon::createFromFormat('d/m/Y', trim($matches[1]))->format('Y-m-d');
         $time = trim($matches[2]);
         $movementRaw = trim($matches[3]);
         $typeRaw = trim($matches[4]);
         $amountRaw = trim($matches[5]);
-
-        // 2. --- ¡LA LÓGICA CLAVE! ---
-        //    Extrae el "detalle bueno" ignorando el nombre del usuario.
         $goodDescription = $this->getCleanDescription($movementRaw);
 
         if (empty($goodDescription)) {
             Log::warning("No se pudo extraer descripción de: $movementRaw");
-            return; // Saltar esta transacción
+            return;
         }
 
-        // 3. Limpia el monto y el tipo
         $amount = floatval(str_replace(',', '', $amountRaw));
         $type = ($typeRaw === 'TE YAPEARON') ? 'income' : 'expense';
-
-        // 4. --- LÓGICA DE BASE DE DATOS ---
-
-        // a. Busca o crea el "Detail" (el cerebro de la IA)
         $features = $this->transactionAnalyzer->analyze($goodDescription);
-
+        Log::info('Features: ' . var_export($features, true));
         $detail = null;
 
-        // Intento A: Si tenemos una entidad limpia válida, buscamos por ella (Deduplicación fuerte)
         if ($features['entity']) {
             $detail = Detail::where('user_id', $this->user->id)
                 ->where('operation_type', $features['type'])
@@ -110,14 +98,12 @@ class ProcessYapeImport implements ShouldQueue
                 ->first();
         }
 
-        // Intento B: Si no encontramos por entidad limpia (o es nula), buscamos por descripción exacta
         if (!$detail) {
             $detail = Detail::where('user_id', $this->user->id)
                 ->where('description', $goodDescription)
                 ->first();
         }
 
-        // Si aún no existe, lo creamos llenando TODO
         if (!$detail) {
             $detail = Detail::create([
                 'user_id' => $this->user->id,
@@ -126,44 +112,27 @@ class ProcessYapeImport implements ShouldQueue
                 'entity_clean' => $features['entity']
             ]);
         }
-
-        // b. Intenta auto-categorizar usando tu IA y Reglas
-        // $categoryId = $this->categorizationService
-        //     ->findCategory($this->user->id, $detail);
-
-        // c. Inserta en tu tabla 'transactions_yapes'
-        TransactionYape::firstOrCreate(
-            [
-                // Columnas de Búsqueda (para evitar duplicados)
-                'user_id' => $this->user->id,
-                'date_operation' => $date . ' ' . $time,
-                'amount' => $amount,
-                'detail_id' => $detail->id,
-                'type_transaction' => $type,
-            ],
-            [
-                // Columnas de Creación (datos nuevos)
-                'type_transaction' => $type,
-                // 'category_id' => $categoryId,
-            ]
-        );
+        $finalCategoryId = $this->categorizationService->findCategory($this->user->id, $detail);
+        
+        TransactionYape::firstOrCreate([
+            'user_id' => $this->user->id,
+            'date_operation' => $date . ' ' . $time,
+            'amount' => $amount,
+            'detail_id' => $detail->id,
+            'type_transaction' => $type,
+            'category_id' => $finalCategoryId
+        ]);
     }
 
-    /**
-     * Filtra el nombre del usuario para obtener la contraparte.
-     */
     private function getCleanDescription(string $movementRaw): string
     {
-
         $filters = [
-            $this->userNameToFilter, // "JHON PERCY LANDEO SANCHEZ"
-            "JHON PERCY LANDEO SANCHEZ", // Detecté un typo en tus datos 
-            "JHON P. LANDEO S." // Detecté abreviaciones [cite: 24]
+            $this->userNameToFilter,
+            "JHON PERCY LANDEO SANCHEZ",
+            "JHON P. LANDEO S."
         ];
-
         $cleanName = str_ireplace($filters, '', $movementRaw);
 
-        // Limpia espacios extra y guiones
         return strtoupper(trim(preg_replace('/\s+/', ' ', $cleanName)));
     }
 }

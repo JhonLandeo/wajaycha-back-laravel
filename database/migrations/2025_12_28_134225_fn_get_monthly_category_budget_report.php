@@ -75,7 +75,8 @@ return new class extends Migration
                                     WHEN c.monthly_budget = 0 THEN 0
                                     ELSE ROUND((COALESCE(tmbc.total_spent, 0) * 100.0) / c.monthly_budget, 2)
                                 END AS percentage_spent,
-                                COALESCE(qbr.total_quantity, 0) AS total_quantity
+                                COALESCE(qbr.total_quantity, 0) AS total_quantity,
+                                c.created_at
                             FROM categories c
                             LEFT JOIN transaction_montly_by_category tmbc ON tmbc.category_id = c.id
                             LEFT JOIN quantity_by_rules qbr ON qbr.category_id = c.id
@@ -92,7 +93,7 @@ return new class extends Migration
                             fc.total_quantity::BIGINT,
                             COUNT(*) OVER()::BIGINT AS total_records
                         FROM final_categories fc
-                        ORDER BY fc.percentage_spent DESC, monthly_budget DESC
+                        ORDER BY fc.percentage_spent DESC, monthly_budget DESC, total_quantity DESC, created_at DESC
                         LIMIT p_per_page
                         OFFSET v_offset;
 
