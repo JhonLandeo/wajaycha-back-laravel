@@ -65,8 +65,8 @@ class TransactionAnalyzer
         $clean = preg_replace('/[^a-z0-9\s]/', '', $clean);
         $clean = trim(preg_replace('/\s+/', ' ', $clean));
 
-        if (strlen($clean) < 2) $clean = null;
+        if (strlen($clean) < 2) $clean = $textLower;
 
-        return ['type' => $type, 'entity' => $clean];
+        return ['type' => $type, 'entity' => $clean, 'sanitized_description' => $textLower];
     }
 }

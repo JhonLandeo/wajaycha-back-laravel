@@ -5,6 +5,7 @@ namespace App\Imports;
 use App\Models\Detail;
 use App\Models\TransactionYape;
 use App\Services\CategorizationService;
+use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +18,7 @@ HeadingRowFormatter::default('none');
 class TransactionYapeImport implements ToModel, WithHeadingRow
 {
     protected int $userId;
+    protected TransactionAnalyzer $transactionAnalyzer;
 
     /**
      * @param int $userId
@@ -24,6 +26,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
     public function __construct(int $userId)
     {
         $this->userId = $userId;
+        $this->transactionAnalyzer = app(TransactionAnalyzer::class);
     }
     /**
      * Especificar la fila donde comienzan los encabezados
@@ -79,10 +82,19 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         } else {
             $typeTransaction = $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income';
             $description = $typeTransaction == 'expense' ? $row['Destino'] : $row['Origen'];
-            $detail = Detail::firstOrCreate(
-                ['user_id' =>  $this->userId, 'description' => $description],
-                ['merchant_id' => null]
-            );
+            $features = $this->transactionAnalyzer->analyze($description);
+            $detail = Detail::where('user_id', $this->userId)
+                ->whereRaw('LOWER(description) = ?', $features['sanitized_description'])
+                ->first();
+
+            if (!$detail) {
+                $detail = Detail::create([
+                    'user_id' => $this->userId,
+                    'description' => $description,
+                    'operation_type' => $features['type'],
+                    'entity_clean' => $features['entity']
+                ]);
+            }
             $categorizationService = app(CategorizationService::class);
             $categoryId = $categorizationService->findCategory($this->userId, $detail);
             return  TransactionYape::create([

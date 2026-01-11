@@ -88,10 +88,9 @@ class ProcessPdfImport implements ShouldQueue
                             else $expense = $itemCleaned;
                         }
                     }
-
+            
                     $income = $income ?? 0;
                     $expense = $expense ?? 0;
-
                     $day = substr($line_subtracted[1], 0, 2);
                     $month = substr($line_subtracted[1], 2);
                     $monthFormat = $month == 'SET' ? 'SEP' : $month;
@@ -128,25 +127,10 @@ class ProcessPdfImport implements ShouldQueue
         $yapeIdsFounds = [];
         foreach ($transactionsData as $txData) {
             $features = $this->transactionAnalyzer->analyze($txData->description);
+            $detail = Detail::where('user_id', $this->userId)
+                ->whereRaw('LOWER(description) = ?', $features['sanitized_description'])
+                ->first();
 
-            $detail = null;
-
-            // Intento A: Si tenemos una entidad limpia válida, buscamos por ella (Deduplicación fuerte)
-            if ($features['entity']) {
-                $detail = Detail::where('user_id', $this->userId)
-                    ->where('operation_type', $features['type'])
-                    ->where('entity_clean', $features['entity'])
-                    ->first();
-            }
-
-            // Intento B: Si no encontramos por entidad limpia (o es nula), buscamos por descripción exacta
-            if (!$detail) {
-                $detail = Detail::where('user_id', $this->userId)
-                    ->where('description', $txData->description)
-                    ->first();
-            }
-
-            // Si aún no existe, lo creamos llenando TODO
             if (!$detail) {
                 $detail = Detail::create([
                     'user_id' => $this->userId,
@@ -159,8 +143,6 @@ class ProcessPdfImport implements ShouldQueue
             $finalCategoryId = null;
             $finalYapeId = null;
 
-            // 2. --- Prioridad 0: Yape Matcher
-            //    Buscamos un Yape que ya esté categorizado por el usuario.
             $transactionYape = TransactionYape::where('user_id', $this->userId)
                 ->whereDate('date_operation', Carbon::parse($txData->date_operation)->toDateString())
                 ->where('amount', $txData->amount)

@@ -17,7 +17,7 @@ class SmartMergeJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    private int $timeLimit = 100; // Segundos
+    private int $timeLimit = 10000; // Segundos
 
     public function handle(): void
     {
@@ -27,12 +27,11 @@ class SmartMergeJob implements ShouldQueue
         do {
             $pivot = DB::table('details')
                 ->whereNull('ai_reviewed_at')
-                ->where('operation_type', '!=', 'YAPE')
-                ->where('operation_type', '!=', 'MANTENIMIENTO')
+                ->whereNotIn('operation_type', ['YAPE', 'MANTENIMIENTO'])
                 ->whereRaw('length(entity_clean) > 2')
                 ->orderBy('id', 'desc')
+                ->lockForUpdate()
                 ->first();
-
             if (!$pivot) {
                 Log::info("🛑 [STOP] No quedan registros líderes por revisar.");
                 break;
@@ -43,10 +42,10 @@ class SmartMergeJob implements ShouldQueue
                 FROM details
                 WHERE 
                     id != ? 
-                    AND length(entity_clean) > 2
-                    AND similarity(entity_clean, ?) BETWEEN 0.3 AND 1
+                    AND length(description) > 2
+                    AND similarity(description, ?) BETWEEN 0.3 AND 1
                 LIMIT 15
-            ", [$pivot->id, $pivot->entity_clean]);
+            ", [$pivot->id, $pivot->description]);
 
 
             if (empty($candidates)) {
@@ -76,7 +75,7 @@ class SmartMergeJob implements ShouldQueue
         $prompt = $this->buildClusterPrompt($pivot->description, json_encode($candidatesData));
 
         try {
-            $modelName = 'gemini-2.0-flash';
+            $modelName = 'gemini-2.5-pro';
 
             $response = Gemini::generativeModel($modelName)
                 ->withGenerationConfig(
@@ -102,9 +101,10 @@ class SmartMergeJob implements ShouldQueue
 
         foreach ($duplicates as $match) {
             $duplicateId = $match['id'];
+            $reason = $match['reason'] ?? 'Similitud detectada por IA';
 
             if ($duplicateId != $pivot->id && DB::table('details')->where('id', $duplicateId)->exists()) {
-                $this->mergeDetails($pivot->id, $duplicateId);
+                $this->mergeDetails($pivot->id, $duplicateId, $reason);
 
                 Log::info("✨ [FUSION] ID $duplicateId -> Líder {$pivot->id}. Razón: " . ($match['reason'] ?? 'IA'));
             }
@@ -116,45 +116,48 @@ class SmartMergeJob implements ShouldQueue
     private function buildClusterPrompt(string $masterDesc, string $candidatesJson): string
     {
         return <<<EOT
-        Actúa como un Motor de Comparación de Textos Bancarios (Strict Logic Mode).
-        Compara un MAESTRO contra CANDIDATOS.
+        Actúa como un Analista de Datos Bancarios Experto (Entity Resolution).
+        Tu misión es fusionar registros SOLO si se refieren inequívocamente a la misma entidad.
 
         MAESTRO: "$masterDesc"
 
-        ALGORITMO DE VERIFICACIÓN (Ejecuta en orden estricto):
+        ALGORITMO DE VERIFICACIÓN (STRICT MODE):
 
-        PASO 1: LIMPIEZA
-        - Ignora: "PLIN", "YQ-", "IZI*", "CULQI", "NIUBIZ".
-        - "PLIN - Juan Manuel" -> "Juan Manuel".
+        PASO 1: DECODIFICACIÓN Y LIMPIEZA
+        - Elimina procesadores: "IZI*", "IZIPAY", "NIUBIZ", "CULQI", "YAPE", "PLIN".
+        - Separa palabras pegadas: "IZISAN" -> "SAN".
+        - **REGLA DE ORO DE PREFIJOS:** "SAN FERNANDO" es un nombre compuesto indivisible. NO es igual a "FERNANDO".
+          - Ej: "SAN JUAN" != "JUAN".
+          - Ej: "DON PEPE" != "PEPE".
+          - Ej: "MARIA DEL PILAR" != "MARIA".
 
-        PASO 2: PRIMER NOMBRE (EL FILTRO MAYOR)
-        - Si el primer nombre limpio es distinto ("Ada" vs "America"), **FALSO**.
-        - Si es igual ("Juan" vs "Juan"), CONTINÚA al Paso 3.
+        PASO 2: DETECCIÓN DE TIPO (PERSONA vs NEGOCIO)
+        - Si el MAESTRO parece un negocio (tiene "EIRL", "SAC", "BODEGA", "SAN ...") y el CANDIDATO es claramente una persona con nombre y dos apellidos, **DESCARTA INMEDIATAMENTE**.
+        - Caso Real: "IZI*SAN FERNANDO L" (Negocio) vs "FERNANDO LUIS ORMENO MENDEZ" (Persona) -> **FALSO** (Son entidades distintas).
 
-        PASO 3: SEGUNDO NOMBRE / INICIAL (EL DETALLE MORTAL ⛔)
-        - Aquí es donde NO debes fallar. Busca conflictos en el segundo nombre o inicial.
-        - **Caso A (Conflicto de Iniciales):** "Juan P." vs "Juan M." -> **FALSO** (Pedro no es Manuel).
-        - **Caso B (Conflicto Nombre-Inicial):** "Juan P." vs "Juan Manuel" -> **FALSO** (P no es M).
-        - **Caso C (Coincidencia):** "Juan P." vs "Juan Pedro" -> **VERDADERO** (P es Pedro).
-        - **Caso D (Ausencia):** "Juan Gomez" (sin inicial) vs "Juan P. Gomez" -> **VERDADERO** (Se asume falta de datos).
+        PASO 3: ANÁLISIS DE LA LETRA FINAL (SUFIJOS)
+        - En comercios, una letra suelta al final suele ser ubicación, NO inicial de segundo nombre.
+        - "SAN FERNANDO L" vs "FERNANDO LUIS" -> **FALSO** (La 'L' es Lince/Local, no Luis).
+        - "SAN FERNANDO L" vs "SAN FERNANDO LINCE" -> **VERDADERO** (L es abreviatura de Lince).
 
-        PASO 4: APELLIDOS
-        - Si pasó el Paso 3, verifica que los apellidos coincidan fonéticamente o por truncamiento.
+        PASO 4: COMPARACIÓN FONÉTICA
+        - Solo si pasaste los filtros anteriores, compara los nombres limpios.
 
-        SALIDA JSON (Solo los que sobreviven al Paso 3):
+        SALIDA JSON (Solo positivos confirmados):
         {
             "duplicates": [
-                { "id": 37, "reason": "Juan P. coincide con Juan PEDRO (P=Pedro)" }
+                { "id": 249, "reason": "SAN FERNANDO L coincide con SAN FERNANDO LINCE (Comercio + Ubicación)" }
             ]
         }
         
-        NOTA: Si el maestro es 'Juan P.' y el candidato es 'Juan M.', NO LO AGREGUES.
+        NOTA IMPORTANTE: 
+        - Si uno dice "SAN FERNANDO" y el otro solo "FERNANDO", es FALSO.
+        - Si el id 155 es "FERNANDO LUIS...", recházalo porque "SAN FERNANDO" no es "FERNANDO".
 
         CANDIDATOS:
         $candidatesJson
         EOT;
     }
-
     private function markAsReviewed(int $id): void
     {
         DB::table('details')
@@ -165,24 +168,66 @@ class SmartMergeJob implements ShouldQueue
             ]);
     }
 
-    private function mergeDetails(int $masterId, int $duplicateId): void
+    private function mergeDetails(int $masterId, int $duplicateId, string $reason): void
     {
-        DB::transaction(function () use ($masterId, $duplicateId) {
-            // 1. Heredar Categoría si el maestro tiene
+        DB::transaction(function () use ($masterId, $duplicateId, $reason) {
+
+            // 1. OBTENER DATOS DEL "MÁRTIR" ANTES DE TOCAR NADA
+            // Usamos lockForUpdate para asegurar que nadie lo modifique mientras lo leemos
+            $duplicateRow = DB::table('details')->where('id', $duplicateId)->lockForUpdate()->first();
+
+            if (!$duplicateRow) return; // Ya no existe (seguridad)
+
+            $txIds = DB::table('transactions')
+                ->where('detail_id', $duplicateId)
+                ->pluck('id')
+                ->toArray();
+
+            $yapeIds = DB::table('transaction_yapes')
+                ->where('detail_id', $duplicateId)
+                ->pluck('id')
+                ->toArray();
+
+            // 2. GUARDAR EN HISTORIAL (AUDITORÍA / BACKUP)
+            DB::table('details_merge_history')->insert([
+                'original_detail_id'    => $duplicateId,
+                'target_detail_id'      => $masterId,
+                'original_data'         => json_encode($duplicateRow),
+                'moved_transaction_ids' => json_encode($txIds), // Guardamos los IDs
+                'moved_yape_ids'        => json_encode($yapeIds), // Guardamos los IDs
+                'merge_reason'          => $reason,
+                'merged_at'             => now(),
+            ]);
+
+            // 3. HERENCIA DE CATEGORÍAS (Tu lógica original mejorada)
             $masterCat = DB::table('categorization_rules')->where('detail_id', $masterId)->value('category_id');
-            $updateData = ['detail_id' => $masterId];
-            if ($masterCat) $updateData['category_id'] = $masterCat;
+          
+            $duplicateCat = DB::table('categorization_rules')->where('detail_id', $duplicateId)->value('category_id');
+            $userId = DB::table('categorization_rules')->where('detail_id', $duplicateId)->value('user_id');
+            if (!$masterCat && $duplicateCat) {
+                DB::table('categorization_rules')->insert([
+                    'detail_id' => $masterId,
+                    'category_id' => $duplicateCat,
+                    'user_id' => $userId,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
 
-            // 2. Mover data
-            DB::table('transactions')->where('detail_id', $duplicateId)->update($updateData);
+            // 4. MOVER TRANSACCIONES (Reasignar hijos)
+            DB::table('transactions')
+                ->where('detail_id', $duplicateId)
+                ->update(['detail_id' => $masterId]);
 
-            $yapeData = $updateData;
-            $yapeData['updated_at'] = now();
-            DB::table('transaction_yapes')->where('detail_id', $duplicateId)->update($yapeData);
+            DB::table('transaction_yapes')
+                ->where('detail_id', $duplicateId)
+                ->update(['detail_id' => $masterId]);
 
-            // 3. Borrar duplicado
+            // 5. BORRADO FINAL (Ahora es seguro porque tenemos backup en merge_history)
             DB::table('categorization_rules')->where('detail_id', $duplicateId)->delete();
             DB::table('details')->where('id', $duplicateId)->delete();
+
+            Log::info("🛡️ [BACKUP] ID $duplicateId guardado en merge_history antes de eliminar.");
         });
     }
 }

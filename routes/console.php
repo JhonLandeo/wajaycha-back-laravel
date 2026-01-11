@@ -13,3 +13,7 @@ Artisan::command('inspire', function () {
 Artisan::command('app:send-summary-transactions-by-day', function(){
     logger()->info('Sending summary transactions by day');
 } )->dailyAt('20:08');
+
+Artisan::command('app:send-summary-transaction-by-month', function(){
+    logger()->info('Sending summary transaction by month');
+} )->monthlyOn(1, '08:00');

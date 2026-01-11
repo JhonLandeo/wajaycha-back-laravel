@@ -44,7 +44,8 @@ class ImportController extends Controller
                 'financialEntity:id,name',
                 'paymentService:id,name',
             ])
-            ->where('user_id', $userId);
+            ->where('user_id', $userId)
+            ->orderBy('created_at', 'desc');
 
         $data = $query->paginate($perPage, ['*'], 'page', $page);
 
