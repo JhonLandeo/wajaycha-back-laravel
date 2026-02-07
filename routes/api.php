@@ -28,7 +28,6 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('monthly-data', [DashboardController::class, 'getMonthlyData']);
     Route::post('import-yape', [TransactionYapeController::class, 'import']);
     Route::post('transaction-by-category', [DashboardController::class, 'getTransactionByCategory']);
-    Route::post('import-yape-pdf', [ImportController::class, 'storeYape']);
 
     Route::resource('pareto-classification', ParetoClassificationController::class);
     Route::resource('categories', CategoryController::class);

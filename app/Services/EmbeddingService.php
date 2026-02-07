@@ -16,7 +16,7 @@ class EmbeddingService
     public function generate(string $text): ?array
     {
         try {
-            $model = Gemini::embeddingModel('models/embedding-001');
+            $model = Gemini::embeddingModel('gemini-embedding-001');
             // @phpstan-ignore-next-line
             $response = $model->embedContent($text);
 

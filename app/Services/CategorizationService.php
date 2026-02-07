@@ -5,85 +5,119 @@ namespace App\Services;
 use App\Models\Detail;
 use App\Models\KeywordRule;
 use App\Models\CategorizationRule;
+use App\Models\Category;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class CategorizationService
 {
     protected EmbeddingService $embeddingService;
-
+    const THRESHOLD_TRIGRAM = 0.4; // 0.0 a 1.0 (Más bajo = más permisivo con nombres cortados)
+    const THRESHOLD_VECTOR = 0.15;
     public function __construct(EmbeddingService $embeddingService)
     {
         $this->embeddingService = $embeddingService;
     }
 
-    public function findCategory(int $userId, Detail $detail): ?int
+    // AÑADIMOS $message como parámetro opcional
+    public function findCategory(int $userId, Detail $detail, ?string $message = null): ?int
     {
-        // --- Prioridad 1: Regla Exacta ---
+        Log::info('Mensaje para categorización: ' . ($message ?? 'Ninguno'));
+        // 1. Prioridad Absoluta: Regla Exacta Histórica (Por ID de Detalle)
         $exactRule = CategorizationRule::where('user_id', $userId)
             ->where('detail_id', $detail->id)
             ->first();
+
         if ($exactRule) {
             return $exactRule->category_id;
         }
-        // Buscar el mas semejante por descripción
-        $similarDetail = Detail::where('user_id', $userId)
-            ->where('id', '!=', $detail->id)
-            ->whereRaw('description ILIKE ?', ["%{$detail->description}%"])
-            ->whereNotNull('last_used_category_id')
-            ->first();
 
-        // Buscar la regla exacta para el detalle similar encontrado
-        if ($similarDetail) {
-            $exactSimilarRule = CategorizationRule::where('user_id', $userId)
-                ->where('detail_id', $similarDetail->id)
-                ->first();
-
-            if ($exactSimilarRule) {
-                $this->createExactRule($userId, $detail->id, $exactSimilarRule->category_id);
-                return $exactSimilarRule->category_id;
-            }
-        }
-
-        if ($similarDetail) {
-            $this->createExactRule($userId, $detail->id, $similarDetail->last_used_category_id);
-            return $similarDetail->last_used_category_id;
-        }
-
-        // --- Prioridad 2: Regla por Keyword ---
+        // Cargamos las reglas de palabras clave (cachear esto sería ideal si son muchas)
         $keywordRules = KeywordRule::where('user_id', $userId)->get();
-        $descriptionLower = strtolower($detail->description);
 
-        foreach ($keywordRules as $rule) {
-            if (str_contains($descriptionLower, strtolower($rule->keyword))) {
-                $this->createExactRule($userId, $detail->id, $rule->category_id);
-                return $rule->category_id;
+        // Si el mensaje es taxi y la categoria es tambien taxi, entonces hacemos match aunque la entidad diga "Bodega El Chino". --- IGNORE ---
+        if (!empty($message)) {
+            $categoryIdByMessage = Category::where('user_id', $userId)
+                ->where('name', 'ilike', '%' . $message . '%')
+                ->value('id');
+
+            Log::info("Buscando categoría por mensaje: '$message' -> Cat ID: " . ($categoryIdByMessage ?? 'No encontrado'));
+
+            if ($categoryIdByMessage) {
+                return $categoryIdByMessage;
             }
         }
 
-        // --- Prioridad 3: Búsqueda Vectorial ---
-        // Genera el vector para la *nueva* transacción
-        $newEmbedding = $this->embeddingService->generate($detail->description);
+        // 2. Prioridad: Búsqueda en el MENSAJE (Lo que pides)
+        // Si el mensaje dice "Taxi a casa", y tienes regla "taxi" -> Transporte.
+        if (!empty($message)) {
+            $categoryByMessage = $this->analyzeTextForKeywords($message, $keywordRules);
+            if ($categoryByMessage) {
+                Log::info("✅ [CAT] Match por MENSAJE: '$message' -> Cat ID: $categoryByMessage");
+                return $categoryByMessage;
+            }
+        }
+
+        // 3. Prioridad: Búsqueda en la DESCRIPCIÓN/ENTIDAD
+        // Si no hubo suerte en el mensaje, buscamos en "Bodega El Chino".
+        $searchString = $detail->entity_clean ?? $detail->description;
+        $categoryByEntity = $this->analyzeTextForKeywords($searchString, $keywordRules);
+        
+        if ($categoryByEntity) {
+            Log::info("✅ [CAT] Match por ENTIDAD: '$searchString' -> Cat ID: $categoryByEntity");
+            $this->createExactRule($userId, $detail->id, $categoryByEntity);
+            return $categoryByEntity;
+        }
+
+       Log::info("🤖 [CAT] Sin coincidencias de texto. Iniciando Vector Search...");
+        
+        $newEmbedding = $this->embeddingService->generate($detail->description); // Vectorizamos el texto limpio mejor
+        
         if (!$newEmbedding) {
             return null;
         }
 
         $vectorString = '[' . implode(',', $newEmbedding) . ']';
-        $result = Detail::query()
+        
+        $vectorMatch = Detail::query()
             ->select('last_used_category_id')
             ->selectRaw('(embedding <=> ?) AS distance', [$vectorString])
             ->where('user_id', $userId)
             ->whereNotNull('embedding')
             ->whereNotNull('last_used_category_id')
-            ->orderBy('distance', 'asc') // 0 es el más cercano
+            ->orderBy('distance', 'asc') // 0 es idéntico
+            ->limit(1)
             ->first();
 
-        // Decide si la similitud es "suficientemente buena"
-        // Este umbral (0.25) es algo que tendrás que "tunear".
-        // Un valor más bajo es más estricto.
-        $threshold = 0.15;
+        if ($vectorMatch && $vectorMatch->distance < self::THRESHOLD_VECTOR) {
+            Log::info("✅ [CAT] Match Vectorial encontrado. Distancia: {$vectorMatch->distance}");
+            $this->createExactRule($userId, $detail->id, $vectorMatch->last_used_category_id);
+            return $vectorMatch->last_used_category_id;
+        }
 
-        if ($result && $result->distance < $threshold) {
-            $this->createExactRule($userId, $detail->id, $result->last_used_category_id);
-            return $result->last_used_category_id;
+        Log::info("❌ [CAT] No se encontró categoría.");
+        return null;
+    }
+
+    /**
+     * Busca palabras clave dentro de un texto.
+     */
+    private function analyzeTextForKeywords(string $text, $rules): ?int
+    {
+        $text = Str::ascii(Str::lower($text)); 
+
+        foreach ($rules as $rule) {
+            $keyword = Str::ascii(Str::lower($rule->keyword));
+            
+            if (str_contains($keyword, ' ')) {
+                if (str_contains($text, $keyword)) {
+                    return $rule->category_id;
+                }
+            } else {
+                if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/', $text)) {
+                    return $rule->category_id;
+                }
+            }
         }
 
         return null;

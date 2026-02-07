@@ -7,105 +7,129 @@ use App\Models\TransactionYape;
 use App\Services\CategorizationService;
 use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Imports\HeadingRowFormatter;
 
-
 HeadingRowFormatter::default('none');
+
 class TransactionYapeImport implements ToModel, WithHeadingRow
 {
     protected int $userId;
     protected TransactionAnalyzer $transactionAnalyzer;
+    protected CategorizationService $categorizationService;
 
-    /**
-     * @param int $userId
-     */
     public function __construct(int $userId)
     {
         $this->userId = $userId;
         $this->transactionAnalyzer = app(TransactionAnalyzer::class);
+        $this->categorizationService = app(CategorizationService::class);
     }
-    /**
-     * Especificar la fila donde comienzan los encabezados
-     *
-     * @return int
-     */
+
     public function headingRow(): int
     {
-        return 5; // Empezar a leer encabezados desde la fila 5
+        return 5;
     }
 
-    /**
-     * @param array{
-     *     'Fecha de operación': string,
-     *     'Mensaje': string,
-     *     'Origen': string,
-     *     'Destino': string,
-     *     'Monto': string,
-     *     'Tipo de Transacción': string
-     * } $row
-     * @return \App\Models\TransactionYape|void
-     */
     public function model(array $row)
     {
+        // Validaciones básicas
         if (empty($row['Fecha de operación']) || empty($row['Origen']) || empty($row['Destino']) || empty($row['Monto']) || empty($row['Tipo de Transacción'])) {
-            return;
+            return null;
         }
 
+        // Parseo de Fechas
         $dateOperation = null;
-
         $dateString = $row['Fecha de operación'];
         if (Carbon::hasFormat($dateString, 'd/m/Y H:i:s')) {
             $dateOperation = Carbon::createFromFormat('d/m/Y H:i:s', $dateString)->format('Y-m-d H:i:s');
         }
 
+        // Lógica de Duplicados (Transacción)
         $toleranceInSeconds = 60;
         $startDate = Carbon::parse($dateOperation)->subSeconds($toleranceInSeconds);
         $endDate = Carbon::parse($dateOperation)->addSeconds($toleranceInSeconds);
 
+        // Determinamos quién es la contraparte
+        $isExpense = $row['Tipo de Transacción'] == 'PAGASTE';
+        $descriptionRaw = $isExpense ? $row['Destino'] : $row['Origen'];
+
+        // Verificamos si la transacción YA existe
         $yapeRecord = TransactionYape::query()
             ->from('transaction_yapes as ty')
             ->join('details as d', 'ty.detail_id', '=', 'd.id')
             ->where('message', $row['Mensaje'])
-            ->where('d.description', $row['Tipo de Transacción'] == 'PAGASTE' ? $row['Destino'] : $row['Origen'])
+            ->where('d.description', $descriptionRaw)
             ->where('amount', (float) $row['Monto'])
             ->whereBetween('date_operation', [$startDate, $endDate])
-            ->where('type_transaction', $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income')
             ->where('ty.user_id', $this->userId)
             ->first();
 
         if ($yapeRecord) {
-            return;
-        } else {
-            $typeTransaction = $row['Tipo de Transacción'] == 'PAGASTE' ? 'expense' : 'income';
-            $description = $typeTransaction == 'expense' ? $row['Destino'] : $row['Origen'];
-            $features = $this->transactionAnalyzer->analyze($description);
-            $detail = Detail::where('user_id', $this->userId)
-                ->whereRaw('LOWER(description) = ?', $features['sanitized_description'])
-                ->first();
-
-            if (!$detail) {
-                $detail = Detail::create([
-                    'user_id' => $this->userId,
-                    'description' => $description,
-                    'operation_type' => $features['type'],
-                    'entity_clean' => $features['entity']
-                ]);
-            }
-            $categorizationService = app(CategorizationService::class);
-            $categoryId = $categorizationService->findCategory($this->userId, $detail);
-            return  TransactionYape::create([
-                'message' => $row['Mensaje'],
-                'amount' => (float) $row['Monto'],
-                'date_operation' => $dateOperation,
-                'type_transaction' => $typeTransaction,
-                'user_id' => $this->userId,
-                'detail_id' => $detail->id,
-                'category_id' => $categoryId,
-            ]);
+            return null;
         }
+
+        $typeTransaction = $isExpense ? 'expense' : 'income';
+
+        // 1. Analizamos para obtener la entidad limpia
+        $features = $this->transactionAnalyzer->analyze($descriptionRaw);
+        $cleanEntity = $features['entity'];
+
+        // 2. Buscamos el detalle INTELIGENTEMENTE
+        $detail = $this->findExistingDetail($cleanEntity, $features['sanitized_description']);
+        Log::info("🔍 Buscando Detalle para Entidad Limpia: {$cleanEntity}. " . ($detail ? "Encontrado ID: {$detail->id}" : "No encontrado."));
+
+        // 3. Si no existe ni parecido, creamos uno nuevo
+        if (!$detail) {
+            $detail = Detail::create([
+                'user_id' => $this->userId,
+                'description' => $descriptionRaw,
+                'operation_type' => $features['type'],
+                'entity_clean' => $cleanEntity
+            ]);
+            Log::info("🆕 Nuevo Detalle creado: {$descriptionRaw} (Clean: {$cleanEntity})");
+        } else {
+            if (empty($detail->entity_clean)) {
+                $detail->update(['entity_clean' => $cleanEntity]);
+            }
+        }
+
+        // 4. Categorizamos (Pasando el Mensaje)
+        $messageRaw = $row['Mensaje'];
+
+        // IMPORTANTE: Pasamos el mensaje como tercer argumento
+        $categoryId = $this->categorizationService->findCategory(
+            $this->userId,
+            $detail,
+            $messageRaw
+        );
+
+        return TransactionYape::create([
+            'message' => $messageRaw,
+            'amount' => (float) $row['Monto'],
+            'date_operation' => $dateOperation,
+            'type_transaction' => $typeTransaction,
+            'user_id' => $this->userId,
+            'detail_id' => $detail->id,
+            'category_id' => $categoryId,
+        ]);
+    }
+
+    /**
+     * Busca un detalle existente usando Trigramas sobre la entidad limpia
+     */
+    private function findExistingDetail(string $cleanEntity, string $sanitizedDescription): ?Detail
+    {
+        // Umbral de similitud (ajusta según pruebas, 0.6 suele ser seguro)
+        $threshold = 0.6;
+
+        return Detail::where('user_id', $this->userId)
+            ->where(function ($query) use ($cleanEntity, $threshold) {
+                $query->where('entity_clean', $cleanEntity)
+                    ->orWhereRaw('similarity(entity_clean, ?) > ?', [$cleanEntity, $threshold]);
+            })
+            ->orderByRaw('similarity(entity_clean, ?) DESC', [$cleanEntity])
+            ->first();
     }
 }

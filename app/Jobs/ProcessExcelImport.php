@@ -15,11 +15,12 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ProcessExcelImport implements ShouldQueue
 {
-      use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected int $userId;
     protected string $filePath;
     protected int $importId;
+    public $timeout = 500;
     public function __construct(int $importId, int $userId, string $filePath)
     {
         $this->importId = $importId;

@@ -113,19 +113,6 @@ class ImportController extends Controller
         }
     }
 
-    public function storeYape(Request $request): JsonResponse
-    {
-        $request->validate(['file' => 'required|mimes:pdf']);
-        $user = Auth::user();
-        $file = $request->file('file');
-        $userName = $user->name;
-        $path = $file->store('yape_imports', 'private');
-
-        ProcessYapeImport::dispatch($user, $path, $userName);
-
-        return response()->json(['message' => 'Tu reporte de Yape está siendo procesado.'], 202);
-    }
-
     /**
      * Update the specified resource in storage.
      */
