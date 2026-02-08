@@ -39,6 +39,7 @@ class CategorizationService
         if (!empty($message)) {
             $categoryIdByMessage = Category::where('user_id', $userId)
                 ->where('name', 'ilike', '%' . $message . '%')
+                ->whereNotNull('parent_id')
                 ->value('id');
 
             Log::info("Buscando categoría por mensaje: '$message' -> Cat ID: " . ($categoryIdByMessage ?? 'No encontrado'));
