@@ -49,7 +49,7 @@ return new class extends Migration
                                 'title', 'Balance'
                             )
                         ) INTO json_result
-                        FROM mv_unified_transactions t
+                        FROM v_unified_transactions t
                         INNER JOIN details d ON t.detail_id = d.id
                         WHERE t.user_id = p_user_id
                         AND (p_year IS NULL OR EXTRACT(YEAR FROM t.date_operation) = p_year)

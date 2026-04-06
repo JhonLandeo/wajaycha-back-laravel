@@ -49,7 +49,7 @@ return new class extends Migration
                                     ELSE 0 
                                 END) AS total_spent, 
                                 mut.category_id
-                            FROM mv_unified_transactions mut 
+                            FROM v_unified_transactions mut 
                             WHERE 
                             EXTRACT (YEAR FROM mut.date_operation) = p_year AND
                             EXTRACT (MONTH FROM mut.date_operation) = p_month AND 

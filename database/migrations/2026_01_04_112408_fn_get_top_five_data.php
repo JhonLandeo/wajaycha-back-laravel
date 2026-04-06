@@ -29,7 +29,7 @@ return new class extends Migration
                             SELECT 
                                 detail_name as name, 
                                 ROUND(SUM(amount)::numeric, 2) as value
-                            FROM mv_unified_transactions
+                            FROM v_unified_transactions
                             WHERE user_id = p_user_id
                             AND type_transaction = 'income'
                             AND (p_year IS NULL OR EXTRACT(YEAR FROM date_operation) = p_year)
@@ -45,7 +45,7 @@ return new class extends Migration
                             SELECT 
                                 detail_name as name, 
                                 ROUND(SUM(amount)::numeric, 2) as value
-                            FROM mv_unified_transactions
+                            FROM v_unified_transactions
                             WHERE user_id = p_user_id
                             AND type_transaction = 'expense'
                             AND (p_year IS NULL OR EXTRACT(YEAR FROM date_operation) = p_year)

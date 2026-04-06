@@ -109,7 +109,7 @@ class DashboardController extends Controller
         END)";
 
         $query = UnifyTransactions::query()
-            ->from('mv_unified_transactions as t')
+            ->from('v_unified_transactions as t')
             ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
             ->leftJoin('categories as c', 'c.id', '=', 't.category_id')
             ->select(

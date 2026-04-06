@@ -59,6 +59,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::unprepared('DROP MATERIALIZED VIEW IF EXISTS public.mv_unified_transactions;');
+        DB::unprepared('DROP MATERIALIZED VIEW IF EXISTS public.v_unified_transactions;');
     }
 };
