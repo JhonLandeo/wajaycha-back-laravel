@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ParetoClassification\StoreParetoClassificationRequest;
+use App\Http\Requests\ParetoClassification\UpdateParetoClassificationRequest;
 use App\Models\ParetoClassification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -9,7 +11,7 @@ use Illuminate\Support\Facades\Auth;
 
 class ParetoClassificationController extends Controller
 {
-   /**
+    /**
      * Display a listing of the resource.
      */
     public function index(Request $request): JsonResponse
@@ -18,8 +20,8 @@ class ParetoClassificationController extends Controller
         $page = $request->input('page', 1);
 
         $category = ParetoClassification::where('user_id', Auth::id())
-        ->orderBy('created_at', 'desc')
-        ->paginate($perPage, ['*'], 'page', $page);
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json($category);
     }
@@ -27,13 +29,10 @@ class ParetoClassificationController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreParetoClassificationRequest $request): JsonResponse
     {
         $userId = Auth::id();
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'percentage' => 'required|numeric|between:0,100',
-        ]);
+        $validatedData = $request->validated();
         $validatedData['user_id'] = $userId;
         $data = ParetoClassification::create($validatedData);
         return response()->json($data);
@@ -60,12 +59,9 @@ class ParetoClassificationController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, ParetoClassification $pareto_classification): JsonResponse
+    public function update(UpdateParetoClassificationRequest $request, ParetoClassification $pareto_classification): JsonResponse
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'percentage' => 'required|numeric|between:0,100',
-        ]);
+        $validatedData = $request->validated();
         $data = $pareto_classification->update($validatedData);
         return response()->json($data);
     }
@@ -75,6 +71,12 @@ class ParetoClassificationController extends Controller
      */
     public function destroy(ParetoClassification $pareto_classification): JsonResponse
     {
+        if ($pareto_classification->categories()->exists()) {
+            return response()->json([
+                'message' => 'No se puede eliminar porque ya se está haciendo uso de estos.',
+            ], 422);
+        }
+
         $data = $pareto_classification->delete();
         return response()->json($data);
     }

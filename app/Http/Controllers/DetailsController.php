@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Detail\UpdateDetailRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Details;
@@ -32,9 +33,9 @@ class DetailsController extends Controller
         return response()->json($paginate);
     }
 
-    public function update(Request $request, Detail $detail): JsonResponse
+    public function update(UpdateDetailRequest $request, Detail $detail): JsonResponse
     {
-        $data = $detail->update($request->all());
+        $data = $detail->update($request->validated());
         return response()->json($data);
     }
 }

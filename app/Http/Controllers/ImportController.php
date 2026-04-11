@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Import\UpdateImportRequest;
 use App\Http\Requests\PdfRequest;
 use App\Jobs\ProcessPdfImport;
 use App\Jobs\ProcessYapeImport;
@@ -116,9 +117,9 @@ class ImportController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Import $import): JsonResponse
+    public function update(UpdateImportRequest $request, Import $import): JsonResponse
     {
-        $data = $import->update($request->all());
+        $data = $import->update($request->validated());
         return response()->json($data);
     }
 

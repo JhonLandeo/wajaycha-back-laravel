@@ -5,12 +5,13 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Jobs\ProcessWhatsAppMessage;
 use App\Jobs\ProcessWhatsAppImage;
+use Illuminate\Http\Response;
 
 class WhatsAppController extends Controller
 {
-    public function verify(Request $request)
+    public function verify(Request $request): Response
     {
-        $verifyToken = env('WHATSAPP_VERIFY_TOKEN', 'mi_secreto_yape_123');
+        $verifyToken = config('services.whatsapp.verify_token');
         $mode = $request->query('hub_mode');
         $token = $request->query('hub_verify_token');
         $challenge = $request->query('hub_challenge');
@@ -22,7 +23,7 @@ class WhatsAppController extends Controller
         return response('Forbidden', 403);
     }
 
-    public function receive(Request $request)
+    public function receive(Request $request): Response
     {
         $body = $request->all();
 

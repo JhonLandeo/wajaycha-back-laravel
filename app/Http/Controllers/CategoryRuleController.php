@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CategoryRule\SyncRuleRequest;
 use App\Models\Category;
 use App\Models\Detail;
 use App\Models\CategorizationRule;
@@ -63,12 +64,9 @@ class CategoryRuleController extends Controller
         return response()->json($suggestions);
     }
 
-    public function syncRule(Request $request, Category $category, CategorizationService $categorizationService): JsonResponse
+    public function syncRule(SyncRuleRequest $request, Category $category, CategorizationService $categorizationService): JsonResponse
     {
         $userId = Auth::id();
-        $request->validate([
-            'detail_id' => 'required|integer|exists:details,id',
-        ]);
         $detailIdToSync = $request->input('detail_id');
         $categorizationService->createExactRule($userId, $detailIdToSync, $category->id);
         $detail = Detail::find($detailIdToSync);

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Category\StoreCategoryRequest;
+use App\Http\Requests\Category\UpdateCategoryRequest;
 use App\Models\Category;
 
 use Illuminate\Http\JsonResponse;
@@ -64,15 +66,10 @@ class CategoryController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreCategoryRequest $request): JsonResponse
     {
         $userId = Auth::id();
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'pareto_classification_id' => 'required|exists:pareto_classifications,id',
-            'monthly_budget' => 'required|numeric|min:0',
-            'type' => 'required|in:income,expense',
-        ]);
+        $validatedData = $request->validated();
         $validatedData['user_id'] = $userId;
         $categories = Category::create($validatedData);
         return response()->json($categories, 201);
@@ -81,14 +78,9 @@ class CategoryController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Category $category): JsonResponse
+    public function update(UpdateCategoryRequest $request, Category $category): JsonResponse
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'pareto_classification_id' => 'required|exists:pareto_classifications,id',
-            'monthly_budget' => 'required|numeric|min:0',
-            'type' => 'required|in:income,expense',
-        ]);
+        $validatedData = $request->validated();
         $category->update($validatedData);
         return response()->json($category);
     }

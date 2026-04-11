@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\TransactionsExport;
+use App\Http\Requests\Transaction\UpdateTransactionRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
@@ -129,12 +130,8 @@ class TransactionsController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, CategorizationService $categorizationService, ClassificationService $classifier): JsonResponse
+    public function update(UpdateTransactionRequest $request, CategorizationService $categorizationService, ClassificationService $classifier): JsonResponse
     {
-        $request->validate([
-            'category_id' => 'required|integer|exists:categories,id',
-            'is_frequent' => 'required|boolean',
-        ]);
 
         $newCategoryId = (int)$request->category_id;
 

@@ -3,15 +3,15 @@
 namespace App\Services;
 
 use Aws\Textract\TextractClient;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 class OcrService
 {
-    protected $client;
+    protected TextractClient $client;
 
     public function __construct()
     {
-        // El cliente lee automáticamente las llaves de tu archivo .env
         $this->client = new TextractClient([
             'region'  => config('services.aws.region', 'us-east-1'),
             'version' => 'latest',
@@ -25,7 +25,7 @@ class OcrService
     /**
      * Envía la imagen a AWS Textract y devuelve el texto plano.
      */
-    public function getTextFromImage($imageBytes)
+    public function getTextFromImage(string $imageBytes): string|null
     {
         try {
             $result = $this->client->analyzeDocument([

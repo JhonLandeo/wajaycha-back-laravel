@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Log;
 
 class WhatsAppNotificationService
 {
-    public function sendTextMessage($phoneNumber, $text)
+    public function sendTextMessage(string $phoneNumber, string $text): void
     {
         $token = config('services.whatsapp.access_token');
         $phoneId = config('services.whatsapp.phone_id');

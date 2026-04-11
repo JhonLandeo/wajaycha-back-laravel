@@ -15,10 +15,10 @@ class ProcessWhatsAppMessage implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $text;
-    protected $from;
+    protected string $text;
+    protected string $from;
 
-    public function __construct($text, $from)
+    public function __construct(string $text, string $from)
     {
         $this->text = $text;
         $this->from = $from;

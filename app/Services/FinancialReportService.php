@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class FinancialReportService
@@ -9,10 +10,8 @@ class FinancialReportService
     /**
      * Calcula la desviación presupuestaria por categoría para un mes/año específico.
      */
-    public function getBudgetDeviation(int $userId, int $month, int $year)
+    public function getBudgetDeviation(int $userId, int $month, int $year): Collection
     {
-        // Esta consulta compara lo que presupuestaste (en tu tabla de categorías)
-        // contra lo que realmente gastaste (en tu vista unificada).
         return DB::table('categories as c')
             ->select([
                 'c.name as category',

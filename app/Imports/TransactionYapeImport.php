@@ -119,7 +119,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
     /**
      * Busca un detalle existente usando Trigramas sobre la entidad limpia
      */
-    private function findExistingDetail(string $cleanEntity, string $sanitizedDescription): ?Detail
+    private function findExistingDetail(string $cleanEntity): ?Detail
     {
         // Umbral de similitud (ajusta según pruebas, 0.6 suele ser seguro)
         $threshold = 0.6;
