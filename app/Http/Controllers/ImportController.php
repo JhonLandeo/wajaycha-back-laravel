@@ -50,7 +50,7 @@ class ImportController extends Controller
 
         $data = $query->paginate($perPage, ['*'], 'page', $page);
 
-        $data->getCollection()->transform(function ($item) {
+        $data = $data->through(function (Import $item) {
             return [
                 'id' => $item->id,
                 'name' => $item->name,

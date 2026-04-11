@@ -13,10 +13,14 @@ class NotificationSummaryByMonth extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
+    /** @var \Illuminate\Support\Collection<int, mixed> */
     public $budgetDeviation;
     public string $monthName;
 
-    public function __construct($budgetDeviation, $monthName)
+    /**
+     * @param \Illuminate\Support\Collection<int, mixed> $budgetDeviation
+     */
+    public function __construct(\Illuminate\Support\Collection $budgetDeviation, string $monthName)
     {
         $this->budgetDeviation = $budgetDeviation;
         $this->monthName = ucfirst($monthName);

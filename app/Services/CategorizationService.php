@@ -103,7 +103,10 @@ class CategorizationService
     /**
      * Busca palabras clave dentro de un texto.
      */
-    private function analyzeTextForKeywords(string $text, $rules): ?int
+    /**
+     * @param \Illuminate\Support\Collection<int, KeywordRule> $rules
+     */
+    private function analyzeTextForKeywords(string $text, \Illuminate\Support\Collection $rules): ?int
     {
         $text = Str::ascii(Str::lower($text));
 

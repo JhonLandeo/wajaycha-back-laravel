@@ -36,7 +36,6 @@ class TransactionYapeController extends Controller
             $import->extension = $extension;
             $import->path = $storedPath;
             $import->mime = $mime;
-            $import->url = null;
             $import->size = $size;
             $import->user_id = $userId;
             $import->payment_service_id = self::PAYMENT_SERVICE_YAPE_ID;

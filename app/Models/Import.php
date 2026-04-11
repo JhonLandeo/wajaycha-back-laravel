@@ -7,6 +7,23 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * @property int $id
+ * @property string $name
+ * @property string $extension
+ * @property string $path
+ * @property string $mime
+ * @property int $size
+ * @property int $user_id
+ * @property int|null $payment_service_id
+ * @property int|null $financial_entity_id
+ * @property string $status
+ * @property-read string|null $financial_entity_name
+ * @property-read string|null $payment_service_name
+ * @property-read string $url
+ * @property-read FinancialEntity|null $financialEntity
+ * @property-read PaymentService|null $paymentService
+ */
 class Import extends Model
 {
     protected $fillable = [
@@ -37,17 +54,21 @@ class Import extends Model
         'url'
     ];
 
-    public function getFinancialEntityNameAttribute()
+    public function getFinancialEntityNameAttribute(): ?string
     {
-        return $this->financialEntity?->name;
+        /** @var FinancialEntity|null $entity */
+        $entity = $this->financialEntity;
+        return $entity?->name;
     }
 
-    public function getPaymentServiceNameAttribute()
+    public function getPaymentServiceNameAttribute(): ?string
     {
-        return $this->paymentService?->name;
+        /** @var PaymentService|null $service */
+        $service = $this->paymentService;
+        return $service?->name;
     }
 
-    public function getUrlAttribute()
+    public function getUrlAttribute(): string
     {
         return Storage::url('files/' . $this->name);
     }

@@ -24,9 +24,9 @@ class ProcessWhatsAppMessage implements ShouldQueue
         $this->from = $from;
     }
 
-    public function handle()
+    public function handle(): void
     {
-        $apiKey = env('GEMINI_API_KEY');
+        $apiKey = config('services.gemini.api_key');
         $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}";
 
         $systemPrompt = 'Eres un asistente financiero experto... (Tu prompt aquí)';

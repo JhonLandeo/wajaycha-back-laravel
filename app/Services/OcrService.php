@@ -35,8 +35,11 @@ class OcrService
                 'FeatureTypes' => ['FORMS'], // Esto ayuda a detectar pares clave-valor
             ]);
 
+            /** @var array<int, array<string, mixed>> $blocks */
+            $blocks = $result['Blocks'];
+
             // Unimos todas las líneas de texto detectadas en un solo bloque
-            $rawText = collect($result['Blocks'])
+            $rawText = collect($blocks)
                 ->where('BlockType', 'LINE')
                 ->pluck('Text')
                 ->implode("\n");

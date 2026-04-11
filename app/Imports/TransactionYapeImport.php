@@ -32,6 +32,9 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         return 5;
     }
 
+    /**
+     * @param array<string, mixed> $row
+     */
     public function model(array $row)
     {
         // Validaciones básicas
@@ -77,7 +80,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         $cleanEntity = $features['entity'];
 
         // 2. Buscamos el detalle INTELIGENTEMENTE
-        $detail = $this->findExistingDetail($cleanEntity, $features['sanitized_description']);
+        $detail = $this->findExistingDetail($cleanEntity);
         Log::info("🔍 Buscando Detalle para Entidad Limpia: {$cleanEntity}. " . ($detail ? "Encontrado ID: {$detail->id}" : "No encontrado."));
 
         // 3. Si no existe ni parecido, creamos uno nuevo

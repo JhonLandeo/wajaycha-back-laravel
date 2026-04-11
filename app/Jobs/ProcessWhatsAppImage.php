@@ -21,16 +21,16 @@ class ProcessWhatsAppImage implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $imageId;
-    protected $from;
+    protected string $imageId;
+    protected string $from;
 
-    public function __construct($imageId, $from)
+    public function __construct(string $imageId, string $from)
     {
         $this->imageId = $imageId;
         $this->from = $from; // Este es el número de WhatsApp
     }
 
-    public function handle(OcrService $ocrService, TransactionAnalyzer $transactionAnalyzer, CategorizationService $categorizationService)
+    public function handle(OcrService $ocrService, TransactionAnalyzer $transactionAnalyzer, CategorizationService $categorizationService): void
     {
         // ---------------------------------------------------------
         // 0. IDENTIFICAR AL USUARIO
@@ -71,7 +71,7 @@ class ProcessWhatsAppImage implements ShouldQueue
         // ---------------------------------------------------------
         // 3. ESTRUCTURAR CON GEMINI AI
         // ---------------------------------------------------------
-        $geminiKey = env('GEMINI_API_KEY');
+        $geminiKey = config('services.gemini.api_key');
         $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$geminiKey}";
 
         // Ajusté el prompt para que extraiga fechas en formato compatible con Carbon
@@ -166,7 +166,7 @@ class ProcessWhatsAppImage implements ShouldQueue
     /**
      * Busca un detalle existente usando Trigramas sobre la entidad limpia (Igual que en Excel)
      */
-    private function findExistingDetail(int $userId, string $cleanEntity)
+    private function findExistingDetail(int $userId, string $cleanEntity): ?Detail
     {
         $threshold = 0.6;
 

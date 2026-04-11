@@ -52,4 +52,7 @@ return [
         'webhook_url' => env('WHATSAPP_WEBHOOK_URL'),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+    ],
 ];
