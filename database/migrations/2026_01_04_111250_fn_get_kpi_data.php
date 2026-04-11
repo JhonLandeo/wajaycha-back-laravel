@@ -24,12 +24,12 @@ return new class extends Migration
                     BEGIN
                         SELECT json_build_object(
                             'avg_daily_income', json_build_object(
-                                'amount', ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END)::numeric, 2),
+                                'amount', COALESCE(ROUND(AVG(CASE WHEN type_transaction = 'income' THEN amount ELSE 0 END)::numeric, 2),0),
                                 'title', 'AVG Ingreso diario',
                                 'type', 'income'
                             ),
                             'avg_daily_expense', json_build_object(
-                                'amount', ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END)::numeric, 2),
+                                'amount', COALESCE(ROUND(AVG(CASE WHEN type_transaction = 'expense' THEN amount ELSE 0 END)::numeric, 2),0),
                                 'title', 'AVG Gasto diario',
                                 'type', 'expense'
                             ),

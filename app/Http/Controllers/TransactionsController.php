@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\TransactionsExport;
+use App\Http\Requests\Transaction\StoreTransactionRequest;
 use App\Http\Requests\Transaction\UpdateTransactionRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
-use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\TransactionTag;
 use App\Models\TransactionYape;
@@ -17,9 +16,6 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Js;
-use Maatwebsite\Excel\Facades\Excel;
 
 class TransactionsController extends Controller
 {
@@ -80,6 +76,15 @@ class TransactionsController extends Controller
         );
 
         return response()->json($paginator);
+    }
+
+    public function store(StoreTransactionRequest $request): JsonResponse
+    {
+        $userId = Auth::id();
+        $validatedData = $request->validated();
+        $validatedData['user_id'] = $userId;
+        $data = Transaction::create($validatedData);
+        return response()->json($data);
     }
 
     public function getSummaryByCategory(Request $request): JsonResponse

@@ -8,6 +8,7 @@ use App\Models\ParetoClassification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class ParetoClassificationController extends Controller
 {
@@ -32,6 +33,7 @@ class ParetoClassificationController extends Controller
     public function store(StoreParetoClassificationRequest $request): JsonResponse
     {
         $userId = Auth::id();
+        Log::info('User ID: ' . $userId);
         $validatedData = $request->validated();
         $validatedData['user_id'] = $userId;
         $data = ParetoClassification::create($validatedData);
