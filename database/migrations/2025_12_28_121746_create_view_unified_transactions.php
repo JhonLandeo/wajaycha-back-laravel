@@ -12,7 +12,6 @@ return new class extends Migration
      */
     public function up(): void
     {
-        $this->down();
         $sql = <<<SQL
                     CREATE VIEW public.v_unified_transactions AS 
                     WITH transactions_base AS (
@@ -59,6 +58,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::unprepared('DROP MATERIALIZED VIEW IF EXISTS public.v_unified_transactions;');
+        DB::unprepared('DROP VIEW IF EXISTS public.v_unified_transactions;');
     }
 };

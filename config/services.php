@@ -37,6 +37,19 @@ return [
     'openai' => [
         'api_key' => env('OPENAI_KEY'),
         'api_url' => env('OPENAI_API_URL')
-    ]
+    ],
+    'aws' => [
+        'key' => env('AWS_ACCESS_KEY_ID'),
+        'secret' => env('AWS_SECRET_ACCESS_KEY'),
+        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+    ],
+    'whatsapp' => [
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'api_url' => env('WHATSAPP_API_URL'),
+        'version' => env('WHATSAPP_API_VERSION'),
+        'phone_id' => env('WHATSAPP_PHONE_ID'),
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+        'webhook_url' => env('WHATSAPP_WEBHOOK_URL'),
+    ],
 
 ];
