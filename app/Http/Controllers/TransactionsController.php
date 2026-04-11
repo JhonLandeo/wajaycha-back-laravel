@@ -89,13 +89,10 @@ class TransactionsController extends Controller
     public function store(StoreTransactionRequest $request): JsonResponse
     {
         $userId = Auth::id();
-        Log::info('Store Transaction Request:', $request->all());
-
         $validatedData = $request->validated();
         $validatedData['user_id'] = $userId;
 
         if (empty($request->detail_id) && $request->filled('detail_description')) {
-            Log::info('Creating new detail in store:', ['description' => $request->detail_description]);
             $detail = Detail::firstOrCreate([
                 'user_id' => $userId,
                 'description' => $request->detail_description
@@ -159,13 +156,11 @@ class TransactionsController extends Controller
     public function update(UpdateTransactionRequest $request, CategorizationService $categorizationService, ClassificationService $classifier): JsonResponse
     {
         $userId = Auth::id();
-        Log::info('Update Transaction Request:', $request->all());
         $transaction = Transaction::findOrFail($request->transaction_id ?? $request->route('transaction'));
 
         $validatedData = $request->validated();
 
         if (empty($request->detail_id) && $request->filled('detail_description')) {
-            Log::info('Creating new detail in update:', ['description' => $request->detail_description]);
             $detail = Detail::firstOrCreate([
                 'user_id' => $userId,
                 'description' => $request->detail_description

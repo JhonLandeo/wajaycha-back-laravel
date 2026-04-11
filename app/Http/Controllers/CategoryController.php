@@ -90,6 +90,11 @@ class CategoryController extends Controller
      */
     public function destroy(Category $category): JsonResponse
     {
+        if ($category->transactions()->exists()) {
+            return response()->json([
+                'message' => 'No se puede eliminar la categoría porque tiene transacciones asociadas'
+            ], 422);
+        }
         $data = $category->delete();
         return response()->json($data);
     }

@@ -26,4 +26,9 @@ class Category extends Model
     {
         return $this->hasMany(CategorizationRule::class);
     }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(Transaction::class);
+    }
 }
