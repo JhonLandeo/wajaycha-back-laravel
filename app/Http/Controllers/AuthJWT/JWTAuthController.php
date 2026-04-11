@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\AuthJWT;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\Category;
 use App\Models\ParetoClassification;
 use App\Models\User;
@@ -20,14 +22,9 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 class JWTAuthController extends Controller
 {
     // User registration
-    public function register(Request $request): JsonResponse
+    public function register(RegisterRequest $request): JsonResponse
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'last_name' => 'required|string|max:255',
-            'password' => 'required|string|min:6|confirmed',
-        ]);
+        $validatedData = $request->validated();
 
         $user = User::create([
             'name' => $validatedData['name'],
@@ -82,9 +79,9 @@ class JWTAuthController extends Controller
     }
 
     // User login
-    public function login(Request $request): JsonResponse
+    public function login(LoginRequest $request): JsonResponse
     {
-        $credentials = $request->only('email', 'password');
+        $credentials = $request->validated();
 
         try {
             // Intenta generar el token JWT
