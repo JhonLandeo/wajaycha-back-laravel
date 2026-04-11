@@ -27,6 +27,7 @@ class StoreTransactionRequest extends FormRequest
             'type_transaction' => 'required|string|in:expense,income',
             'category_id' => 'nullable|integer|exists:categories,id',
             'detail_id' => 'nullable|integer|exists:details,id',
+            'detail_description' => 'nullable|string|max:255',
             'yape_id' => 'nullable|integer|exists:transaction_yapes,id',
         ];
     }

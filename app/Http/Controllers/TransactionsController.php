@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Transaction\StoreTransactionRequest;
 use App\Http\Requests\Transaction\UpdateTransactionRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
+use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\TransactionTag;
 use App\Models\TransactionYape;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class TransactionsController extends Controller
 {
@@ -78,11 +80,30 @@ class TransactionsController extends Controller
         return response()->json($paginator);
     }
 
+    public function show(Transaction $transaction): JsonResponse
+    {
+        $transaction->load('detail');
+        return response()->json($transaction);
+    }
+
     public function store(StoreTransactionRequest $request): JsonResponse
     {
         $userId = Auth::id();
+        Log::info('Store Transaction Request:', $request->all());
+
         $validatedData = $request->validated();
         $validatedData['user_id'] = $userId;
+
+        if (empty($request->detail_id) && $request->filled('detail_description')) {
+            Log::info('Creating new detail in store:', ['description' => $request->detail_description]);
+            $detail = Detail::firstOrCreate([
+                'user_id' => $userId,
+                'description' => $request->detail_description
+            ]);
+            $validatedData['detail_id'] = $detail->id;
+            GenerateEmbeddingForDetail::dispatch($detail, $request->category_id);
+        }
+
         $data = Transaction::create($validatedData);
         return response()->json($data);
     }
@@ -137,6 +158,30 @@ class TransactionsController extends Controller
      */
     public function update(UpdateTransactionRequest $request, CategorizationService $categorizationService, ClassificationService $classifier): JsonResponse
     {
+        $userId = Auth::id();
+        Log::info('Update Transaction Request:', $request->all());
+        $transaction = Transaction::findOrFail($request->transaction_id ?? $request->route('transaction'));
+
+        $validatedData = $request->validated();
+
+        if (empty($request->detail_id) && $request->filled('detail_description')) {
+            Log::info('Creating new detail in update:', ['description' => $request->detail_description]);
+            $detail = Detail::firstOrCreate([
+                'user_id' => $userId,
+                'description' => $request->detail_description
+            ]);
+            $validatedData['detail_id'] = $detail->id;
+            GenerateEmbeddingForDetail::dispatch($detail, $request->category_id);
+        }
+
+        // Update basic fields
+        $transaction->update([
+            'amount' => $validatedData['amount'] ?? $transaction->amount,
+            'date_operation' => $validatedData['date_operation'] ?? $transaction->date_operation,
+            'type_transaction' => $validatedData['type_transaction'] ?? $transaction->type_transaction,
+            'detail_id' => $validatedData['detail_id'] ?? $transaction->detail_id,
+            'category_id' => $validatedData['category_id'] ?? $transaction->category_id,
+        ]);
 
         $newCategoryId = (int)$request->category_id;
 

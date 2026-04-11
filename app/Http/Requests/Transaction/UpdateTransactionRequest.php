@@ -17,7 +17,12 @@ class UpdateTransactionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'category_id' => 'required|integer|exists:categories,id',
+            'amount' => 'required|numeric',
+            'date_operation' => 'required|date',
+            'type_transaction' => 'required|string|in:expense,income',
+            'category_id' => 'nullable|integer|exists:categories,id',
+            'detail_id' => 'nullable|integer|exists:details,id',
+            'detail_description' => 'nullable|string|max:255',
             'is_frequent' => 'required|boolean',
         ];
     }

@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Detail\StoreDetailRequest;
 use App\Http\Requests\Detail\UpdateDetailRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
-use App\Models\Details;
 use App\Models\Transaction;
 use App\Models\TransactionYape;
 use Carbon\Carbon;
@@ -31,6 +31,15 @@ class DetailsController extends Controller
         $paginate = new LengthAwarePaginator($data, $total ?? 0, $perPage, $page);
 
         return response()->json($paginate);
+    }
+
+    public function store(StoreDetailRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+        $data['user_id'] = auth()->id();
+        $detail = Detail::create($data);
+        GenerateEmbeddingForDetail::dispatch($detail, $request->last_used_category_id);
+        return response()->json($detail);
     }
 
     public function update(UpdateDetailRequest $request, Detail $detail): JsonResponse
