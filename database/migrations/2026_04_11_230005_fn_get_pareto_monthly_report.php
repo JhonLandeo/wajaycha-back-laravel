@@ -25,6 +25,7 @@ return new class extends Migration
                             id bigint,
                             name text,
                             percentage numeric,
+                            actual_percentage numeric,
                             monthly_budget numeric,
                             spent numeric,
                             available_budget numeric,
@@ -41,6 +42,7 @@ return new class extends Migration
                         v_offset INT;
                         v_total_income NUMERIC;
                         v_total_expense NUMERIC;
+                        v_total_budget_all NUMERIC;
                     BEGIN
 
                         v_offset := (p_page - 1) * p_per_page;
@@ -54,6 +56,12 @@ return new class extends Migration
                         WHERE mut.user_id = p_user_id
                         AND (p_year IS NULL OR EXTRACT(YEAR FROM mut.date_operation) = p_year)
                         AND (p_month IS NULL OR EXTRACT(MONTH FROM mut.date_operation) = p_month);
+
+                        -- Calculate total budget for all classifications to get relative weight
+                        SELECT SUM(c.monthly_budget) INTO v_total_budget_all
+                        FROM categories c
+                        WHERE c.user_id = p_user_id
+                        AND (c.parent_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM categories c2 WHERE c2.parent_id = c.id));
 
                         RETURN QUERY
                         WITH transaction_montly_by_category AS (
@@ -99,6 +107,10 @@ return new class extends Migration
                             ps.id,
                             ps.name::TEXT,
                             ps.percentage::NUMERIC,
+                            CASE 
+                                WHEN COALESCE(v_total_budget_all, 0) = 0 THEN 0
+                                ELSE ROUND((ps.total_monthly_budget * 100.0) / v_total_budget_all, 2)
+                            END::NUMERIC AS actual_percentage,
                             ps.total_monthly_budget::NUMERIC,
                             ps.total_spent::NUMERIC,
                             (ps.total_monthly_budget - ps.total_spent)::NUMERIC AS available_budget,
