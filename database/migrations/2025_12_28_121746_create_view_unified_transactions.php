@@ -12,6 +12,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        $this->down();
         $sql = <<<SQL
                     CREATE VIEW public.v_unified_transactions AS 
                     WITH transactions_base AS (
