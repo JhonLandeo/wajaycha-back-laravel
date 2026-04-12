@@ -40,6 +40,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::resource('tags', TagsController::class);
 
     Route::get('all-categories', [CategoryController::class, 'all']);
+    Route::get('all-pareto-classification', [ParetoClassificationController::class, 'all']);
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
     Route::get('get-summary-by-category', [TransactionsController::class, 'getSummaryByCategory']);
 

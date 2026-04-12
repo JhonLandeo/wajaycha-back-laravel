@@ -8,6 +8,7 @@ use App\Models\ParetoClassification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ParetoClassificationController extends Controller
@@ -19,12 +20,42 @@ class ParetoClassificationController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
+        $month = $request->input('month', now()->month);
+        $year = $request->input('year', now()->year);
+        $userId = Auth::id();
 
-        $category = ParetoClassification::where('user_id', Auth::id())
-            ->orderBy('created_at', 'desc')
-            ->paginate($perPage, ['*'], 'page', $page);
+        $result = DB::select('SELECT * FROM get_pareto_monthly_report(?, ?, ?, ?, ?)', [
+            $userId,
+            $month,
+            $year,
+            $page,
+            $perPage
+        ]);
 
-        return response()->json($category);
+        $total = count($result) > 0 ? $result[0]->total_records : 0;
+
+        foreach ($result as $row) {
+            $row->category_names = json_decode($row->category_names);
+        }
+
+        $paginator = new \Illuminate\Pagination\LengthAwarePaginator(
+            $result,
+            $total,
+            $perPage,
+            $page
+        );
+
+        return response()->json($paginator);
+    }
+
+    /**
+     * Display a listing of all resources.
+     */
+    public function all(): JsonResponse
+    {
+        $userId = Auth::id();
+        $data = ParetoClassification::where('user_id', $userId)->get();
+        return response()->json($data);
     }
 
     /**
