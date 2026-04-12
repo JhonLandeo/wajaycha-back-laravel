@@ -68,7 +68,6 @@ class JWTAuthController extends Controller
         return response()->json(compact('user'));
     }
 
-    // User logout
     public function logout(): JsonResponse
     {
         try {

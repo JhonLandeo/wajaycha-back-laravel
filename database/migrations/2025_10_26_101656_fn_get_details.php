@@ -14,7 +14,7 @@ return new class extends Migration
     {
         $this->down();
         $sql = <<<SQL
-                CREATE OR REPLACE FUNCTION get_details(p_per_page integer, p_page integer)
+                CREATE OR REPLACE FUNCTION get_details(p_per_page integer, p_page integer, p_user_id integer)
                 RETURNS TABLE(id bigint, name character varying, created_at timestamp without time zone, category_name character varying, total_count bigint)
                 LANGUAGE plpgsql
                 AS $$
@@ -35,6 +35,7 @@ return new class extends Migration
                                 ROW_NUMBER() OVER(PARTITION BY t.detail_id ORDER BY COUNT(*) DESC) as rn
                             FROM transactions t
                             JOIN categories c ON c.id = t.category_id
+                            WHERE t.user_id = p_user_id
                             GROUP BY t.detail_id, c.name
                         ) ranked_categories
                         WHERE rn = 1
@@ -50,8 +51,10 @@ return new class extends Migration
                     CROSS JOIN (
                         SELECT COUNT(DISTINCT t.detail_id) AS total_count
                         FROM transactions t
+                        WHERE t.user_id = p_user_id
                     ) AS tc
-                    WHERE EXISTS (SELECT 1 FROM transactions t WHERE t.detail_id = d.id)
+                    WHERE d.user_id = p_user_id
+                    AND EXISTS (SELECT 1 FROM transactions t WHERE t.detail_id = d.id AND t.user_id = p_user_id)
                     ORDER BY
                         CASE WHEN dpc.category_name IS NOT NULL THEN 0 ELSE 1 END,
                         d.id
@@ -71,6 +74,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::unprepared('DROP FUNCTION IF EXISTS get_details(integer, integer);');
+        DB::unprepared('DROP FUNCTION IF EXISTS get_details(integer, integer, integer);');
     }
 };

@@ -139,9 +139,7 @@ class TransactionsController extends Controller
             $query->where('t.type_transaction', $type);
         }
 
-        if ($userId) {
-            $query->where('t.user_id', $userId);
-        }
+        $query->where('transactions.user_id', $userId);
 
         $results = $query->groupBy('sc.name')
             ->orderBy(DB::raw('total'), 'desc')
