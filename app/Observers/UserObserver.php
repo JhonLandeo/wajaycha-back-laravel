@@ -18,8 +18,6 @@ class UserObserver implements ShouldHandleEventsAfterCommit
     public function created(User $user): void
     {
         $defaultParetoClassifications = [
-            // === CATEGORÍAS DE PRESUPUESTO (Suman 100%) ===
-
             // 1. NECESIDADES (Total 50%)
             // Gastos fijos obligatorios (alquiler, préstamos, internet, seguros)
             ['name' => 'Fijos', 'percentage' => 35, 'user_id' => $user->id, 'created_at' => now(), 'updated_at' => now()],
@@ -47,6 +45,7 @@ class UserObserver implements ShouldHandleEventsAfterCommit
             ['name' => 'Ingreso Fijo', 'percentage' => 0, 'user_id' => $user->id, 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Ingreso Variable', 'percentage' => 0, 'user_id' => $user->id, 'created_at' => now(), 'updated_at' => now()],
         ];
+        Log::info('Default Pareto Classifications: ' . json_encode($defaultParetoClassifications));
         ParetoClassification::insert($defaultParetoClassifications);
 
         $pareto = ParetoClassification::where('user_id', $user->id)->pluck('id', 'name')->toArray();
@@ -244,8 +243,10 @@ class UserObserver implements ShouldHandleEventsAfterCommit
             ];
         }
 
-        // Inserta todos los tags en una sola consulta
-        Tag::insert($tagsToInsert);
+        // Inserta todos los tags en una sola consulta si el usuario no tiene ninguno
+        if ($user->tags()->count() === 0) {
+            Tag::insert($tagsToInsert);
+        }
     }
 
     /**

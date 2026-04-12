@@ -33,7 +33,6 @@ class ParetoClassificationController extends Controller
     public function store(StoreParetoClassificationRequest $request): JsonResponse
     {
         $userId = Auth::id();
-        Log::info('User ID: ' . $userId);
         $validatedData = $request->validated();
         $validatedData['user_id'] = $userId;
         $data = ParetoClassification::create($validatedData);
