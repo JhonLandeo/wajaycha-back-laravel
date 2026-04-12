@@ -52,8 +52,8 @@ return new class extends Migration
                         INTO v_total_income, v_total_expense
                         FROM v_unified_transactions mut
                         WHERE mut.user_id = p_user_id
-                        AND EXTRACT(YEAR FROM mut.date_operation) = p_year
-                        AND EXTRACT(MONTH FROM mut.date_operation) = p_month;
+                        AND (p_year IS NULL OR EXTRACT(YEAR FROM mut.date_operation) = p_year)
+                        AND (p_month IS NULL OR EXTRACT(MONTH FROM mut.date_operation) = p_month);
 
                         RETURN QUERY
                         WITH transaction_montly_by_category AS (
@@ -66,8 +66,8 @@ return new class extends Migration
                                 mut.category_id
                             FROM v_unified_transactions mut 
                             WHERE 
-                            EXTRACT (YEAR FROM mut.date_operation) = p_year AND
-                            EXTRACT (MONTH FROM mut.date_operation) = p_month AND 
+                            (p_year IS NULL OR EXTRACT (YEAR FROM mut.date_operation) = p_year) AND
+                            (p_month IS NULL OR EXTRACT (MONTH FROM mut.date_operation) = p_month) AND 
                             mut.user_id = p_user_id
                             GROUP BY mut.category_id
                         ), 
@@ -111,7 +111,7 @@ return new class extends Migration
                             COALESCE(v_total_expense, 0)::NUMERIC AS total_expense,
                             COUNT(*) OVER()::BIGINT AS total_records
                         FROM pareto_summaries ps
-                        ORDER BY percentage_spent DESC, total_monthly_budget DESC
+                        ORDER BY id
                         LIMIT p_per_page
                         OFFSET v_offset;
 

@@ -20,8 +20,8 @@ class ParetoClassificationController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $page = $request->input('page', 1);
-        $month = $request->input('month', now()->month);
-        $year = $request->input('year', now()->year);
+        $month = $request->input('month');
+        $year = $request->input('year');
         $userId = Auth::id();
 
         $result = DB::select('SELECT * FROM get_pareto_monthly_report(?, ?, ?, ?, ?)', [
@@ -111,5 +111,15 @@ class ParetoClassificationController extends Controller
 
         $data = $pareto_classification->delete();
         return response()->json($data);
+    }
+
+    public function categories(ParetoClassification $pareto_classification): JsonResponse
+    {
+        $categories = $pareto_classification->categories()
+            ->withCount('categorizationRules')
+            ->orderBy('categorization_rules_count', 'desc')
+            ->get();
+
+        return response()->json($categories);
     }
 }

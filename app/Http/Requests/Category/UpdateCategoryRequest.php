@@ -18,9 +18,9 @@ class UpdateCategoryRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'pareto_classification_id' => 'required|exists:pareto_classifications,id',
+            'pareto_classification_id' => 'required_if:type,expense|nullable|exists:pareto_classifications,id',
             'monthly_budget' => 'required|numeric|min:0',
-            'type' => 'required|in:income,expense',
+            'type' => 'required|in:income,expense,transfer',
         ];
     }
 }
