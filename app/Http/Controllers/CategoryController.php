@@ -49,7 +49,10 @@ class CategoryController extends Controller
         $userId = Auth::id();
         $categories = Category::query()
             ->where('user_id', $userId)
-            ->whereNotNull('parent_id')
+            ->where(function ($query) {
+                $query->whereNotNull('parent_id')
+                    ->orWhereDoesntHave('children');
+            })
             ->with('paretoClassification')
             ->withCount('categorizationRules')
             ->orderBy('categorization_rules_count', 'desc')

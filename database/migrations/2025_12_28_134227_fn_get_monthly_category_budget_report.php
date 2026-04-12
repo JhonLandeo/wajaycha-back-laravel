@@ -81,7 +81,7 @@ return new class extends Migration
                             LEFT JOIN transaction_montly_by_category tmbc ON tmbc.category_id = c.id
                             LEFT JOIN quantity_by_rules qbr ON qbr.category_id = c.id
                             WHERE c.user_id = p_user_id
-                            AND c.parent_id IS NOT NULL
+                            AND (c.parent_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM categories c2 WHERE c2.parent_id = c.id))
                         )
                         SELECT 
                             fc.id,
