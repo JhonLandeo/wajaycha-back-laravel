@@ -1,16 +1,13 @@
 <?php
 
 use App\Http\Controllers\AuthJWT\JWTAuthController;
-use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CategoryRuleController;
-use App\Http\Controllers\ChatGptController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DetailsController;
 use App\Http\Controllers\ImportController;
 use App\Http\Controllers\ParetoClassificationController;
 use App\Http\Controllers\PdfController;
-use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TagsController;
 use App\Http\Controllers\TransactionsController;
 use App\Http\Controllers\TransactionYapeController;
