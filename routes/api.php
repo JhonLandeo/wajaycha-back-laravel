@@ -34,6 +34,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
 
     Route::resource('pareto-classification', ParetoClassificationController::class);
     Route::resource('categories', CategoryController::class);
+    Route::patch('categories/{category}/pareto', [CategoryController::class, 'patchPareto']);
     Route::resource('transactions', TransactionsController::class);
     Route::resource('imports', ImportController::class);
     Route::resource('details', DetailsController::class);

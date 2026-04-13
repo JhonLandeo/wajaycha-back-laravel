@@ -30,7 +30,7 @@ return new class extends Migration
                             spent numeric,
                             available_budget numeric,
                             percentage_spent numeric,
-                            category_names jsonb,
+                            categories jsonb,
                             total_income numeric,
                             total_expense numeric,
                             total_records bigint
@@ -81,9 +81,11 @@ return new class extends Migration
                         ), 
                         category_summaries AS (
                             SELECT 
+                                c.id,
                                 c.pareto_classification_id,
                                 c.name,
                                 c.monthly_budget,
+                                c.type,
                                 COALESCE(tmbc.total_spent, 0) AS spent
                             FROM categories c
                             LEFT JOIN transaction_montly_by_category tmbc ON tmbc.category_id = c.id
@@ -97,7 +99,15 @@ return new class extends Migration
                                 pc.percentage,
                                 SUM(COALESCE(cs.monthly_budget, 0)) AS total_monthly_budget,
                                 SUM(COALESCE(cs.spent, 0)) AS total_spent,
-                                JSONB_AGG(cs.name) FILTER (WHERE cs.name IS NOT NULL) AS category_names
+                                JSONB_AGG(
+                                    JSONB_BUILD_OBJECT(
+                                        'id', cs.id,
+                                        'name', cs.name,
+                                        'monthly_budget', cs.monthly_budget,
+                                        'spent', cs.spent,
+                                        'type', cs.type
+                                    )
+                                ) FILTER (WHERE cs.id IS NOT NULL) AS categories
                             FROM pareto_classifications pc
                             LEFT JOIN category_summaries cs ON cs.pareto_classification_id = pc.id
                             WHERE pc.user_id = p_user_id
@@ -118,7 +128,7 @@ return new class extends Migration
                                 WHEN ps.total_monthly_budget = 0 THEN 0
                                 ELSE ROUND((ps.total_spent * 100.0) / ps.total_monthly_budget, 2)
                             END::NUMERIC AS percentage_spent,
-                            COALESCE(ps.category_names, '[]'::jsonb) AS category_names,
+                            COALESCE(ps.categories, '[]'::jsonb) AS categories,
                             COALESCE(v_total_income, 0)::NUMERIC AS total_income,
                             COALESCE(v_total_expense, 0)::NUMERIC AS total_expense,
                             COUNT(*) OVER()::BIGINT AS total_records

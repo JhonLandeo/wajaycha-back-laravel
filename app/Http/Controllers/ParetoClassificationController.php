@@ -35,7 +35,7 @@ class ParetoClassificationController extends Controller
         $total = count($result) > 0 ? $result[0]->total_records : 0;
 
         foreach ($result as $row) {
-            $row->category_names = json_decode($row->category_names);
+            $row->categories = json_decode($row->categories);
         }
 
         $paginator = new \Illuminate\Pagination\LengthAwarePaginator(

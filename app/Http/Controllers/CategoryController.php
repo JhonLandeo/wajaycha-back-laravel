@@ -101,4 +101,17 @@ class CategoryController extends Controller
         $data = $category->delete();
         return response()->json($data);
     }
+
+    public function patchPareto(\App\Models\Category $category, Request $request): JsonResponse
+    {
+        $request->validate([
+            'pareto_classification_id' => 'sometimes|nullable|exists:pareto_classifications,id',
+        ]);
+
+        $category->update([
+            'pareto_classification_id' => $request->pareto_classification_id
+        ]);
+
+        return response()->json($category);
+    }
 }
