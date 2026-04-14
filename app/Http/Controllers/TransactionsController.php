@@ -101,6 +101,8 @@ class TransactionsController extends Controller
             GenerateEmbeddingForDetail::dispatch($detail, $request->category_id);
         }
 
+        $validatedData['is_manual'] = true;
+
         $data = Transaction::create($validatedData);
         return response()->json($data);
     }
@@ -155,6 +157,10 @@ class TransactionsController extends Controller
     {
         $userId = Auth::id();
         $transaction = Transaction::findOrFail($request->transaction_id ?? $request->route('transaction'));
+
+        if (!$transaction->is_manual) {
+            return response()->json(['message' => 'Solo las transacciones manuales pueden ser editadas.'], 403);
+        }
 
         $validatedData = $request->validated();
 
@@ -305,6 +311,10 @@ class TransactionsController extends Controller
      */
     public function destroy(Transaction $transaction): JsonResponse
     {
+        if (!$transaction->is_manual) {
+            return response()->json(['message' => 'Solo las transacciones manuales pueden ser eliminadas.'], 403);
+        }
+
         $data = $transaction->delete();
         return response()->json($data);
     }

@@ -15,7 +15,7 @@ return new class extends Migration
         $this->down();
         $sql = <<<SQL
                     CREATE OR REPLACE FUNCTION get_transactions(p_per_page integer, p_page integer, p_year integer, p_month integer, p_type type_transaction, p_amount numeric, p_search character varying, p_category text, p_user_id integer, p_recurring boolean, p_weekend boolean, p_workday boolean)
-                    RETURNS TABLE(id bigint, message text, amount numeric, date_operation character varying, type_transaction character varying, category_id bigint, detail_id bigint, detail_name character varying, frequency_general jsonb, frequency bigint, yape_trans jsonb, yape_id bigint, user_id bigint, source_type text, suggested_category_id bigint, suggest_name character varying, tags jsonb, total_count bigint)
+                    RETURNS TABLE(id bigint, message text, amount numeric, date_operation character varying, type_transaction character varying, category_id bigint, detail_id bigint, detail_name character varying, frequency_general jsonb, frequency bigint, yape_trans jsonb, yape_id bigint, user_id bigint, source_type text, suggested_category_id bigint, suggest_name character varying, tags jsonb, is_manual boolean, total_count bigint)
                     LANGUAGE sql
                     AS $$
                                     SELECT * FROM (
@@ -64,7 +64,8 @@ return new class extends Migration
                                                 t.user_id,
                                                 dsf.frequency_general_json AS frequency_general,
                                                 COUNT(t.id) OVER(PARTITION BY t.detail_id) AS frequency,
-                                                tbt.tags
+                                                tbt.tags,
+                                                t.is_manual
                                             FROM transactions t
                                             JOIN details d ON d.id = t.detail_id
                                             LEFT JOIN RECURRING_CATEGORY_FREQUENCIES dsf ON dsf.detail_id = t.detail_id
@@ -87,7 +88,7 @@ return new class extends Migration
                                             SELECT
                                                 ty.id, ty.message, ty.amount, ty.date_operation, ty.type_transaction,
                                                 d.description detail_name, d.id detail_id, ty.user_id, ty.category_id, ty.suggested_category_id, 
-                                                c.name suggest_name, tbt.tags
+                                                c.name suggest_name, tbt.tags, false as is_manual
                                             FROM transaction_yapes ty
                                             JOIN details d ON d.id = ty.detail_id
                                             LEFT JOIN categories c ON c.id = ty.suggested_category_id
@@ -147,7 +148,7 @@ return new class extends Migration
                                                 tylc.category_id, tylc.detail_id, tylc.detail_name, tylc.frequency_general,
                                                 tylc.frequency, tylc.yape_trans, tylc.matched_yape_id, tylc.user_id,
                                                 'transaction' AS source_type, NULL::BIGINT AS suggested_category_id, 
-                                                NULL AS suggest_name, tylc.tags
+                                                NULL AS suggest_name, tylc.tags, tylc.is_manual
                                             FROM TRANSACTIONS_YAPE_LINK_CANDIDATES tylc
                                             WHERE
                                                 tylc.rn = 1
@@ -193,7 +194,8 @@ return new class extends Migration
                                                 'yape_unmatched' AS source_type,
                                                 pfy.suggested_category_id,
                                                 pfy.suggest_name,
-                                                pfy.tags
+                                                pfy.tags,
+                                                pfy.is_manual
                                             FROM PRE_FILTERED_YAPES pfy
                                             LEFT JOIN FREQUENCY_YAPE fy ON fy.detail_id = pfy.detail_id
                                             WHERE
@@ -231,6 +233,7 @@ return new class extends Migration
                                             oat.suggested_category_id,
                                             oat.suggest_name,
                                             oat.tags,
+                                            oat.is_manual,
                                             COUNT(*) OVER() AS total_count
                                         FROM ORDER_ALL_TRANSACTION oat
                                         LIMIT p_per_page
