@@ -9,7 +9,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use App\Services\OcrService;
 use App\Services\TransactionAnalyzer;
 use App\Services\CategorizationService;
 use App\Models\Transaction;
@@ -30,57 +29,58 @@ class ProcessWhatsAppImage implements ShouldQueue
         $this->from = $from; // Este es el número de WhatsApp
     }
 
-    public function handle(OcrService $ocrService, TransactionAnalyzer $transactionAnalyzer, CategorizationService $categorizationService): void
+    public function handle(TransactionAnalyzer $transactionAnalyzer, CategorizationService $categorizationService, \App\Services\WhatsAppNotificationService $whatsappService): void
     {
         // ---------------------------------------------------------
         // 0. IDENTIFICAR AL USUARIO
         // ---------------------------------------------------------
-        // Como es tu VPS personal, asumiremos el usuario 1. 
-        // A futuro, puedes buscarlo por el número de WhatsApp: User::where('phone', $this->from)->first();
-        $userId = 1;
+        $user = User::where('whatsapp_phone', $this->from)->first();
+
+        if (!$user) {
+            Log::warning("❌ WhatsApp: Número no registrado ({$this->from}).");
+            $whatsappService->sendTextMessage($this->from, "❌ Tu número de WhatsApp no está vinculado a ninguna cuenta. Por favor, actualiza tu perfil en la app.");
+            return;
+        }
+
+        $userId = $user->id;
 
         $whatsappToken = config('services.whatsapp.access_token');
         Log::info("WhatsApp Token: " . $whatsappToken);
 
         // ---------------------------------------------------------
-        // WHATSAPP_ACCESS_TOKEN=EAAMbm7QZA8UUBRAQIZACFRvxpL1. DESCARGAR IMAGEN DESDE META
+        // 1. DESCARGAR IMAGEN DESDE META
         // ---------------------------------------------------------
         $mediaResponse = Http::withToken($whatsappToken)
             ->get("https://graph.facebook.com/v21.0/{$this->imageId}");
 
         $mediaUrl = $mediaResponse->json('url');
+        $mimeType = $mediaResponse->json('mime_type') ?? 'image/jpeg'; // Capturamos el mime type si viene, si no asume jpeg
 
         if (!$mediaUrl) {
             Log::error("❌ WhatsApp: No se pudo obtener la URL de la imagen. Respuesta: " . $mediaResponse->body());
+            $whatsappService->sendTextMessage($this->from, "❌ Error al descargar el comprobante de Meta. Por favor, contacte con soporte si el problema persiste.");
             return;
         }
 
         $imageBytes = Http::withToken($whatsappToken)->get($mediaUrl)->body();
         Log::info("⬇️ Imagen descargada de Meta exitosamente.");
 
-        // ---------------------------------------------------------
-        // 2. EXTRAER TEXTO (AWS TEXTRACT)
-        // ---------------------------------------------------------
-        $rawText = $ocrService->getTextFromImage($imageBytes);
-
-        if (!$rawText) {
-            Log::error("❌ AWS Textract: No se detectó texto en la imagen.");
-            return;
-        }
+        $base64Image = base64_encode($imageBytes);
 
         // ---------------------------------------------------------
-        // 3. ESTRUCTURAR CON GEMINI AI
+        // 2 & 3. ANALIZAR IMAGEN DIRECTAMENTE CON GEMINI AI VISON
         // ---------------------------------------------------------
         $geminiKey = config('services.gemini.api_key');
         $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$geminiKey}";
 
-        // Ajusté el prompt para que extraiga fechas en formato compatible con Carbon
         $systemPrompt = '
-            Eres un asistente financiero. Extrae los datos del recibo (Yape/Plin) en JSON válido.
-            - Si dice "¡Yapeaste!" o "Pago a", origin es "Jhon", destination es la contraparte, type_transaction es "expense".
-            - Si dice "Te yapeó", destination es "Jhon", origin es quien paga, type_transaction es "income".
+            Eres un asistente financiero. Lee y extrae los datos del recibo o comprobante (Yape/Plin, etc.) de la imagen adjunta en un JSON válido.
+            - Si dice "¡Yapeaste!" o "Pago a", origin es el "Usuario", destination es a quién le paga.
+            - Si dice "Te yapeó", destination es el "Usuario", origin es quien paga. Deduce o extrae el nombre exacto de la persona o negocio. NUNCA uses la palabra literal "contraparte".
+            - IMPORTANTE: Si evalúas la imagen y determinas que NO ES un comprobante de pago o transferencia financiera válida (por ejemplo, es un meme, un chat, una foto aleatoria), debes devolver el JSON con "is_valid_receipt" en false.
             Estructura estricta:
             {
+              "is_valid_receipt": (boolean, false si no parece ser un comprobante de pago válido, true si sí lo es),
               "amount": (decimal, ej: 2.50),
               "destination": (string),
               "origin": (string),
@@ -90,12 +90,25 @@ class ProcessWhatsAppImage implements ShouldQueue
             }';
 
         $response = Http::post($url, [
-            'contents' => [['parts' => [['text' => $systemPrompt . "\n\nTexto: \"" . $rawText . "\""]]]],
+            'contents' => [
+                [
+                    'parts' => [
+                        ['text' => $systemPrompt],
+                        [
+                            'inlineData' => [
+                                'mimeType' => $mimeType,
+                                'data' => $base64Image
+                            ]
+                        ]
+                    ]
+                ]
+            ],
             'generationConfig' => ['responseMimeType' => 'application/json']
         ]);
 
         if (!$response->successful()) {
             Log::error("❌ Error de Gemini: " . $response->body());
+            $whatsappService->sendTextMessage($this->from, "❌ Error de conexión con el motor de IA. Por favor, contacte con soporte si el problema persiste.");
             return;
         }
 
@@ -104,6 +117,12 @@ class ProcessWhatsAppImage implements ShouldQueue
 
         if ($jsonString) {
             $td = json_decode($jsonString, true);
+
+            // Verificamos si no es un comprobante válido según Gemini
+            if (isset($td['is_valid_receipt']) && $td['is_valid_receipt'] === false) {
+                $whatsappService->sendTextMessage($this->from, "❌ La imagen enviada no parece ser un comprobante de pago válido.");
+                return;
+            }
 
             // ---------------------------------------------------------
             // 4. LÓGICA DE DETALLES Y CATEGORIZACIÓN (ESTILO EXCEL)
@@ -160,6 +179,24 @@ class ProcessWhatsAppImage implements ShouldQueue
             ]);
 
             Log::info("✅ Yape procesado (S/ {$td['amount']} a {$descriptionRaw}) -> Categoría ID: {$categoryId}");
+            $whatsappService->sendTextMessage($this->from, "✅ Comprobante registrado: S/ " . number_format($td['amount'], 2) . " a {$descriptionRaw}.");
+        } else {
+            $whatsappService->sendTextMessage($this->from, "❌ No pude extraer datos válidos del comprobante. Por favor, contacte con soporte.");
+        }
+    }
+
+    /**
+     * Handle a job failure.
+     */
+    public function failed(\Throwable $exception): void
+    {
+        Log::error("❌ Job ProcessWhatsAppImage falló inesperadamente: " . $exception->getMessage());
+
+        try {
+            $whatsappService = app(\App\Services\WhatsAppNotificationService::class);
+            $whatsappService->sendTextMessage($this->from, "❌ Ocurrió un error inesperado al procesar tu comprobante. Por favor, contacta con soporte técnico.");
+        } catch (\Exception $e) {
+            Log::error("❌ No se pudo enviar el mensaje de fallo al usuario (en failed): " . $e->getMessage());
         }
     }
 

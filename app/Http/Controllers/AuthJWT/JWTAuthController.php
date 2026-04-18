@@ -24,6 +24,7 @@ class JWTAuthController extends Controller
             'name' => $validatedData['name'],
             'last_name' => $validatedData['last_name'],
             'email' => $validatedData['email'],
+            'whatsapp_phone' => $validatedData['whatsapp_phone'] ?? null,
             'password' => Hash::make($validatedData['password']),
         ]);
 

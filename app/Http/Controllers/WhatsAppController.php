@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Jobs\ProcessWhatsAppMessage;
 use App\Jobs\ProcessWhatsAppImage;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 
 class WhatsAppController extends Controller
 {
@@ -32,6 +33,7 @@ class WhatsAppController extends Controller
 
             if ($message) {
                 $from = $message['from'];
+                Log::info("📥 WhatsApp: Mensaje recibido de {$from}");
 
                 // CASO A: ES TEXTO
                 if ($message['type'] === 'text') {
