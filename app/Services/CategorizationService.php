@@ -63,23 +63,23 @@ class CategorizationService
         // Si no hubo suerte en el mensaje, buscamos en "Bodega El Chino".
         $searchString = $detail->entity_clean ?? $detail->description;
         $categoryByEntity = $this->analyzeTextForKeywords($searchString, $keywordRules);
-        
+
         if ($categoryByEntity) {
             Log::info("✅ [CAT] Match por ENTIDAD: '$searchString' -> Cat ID: $categoryByEntity");
             $this->createExactRule($userId, $detail->id, $categoryByEntity);
             return $categoryByEntity;
         }
 
-       Log::info("🤖 [CAT] Sin coincidencias de texto. Iniciando Vector Search...");
-        
+        Log::info("🤖 [CAT] Sin coincidencias de texto. Iniciando Vector Search...");
+
         $newEmbedding = $this->embeddingService->generate($detail->description); // Vectorizamos el texto limpio mejor
-        
+
         if (!$newEmbedding) {
             return null;
         }
 
         $vectorString = '[' . implode(',', $newEmbedding) . ']';
-        
+
         $vectorMatch = Detail::query()
             ->select('last_used_category_id')
             ->selectRaw('(embedding <=> ?) AS distance', [$vectorString])
@@ -103,13 +103,16 @@ class CategorizationService
     /**
      * Busca palabras clave dentro de un texto.
      */
-    private function analyzeTextForKeywords(string $text, $rules): ?int
+    /**
+     * @param \Illuminate\Support\Collection<int, KeywordRule> $rules
+     */
+    private function analyzeTextForKeywords(string $text, \Illuminate\Support\Collection $rules): ?int
     {
-        $text = Str::ascii(Str::lower($text)); 
+        $text = Str::ascii(Str::lower($text));
 
         foreach ($rules as $rule) {
             $keyword = Str::ascii(Str::lower($rule->keyword));
-            
+
             if (str_contains($keyword, ' ')) {
                 if (str_contains($text, $keyword)) {
                     return $rule->category_id;

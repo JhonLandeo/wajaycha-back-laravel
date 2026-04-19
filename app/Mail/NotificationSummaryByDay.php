@@ -12,45 +12,20 @@ use Illuminate\Queue\SerializesModels;
 class NotificationSummaryByDay extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
-
     public object $summary;
 
-    /**
-     * Create a new message instance.
-     */
     public function __construct(object $summary)
     {
         $this->summary = $summary;
     }
 
-    /**
-     * Get the message envelope.
-     */
     public function envelope(): Envelope
     {
-        return new Envelope(
-            subject: 'Notification Summary By Day',
-        );
+        return new Envelope(subject: 'Resumen Diario Wajaycha');
     }
 
-    /**
-     * Get the message content definition.
-     */
     public function content(): Content
     {
-        return new Content(
-            view: 'emails.summary',
-            with: ['summary' => $this->summary],
-        );
-    }
-
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
-     */
-    public function attachments(): array
-    {
-        return [];
+        return new Content(markdown: 'emails.summary_day', with: ['summary' => $this->summary]);
     }
 }

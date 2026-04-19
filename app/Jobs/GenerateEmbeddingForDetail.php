@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Jobs;
 
 use App\Models\Detail;
@@ -15,9 +16,9 @@ class GenerateEmbeddingForDetail implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected Detail $detail;
-    protected int $categoryId;
+    protected ?int $categoryId;
 
-    public function __construct(Detail $detail, int $categoryId)
+    public function __construct(Detail $detail, ?int $categoryId = null)
     {
         $this->detail = $detail;
         $this->categoryId = $categoryId;
@@ -27,10 +28,11 @@ class GenerateEmbeddingForDetail implements ShouldQueue
     {
         $vector = $embeddingService->generate($this->detail->description);
         if ($vector) {
-            $this->detail->update([
-                'embedding' => $vector,
-                'last_used_category_id' => $this->categoryId
-            ]);
+            $updateData = ['embedding' => $vector];
+            if ($this->categoryId) {
+                $updateData['last_used_category_id'] = $this->categoryId;
+            }
+            $this->detail->update($updateData);
         }
     }
 }

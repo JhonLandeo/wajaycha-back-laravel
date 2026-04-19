@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Category\StoreCategoryRequest;
+use App\Http\Requests\Category\UpdateCategoryRequest;
 use App\Models\Category;
 
 use Illuminate\Http\JsonResponse;
@@ -47,7 +49,10 @@ class CategoryController extends Controller
         $userId = Auth::id();
         $categories = Category::query()
             ->where('user_id', $userId)
-            ->whereNotNull('parent_id')
+            ->where(function ($query) {
+                $query->whereNotNull('parent_id')
+                    ->orWhereDoesntHave('children');
+            })
             ->with('paretoClassification')
             ->withCount('categorizationRules')
             ->orderBy('categorization_rules_count', 'desc')
@@ -64,15 +69,10 @@ class CategoryController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreCategoryRequest $request): JsonResponse
     {
         $userId = Auth::id();
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'pareto_classification_id' => 'required|exists:pareto_classifications,id',
-            'monthly_budget' => 'required|numeric|min:0',
-            'type' => 'required|in:income,expense',
-        ]);
+        $validatedData = $request->validated();
         $validatedData['user_id'] = $userId;
         $categories = Category::create($validatedData);
         return response()->json($categories, 201);
@@ -81,14 +81,9 @@ class CategoryController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Category $category): JsonResponse
+    public function update(UpdateCategoryRequest $request, Category $category): JsonResponse
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'pareto_classification_id' => 'required|exists:pareto_classifications,id',
-            'monthly_budget' => 'required|numeric|min:0',
-            'type' => 'required|in:income,expense',
-        ]);
+        $validatedData = $request->validated();
         $category->update($validatedData);
         return response()->json($category);
     }
@@ -98,7 +93,25 @@ class CategoryController extends Controller
      */
     public function destroy(Category $category): JsonResponse
     {
+        if ($category->transactions()->exists()) {
+            return response()->json([
+                'message' => 'No se puede eliminar la categoría porque tiene transacciones asociadas'
+            ], 422);
+        }
         $data = $category->delete();
         return response()->json($data);
+    }
+
+    public function patchPareto(\App\Models\Category $category, Request $request): JsonResponse
+    {
+        $request->validate([
+            'pareto_classification_id' => 'sometimes|nullable|exists:pareto_classifications,id',
+        ]);
+
+        $category->update([
+            'pareto_classification_id' => $request->pareto_classification_id
+        ]);
+
+        return response()->json($category);
     }
 }

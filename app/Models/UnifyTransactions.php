@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class UnifyTransactions extends Model
 {
-    protected $table = 'mv_unified_transactions';
+    protected $table = 'v_unified_transactions';
 
     public $timestamps = false;
 

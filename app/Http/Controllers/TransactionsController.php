@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\TransactionsExport;
+use App\Http\Requests\Transaction\StoreTransactionRequest;
+use App\Http\Requests\Transaction\UpdateTransactionRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
@@ -17,8 +18,6 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Js;
-use Maatwebsite\Excel\Facades\Excel;
 
 class TransactionsController extends Controller
 {
@@ -81,6 +80,33 @@ class TransactionsController extends Controller
         return response()->json($paginator);
     }
 
+    public function show(Transaction $transaction): JsonResponse
+    {
+        $transaction->load('detail');
+        return response()->json($transaction);
+    }
+
+    public function store(StoreTransactionRequest $request): JsonResponse
+    {
+        $userId = Auth::id();
+        $validatedData = $request->validated();
+        $validatedData['user_id'] = $userId;
+
+        if (empty($request->detail_id) && $request->filled('detail_description')) {
+            $detail = Detail::firstOrCreate([
+                'user_id' => $userId,
+                'description' => $request->detail_description
+            ]);
+            $validatedData['detail_id'] = $detail->id;
+            GenerateEmbeddingForDetail::dispatch($detail, $request->category_id);
+        }
+
+        $validatedData['is_manual'] = true;
+
+        $data = Transaction::create($validatedData);
+        return response()->json($data);
+    }
+
     public function getSummaryByCategory(Request $request): JsonResponse
     {
         $perPage = $request->input('per_page', 20);
@@ -115,9 +141,7 @@ class TransactionsController extends Controller
             $query->where('t.type_transaction', $type);
         }
 
-        if ($userId) {
-            $query->where('t.user_id', $userId);
-        }
+        $query->where('transactions.user_id', $userId);
 
         $results = $query->groupBy('sc.name')
             ->orderBy(DB::raw('total'), 'desc')
@@ -129,11 +153,33 @@ class TransactionsController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, CategorizationService $categorizationService, ClassificationService $classifier): JsonResponse
+    public function update(UpdateTransactionRequest $request, CategorizationService $categorizationService, ClassificationService $classifier): JsonResponse
     {
-        $request->validate([
-            'category_id' => 'required|integer|exists:categories,id',
-            'is_frequent' => 'required|boolean',
+        $userId = Auth::id();
+        $transaction = Transaction::findOrFail($request->transaction_id ?? $request->route('transaction'));
+
+        if (!$transaction->is_manual) {
+            return response()->json(['message' => 'Solo las transacciones manuales pueden ser editadas.'], 403);
+        }
+
+        $validatedData = $request->validated();
+
+        if (empty($request->detail_id) && $request->filled('detail_description')) {
+            $detail = Detail::firstOrCreate([
+                'user_id' => $userId,
+                'description' => $request->detail_description
+            ]);
+            $validatedData['detail_id'] = $detail->id;
+            GenerateEmbeddingForDetail::dispatch($detail, $request->category_id);
+        }
+
+        // Update basic fields
+        $transaction->update([
+            'amount' => $validatedData['amount'] ?? $transaction->amount,
+            'date_operation' => $validatedData['date_operation'] ?? $transaction->date_operation,
+            'type_transaction' => $validatedData['type_transaction'] ?? $transaction->type_transaction,
+            'detail_id' => $validatedData['detail_id'] ?? $transaction->detail_id,
+            'category_id' => $validatedData['category_id'] ?? $transaction->category_id,
         ]);
 
         $newCategoryId = (int)$request->category_id;
@@ -265,6 +311,10 @@ class TransactionsController extends Controller
      */
     public function destroy(Transaction $transaction): JsonResponse
     {
+        if (!$transaction->is_manual) {
+            return response()->json(['message' => 'Solo las transacciones manuales pueden ser eliminadas.'], 403);
+        }
+
         $data = $transaction->delete();
         return response()->json($data);
     }

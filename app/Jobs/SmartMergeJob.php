@@ -62,7 +62,10 @@ class SmartMergeJob implements ShouldQueue
         Log::info("🏁 [END] Trabajo finalizado.");
     }
 
-    private function processCluster($pivot, array $candidates): void
+    /**
+     * @param array<int, object> $candidates
+     */
+    private function processCluster(object $pivot, array $candidates): void
     {
         $candidatesData = [];
         foreach ($candidates as $cand) {
@@ -201,7 +204,7 @@ class SmartMergeJob implements ShouldQueue
 
             // 3. HERENCIA DE CATEGORÍAS (Tu lógica original mejorada)
             $masterCat = DB::table('categorization_rules')->where('detail_id', $masterId)->value('category_id');
-          
+
             $duplicateCat = DB::table('categorization_rules')->where('detail_id', $duplicateId)->value('category_id');
             $userId = DB::table('categorization_rules')->where('detail_id', $duplicateId)->value('user_id');
             if (!$masterCat && $duplicateCat) {

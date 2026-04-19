@@ -20,7 +20,7 @@ class ProcessExcelImport implements ShouldQueue
     protected int $userId;
     protected string $filePath;
     protected int $importId;
-    public $timeout = 500;
+    public int $timeout = 500;
     public function __construct(int $importId, int $userId, string $filePath)
     {
         $this->importId = $importId;

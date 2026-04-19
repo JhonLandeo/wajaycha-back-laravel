@@ -6,4 +6,7 @@ Route::get('/', function () {
     return ['Laravel' => app()->version()];
 });
 
-require __DIR__.'/auth.php';
+Route::get('/privacy-policy', function () {
+    return view('privacy-policy');
+});
+

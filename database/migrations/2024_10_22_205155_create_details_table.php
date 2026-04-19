@@ -17,7 +17,6 @@ return new class extends Migration
             $table->id();
             $table->string('description');
             $table->foreignId('user_id')->constrained();
-            $table->foreignId('merchant_id')->nullable()->constrained();
             $table->vector('embedding', 768)->nullable();
             $table->unsignedBigInteger('last_used_category_id')->nullable();
             $table->timestamps();

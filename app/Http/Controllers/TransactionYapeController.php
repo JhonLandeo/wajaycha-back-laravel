@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\TransactionYape\ImportYapeRequest;
 use App\Jobs\ProcessExcelImport;
 use App\Jobs\SuggestYapeCategoriesJob;
 use App\Models\Import;
@@ -16,7 +17,7 @@ class TransactionYapeController extends Controller
 {
     const FINANCIAL_BCP_ID = 1;
     const PAYMENT_SERVICE_YAPE_ID = 1;
-    public function import(Request $request): JsonResponse
+    public function import(ImportYapeRequest $request): JsonResponse
     {
         try {
             $file = $request->file('file');
@@ -35,7 +36,6 @@ class TransactionYapeController extends Controller
             $import->extension = $extension;
             $import->path = $storedPath;
             $import->mime = $mime;
-            $import->url = null;
             $import->size = $size;
             $import->user_id = $userId;
             $import->payment_service_id = self::PAYMENT_SERVICE_YAPE_ID;

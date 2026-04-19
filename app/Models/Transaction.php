@@ -7,6 +7,7 @@ use App\Models\Detail;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use App\Events\TransactionCreated;
 
 /**
  * @property-read Detail $detail
@@ -40,6 +41,7 @@ class Transaction extends Model
         'user_id',
         'detail_id',
         'yape_id',
+        'is_manual',
     ];
 
     public function detail(): BelongsTo
@@ -50,10 +52,5 @@ class Transaction extends Model
     public function category(): HasOneThrough
     {
         return $this->hasOneThrough(Category::class, Category::class);
-    }
-
-    public function splits(): HasMany
-    {
-        return $this->hasMany(TransactionSplit::class);
     }
 }

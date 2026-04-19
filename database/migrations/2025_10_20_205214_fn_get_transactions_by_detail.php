@@ -66,7 +66,8 @@ return new class extends Migration
                                         t.type_transaction, t.category_id,
                                         'transaction' AS source_type,
                                         COALESCE(my.yape_trans_json, '[]'::jsonb) AS yape_trans,
-                                        t.user_id, null::BIGINT AS suggested_category_id
+                                        t.user_id, null::BIGINT AS suggested_category_id,
+                                        t.is_manual
                                     FROM 
                                         transactions AS t
                                     LEFT JOIN 
@@ -85,7 +86,8 @@ return new class extends Migration
                                         'yape_unmatched' AS source_type,
                                         '[]'::jsonb AS yape_trans,
                                         uy.user_id,
-                                        uy.suggested_category_id
+                                        uy.suggested_category_id,
+                                        false as is_manual
                                     FROM 
                                         UnmatchedYapes AS uy
                                     WHERE CASE
@@ -113,7 +115,8 @@ return new class extends Migration
                                                 'detail_name', d.description,
                                                 'yape_trans', a.yape_trans,
                                                 'source_type', a.source_type,
-                                                'suggest_name', c.name
+                                                'suggest_name', c.name,
+                                                'is_manual', a.is_manual
                                             )
                                         ) AS child_transactions,
                                         COUNT(a.id) AS frequency,
