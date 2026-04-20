@@ -12,7 +12,6 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement('CREATE EXTENSION IF NOT EXISTS vector;');
         Schema::create('details', function (Blueprint $table) {
             $table->id();
             $table->string('description');

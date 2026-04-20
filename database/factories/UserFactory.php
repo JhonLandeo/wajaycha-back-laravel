@@ -24,12 +24,24 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->name(),
+            'name' => fake()->firstName(),
+            'last_name' => fake()->lastName(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'whatsapp_phone' => null,
         ];
+    }
+
+    /**
+     * Estado para usuarios con número de WhatsApp vinculado.
+     */
+    public function withWhatsApp(string $phone = '51999999999'): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'whatsapp_phone' => $phone,
+        ]);
     }
 
     /**

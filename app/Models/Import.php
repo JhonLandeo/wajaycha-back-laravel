@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * @property int $id
@@ -26,6 +27,7 @@ use Illuminate\Support\Facades\Storage;
  */
 class Import extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'name',
         'extension',

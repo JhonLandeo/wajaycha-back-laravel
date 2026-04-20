@@ -41,7 +41,7 @@ class DetailsController extends Controller
         $data['user_id'] = Auth::id();
         $detail = Detail::create($data);
         GenerateEmbeddingForDetail::dispatch($detail, $request->last_used_category_id);
-        return response()->json($detail);
+        return response()->json($detail, 201);
     }
 
     public function update(UpdateDetailRequest $request, Detail $detail): JsonResponse

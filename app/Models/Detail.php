@@ -11,6 +11,8 @@ use App\Models\Transaction;
 
 class Detail extends Model
 {
+    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+
     protected $fillable = [
         'description',
         'user_id',

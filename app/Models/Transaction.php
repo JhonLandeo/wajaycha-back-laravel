@@ -5,9 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Detail;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
-use App\Events\TransactionCreated;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
  * @property-read Detail $detail
@@ -32,6 +31,7 @@ use App\Events\TransactionCreated;
  */
 class Transaction extends Model
 {
+    use HasFactory;
     protected $table = 'transactions';
     protected $fillable = [
         'category_id',

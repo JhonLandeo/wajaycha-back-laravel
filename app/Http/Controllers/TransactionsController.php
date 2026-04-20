@@ -104,7 +104,7 @@ class TransactionsController extends Controller
         $validatedData['is_manual'] = true;
 
         $data = Transaction::create($validatedData);
-        return response()->json($data);
+        return response()->json($data, 201);
     }
 
     public function getSummaryByCategory(Request $request): JsonResponse
@@ -120,7 +120,7 @@ class TransactionsController extends Controller
             ->leftJoin('details as d', 'd.id', '=', 'transactions.detail_id')
             ->leftJoin('categories as sc', 'sc.id', '=', 'transactions.category_id')
             ->select(
-                DB::raw('COALESCE(sc.name, "Sin categorizar") as name'),
+                DB::raw("COALESCE(sc.name, 'Sin categorizar') as name"),
                 DB::raw('COUNT(*) as quantity'),
                 DB::raw(" SUM(CASE 
                     WHEN transactions.type_transaction = 'expense' THEN transactions.amount 
@@ -130,15 +130,15 @@ class TransactionsController extends Controller
             );
 
         if ($year) {
-            $query->whereYear('t.date_operation', $year);
+            $query->whereYear('transactions.date_operation', $year);
         }
 
         if ($month) {
-            $query->whereMonth('t.date_operation', $month);
+            $query->whereMonth('transactions.date_operation', $month);
         }
 
         if ($type) {
-            $query->where('t.type_transaction', $type);
+            $query->where('transactions.type_transaction', $type);
         }
 
         $query->where('transactions.user_id', $userId);
@@ -157,7 +157,9 @@ class TransactionsController extends Controller
     {
         $userId = Auth::id();
         $transaction = Transaction::findOrFail($request->transaction_id ?? $request->route('transaction'));
-
+        if ($transaction->user_id !== Auth::id()) {
+            return response()->json(['message' => 'No autorizado'], 403);
+        }
         if (!$transaction->is_manual) {
             return response()->json(['message' => 'Solo las transacciones manuales pueden ser editadas.'], 403);
         }
