@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
- * @property-read Detail $detail
+ * @property-read Detail|null $detail
  *
  * @property float $value                
  * @property string $name               
@@ -31,6 +31,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  */
 class Transaction extends Model
 {
+    /** @use HasFactory<\Database\Factories\TransactionFactory> */
     use HasFactory;
     protected $table = 'transactions';
     protected $fillable = [

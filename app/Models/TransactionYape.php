@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * @property-read \App\Models\Detail $detail
+ * @property-read \App\Models\Detail|null $detail
  */
 class TransactionYape extends Model
 {

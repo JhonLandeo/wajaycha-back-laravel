@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class ParetoClassification extends Model
 {
+    /** @use HasFactory<\Database\Factories\ParetoClassificationFactory> */
     use HasFactory;
 
     protected $fillable = [

@@ -11,6 +11,7 @@ use App\Models\Transaction;
 
 class Detail extends Model
 {
+    /** @use \Illuminate\Database\Eloquent\Factories\HasFactory<\Database\Factories\DetailFactory> */
     use \Illuminate\Database\Eloquent\Factories\HasFactory;
 
     protected $fillable = [

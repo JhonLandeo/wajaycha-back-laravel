@@ -1,0 +1,205 @@
+Note: Using configuration file /home/jhon/Documents/personal-projects/wajaycha/wajaycha-back-laravel/phpstan.neon.
+ ------ ----------------------------------------------------------------------- 
+  Line   Actions/Transactions/StoreTransactionAction.php                        
+ ------ ----------------------------------------------------------------------- 
+  13     Method App\Actions\Transactions\StoreTransactionAction::execute() has  
+         parameter $validatedData with no value type specified in iterable      
+         type array.                                                            
+         🪪  missingType.iterableValue                                          
+         💡  See:                                                               
+         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  
+         terable-type                                                           
+ ------ ----------------------------------------------------------------------- 
+
+ ------ ----------------------------------------------------------------------- 
+  Line   Actions/Transactions/UpdateTransactionAction.php                       
+ ------ ----------------------------------------------------------------------- 
+  23     Method App\Actions\Transactions\UpdateTransactionAction::execute()     
+         has parameter $requestData with no value type specified in iterable    
+         type array.                                                            
+         🪪  missingType.iterableValue                                          
+         💡  See:                                                               
+         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  
+         terable-type                                                           
+  23     Method App\Actions\Transactions\UpdateTransactionAction::execute()     
+         has parameter $validatedData with no value type specified in iterable  
+         type array.                                                            
+         🪪  missingType.iterableValue                                          
+         💡  See:                                                               
+         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  
+         terable-type                                                           
+  53     Method                                                                 
+         App\Actions\Transactions\UpdateTransactionAction::updateTransactionFr  
+         equent() has parameter $requestData with no value type specified in    
+         iterable type array.                                                   
+         🪪  missingType.iterableValue                                          
+         💡  See:                                                               
+         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  
+         terable-type                                                           
+  70     If condition is always true.                                           
+         🪪  if.alwaysTrue                                                      
+         💡  Because the type is coming from a PHPDoc, you can turn off this    
+         check by setting treatPhpDocTypesAsCertain: false in your phpstan.neo  
+         n.                                                                     
+  93     If condition is always true.                                           
+         🪪  if.alwaysTrue                                                      
+         💡  Because the type is coming from a PHPDoc, you can turn off this    
+         check by setting treatPhpDocTypesAsCertain: false in your phpstan.neo  
+         n.                                                                     
+  110    Method                                                                 
+         App\Actions\Transactions\UpdateTransactionAction::updateTransactionWi  
+         thoutFrequent() has parameter $requestData with no value type          
+         specified in iterable type array.                                      
+         🪪  missingType.iterableValue                                          
+         💡  See:                                                               
+         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  
+         terable-type                                                           
+  125    Left side of && is always true.                                        
+         🪪  booleanAnd.leftAlwaysTrue                                          
+         💡  Because the type is coming from a PHPDoc, you can turn off this    
+         check by setting treatPhpDocTypesAsCertain: false in your phpstan.neo  
+         n.                                                                     
+  139    Left side of && is always true.                                        
+         🪪  booleanAnd.leftAlwaysTrue                                          
+         💡  Because the type is coming from a PHPDoc, you can turn off this    
+         check by setting treatPhpDocTypesAsCertain: false in your phpstan.neo  
+         n.                                                                     
+ ------ ----------------------------------------------------------------------- 
+
+ ------ ---------------------------------------------------------------------- 
+  Line   Console/Commands/SendSummaryTransactionByMonth.php                    
+ ------ ---------------------------------------------------------------------- 
+  17     Parameter $reportService of method                                    
+         App\Console\Commands\SendSummaryTransactionByMonth::handle() has      
+         invalid type App\Services\FinancialReportService.                     
+         🪪  class.notFound                                                    
+  28     Call to method getBudgetDeviation() on an unknown class               
+         App\Services\FinancialReportService.                                  
+         🪪  class.notFound                                                    
+         💡  Learn more at https://phpstan.org/user-guide/discovering-symbols  
+ ------ ---------------------------------------------------------------------- 
+
+ ------ --------------------------------------------------------------------- 
+  Line   Http/Controllers/WhatsAppFlowController.php                          
+ ------ --------------------------------------------------------------------- 
+  11     Method App\Http\Controllers\WhatsAppFlowController::handle() has no  
+         return type specified.                                               
+         🪪  missingType.return                                               
+ ------ --------------------------------------------------------------------- 
+
+ ------ ----------------------------------------------------------------------- 
+  Line   Http/Requests/Auth/LoginRequest.php                                    
+ ------ ----------------------------------------------------------------------- 
+  35     Method App\Http\Requests\Auth\LoginRequest::messages() return type     
+         has no value type specified in iterable type array.                    
+         🪪  missingType.iterableValue                                          
+         💡  See:                                                               
+         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  
+         terable-type                                                           
+ ------ ----------------------------------------------------------------------- 
+
+ ------ ----------------------------------------------------------------------- 
+  Line   Http/Requests/Auth/RegisterRequest.php                                 
+ ------ ----------------------------------------------------------------------- 
+  14     Method App\Http\Requests\Auth\RegisterRequest::rules() return type     
+         has no value type specified in iterable type array.                    
+         🪪  missingType.iterableValue                                          
+         💡  See:                                                               
+         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  
+         terable-type                                                           
+  25     Method App\Http\Requests\Auth\RegisterRequest::messages() return type  
+         has no value type specified in iterable type array.                    
+         🪪  missingType.iterableValue                                          
+         💡  See:                                                               
+         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  
+         terable-type                                                           
+ ------ ----------------------------------------------------------------------- 
+
+ ------ ---------------------------------------------------------------- 
+  Line   Models/Category.php                                             
+ ------ ---------------------------------------------------------------- 
+  12     Class App\Models\Category uses generic trait                    
+         Illuminate\Database\Eloquent\Factories\HasFactory but does not  
+         specify its types: TFactory                                     
+         🪪  missingType.generics                                        
+ ------ ---------------------------------------------------------------- 
+
+ ------ ---------------------------------------------------------------- 
+  Line   Models/Detail.php                                               
+ ------ ---------------------------------------------------------------- 
+  14     Class App\Models\Detail uses generic trait                      
+         Illuminate\Database\Eloquent\Factories\HasFactory but does not  
+         specify its types: TFactory                                     
+         🪪  missingType.generics                                        
+ ------ ---------------------------------------------------------------- 
+
+ ------ ---------------------------------------------------------------- 
+  Line   Models/FinancialEntity.php                                      
+ ------ ---------------------------------------------------------------- 
+  11     Class App\Models\FinancialEntity uses generic trait             
+         Illuminate\Database\Eloquent\Factories\HasFactory but does not  
+         specify its types: TFactory                                     
+         🪪  missingType.generics                                        
+ ------ ---------------------------------------------------------------- 
+
+ ------ ---------------------------------------------------------------- 
+  Line   Models/Import.php                                               
+ ------ ---------------------------------------------------------------- 
+  30     Class App\Models\Import uses generic trait                      
+         Illuminate\Database\Eloquent\Factories\HasFactory but does not  
+         specify its types: TFactory                                     
+         🪪  missingType.generics                                        
+ ------ ---------------------------------------------------------------- 
+
+ ------ ---------------------------------------------------------------- 
+  Line   Models/ParetoClassification.php                                 
+ ------ ---------------------------------------------------------------- 
+  11     Class App\Models\ParetoClassification uses generic trait        
+         Illuminate\Database\Eloquent\Factories\HasFactory but does not  
+         specify its types: TFactory                                     
+         🪪  missingType.generics                                        
+ ------ ---------------------------------------------------------------- 
+
+ ------ ---------------------------------------------------------------- 
+  Line   Models/Transaction.php                                          
+ ------ ---------------------------------------------------------------- 
+  34     Class App\Models\Transaction uses generic trait                 
+         Illuminate\Database\Eloquent\Factories\HasFactory but does not  
+         specify its types: TFactory                                     
+         🪪  missingType.generics                                        
+ ------ ---------------------------------------------------------------- 
+
+ ------ ----------------------------------------------------------------------- 
+  Line   Repositories/Contracts/TransactionRepositoryContract.php               
+ ------ ----------------------------------------------------------------------- 
+  12     Method                                                                 
+         App\Repositories\Contracts\TransactionRepositoryContract::findPaginat  
+         ed() return type with generic interface                                
+         Illuminate\Contracts\Pagination\LengthAwarePaginator does not specify  
+         its types: TKey, TValue                                                
+         🪪  missingType.generics                                               
+  14     Method                                                                 
+         App\Repositories\Contracts\TransactionRepositoryContract::summaryByCa  
+         tegory() return type with generic interface                            
+         Illuminate\Contracts\Pagination\LengthAwarePaginator does not specify  
+         its types: TKey, TValue                                                
+         🪪  missingType.generics                                               
+ ------ ----------------------------------------------------------------------- 
+
+ ------ ----------------------------------------------------------------------- 
+  Line   Repositories/TransactionRepository.php                                 
+ ------ ----------------------------------------------------------------------- 
+  16     Method App\Repositories\TransactionRepository::findPaginated() return  
+         type with generic interface                                            
+         Illuminate\Contracts\Pagination\LengthAwarePaginator does not specify  
+         its types: TKey, TValue                                                
+         🪪  missingType.generics                                               
+  57     Method App\Repositories\TransactionRepository::summaryByCategory()     
+         return type with generic interface                                     
+         Illuminate\Contracts\Pagination\LengthAwarePaginator does not specify  
+         its types: TKey, TValue                                                
+         🪪  missingType.generics                                               
+ ------ ----------------------------------------------------------------------- 
+
+ [ERROR] Found 25 errors                                                        
+

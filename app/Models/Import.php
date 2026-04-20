@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  */
 class Import extends Model
 {
+    /** @use HasFactory<\Database\Factories\ImportFactory> */
     use HasFactory;
     protected $fillable = [
         'name',

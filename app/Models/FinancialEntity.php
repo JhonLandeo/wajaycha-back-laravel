@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class FinancialEntity extends Model
 {
+    /** @use HasFactory<\Database\Factories\FinancialEntityFactory> */
     use HasFactory;
     protected $fillable = [
         'name',

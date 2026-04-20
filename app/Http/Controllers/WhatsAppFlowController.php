@@ -8,7 +8,11 @@ use phpseclib3\Crypt\PublicKeyLoader;
 
 class WhatsAppFlowController extends Controller
 {
-    public function handle(Request $request)
+    /**
+     * @param Request $request
+     * @return \Illuminate\Http\Response|\Illuminate\Contracts\Foundation\Application|\Illuminate\Contracts\Routing\ResponseFactory
+     */
+    public function handle(Request $request): \Illuminate\Http\Response|\Illuminate\Contracts\Foundation\Application|\Illuminate\Contracts\Routing\ResponseFactory
     {
         // 1. Obtener datos en Base64 y decodificarlos a binario
         $encryptedAesKey = base64_decode($request->input('encrypted_aes_key'));
