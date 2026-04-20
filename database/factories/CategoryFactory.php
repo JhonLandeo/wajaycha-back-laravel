@@ -24,9 +24,8 @@ class CategoryFactory extends Factory
         return [
             'name'                      => fake()->words(2, true),
             'type'                      => fake()->randomElement(['expense', 'income']),
-            'monthly_budget'            => fake()->randomFloat(2, 0, 500),
+            'monthly_budget'            => (float) fake()->randomFloat(2, 0, 500),
             'user_id'                   => User::factory(),
-            'pareto_classification_id'  => ParetoClassification::factory(),
             'parent_id'                 => null,
         ];
     }

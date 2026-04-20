@@ -1,9 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class ParetoClassification extends Model
@@ -16,9 +17,4 @@ class ParetoClassification extends Model
         'percentage',
         'user_id'
     ];
-
-    public function categories(): HasMany
-    {
-        return $this->hasMany(Category::class);
-    }
 }

@@ -1,49 +1,41 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Actions\Pareto\StoreParetoAction;
+use App\Actions\Pareto\UpdateParetoAction;
+use App\DTOs\Pareto\ParetoClassificationDTO;
 use App\Http\Requests\ParetoClassification\StoreParetoClassificationRequest;
 use App\Http\Requests\ParetoClassification\UpdateParetoClassificationRequest;
 use App\Models\ParetoClassification;
+use App\Repositories\Contracts\ParetoRepositoryContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
-class ParetoClassificationController extends Controller
+final class ParetoClassificationController extends Controller
 {
+    public function __construct(
+        private readonly ParetoRepositoryContract $repository,
+        private readonly StoreParetoAction $storeAction,
+        private readonly UpdateParetoAction $updateAction
+    ) {
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 10);
-        $page = $request->input('page', 1);
-        $month = $request->input('month');
-        $year = $request->input('year');
-        $userId = Auth::id();
+        $perPage = (int) $request->input('per_page', 10);
+        $page = (int) $request->input('page', 1);
+        $month = $request->input('month') ? (int) $request->input('month') : null;
+        $year = $request->input('year') ? (int) $request->input('year') : null;
+        $userId = (int) Auth::id();
 
-        $result = DB::select('SELECT * FROM get_pareto_monthly_report(?, ?, ?, ?, ?)', [
-            $userId,
-            $month,
-            $year,
-            $page,
-            $perPage
-        ]);
-
-        $total = count($result) > 0 ? $result[0]->total_records : 0;
-
-        foreach ($result as $row) {
-            $row->categories = json_decode($row->categories);
-        }
-
-        $paginator = new \Illuminate\Pagination\LengthAwarePaginator(
-            $result,
-            $total,
-            $perPage,
-            $page
-        );
+        $paginator = $this->repository->getMonthlyReport($userId, $month, $year, $page, $perPage);
 
         return response()->json($paginator);
     }
@@ -53,8 +45,8 @@ class ParetoClassificationController extends Controller
      */
     public function all(): JsonResponse
     {
-        $userId = Auth::id();
-        $data = ParetoClassification::where('user_id', $userId)->get();
+        $userId = (int) Auth::id();
+        $data = $this->repository->getAllForUser($userId);
         return response()->json($data);
     }
 
@@ -63,63 +55,65 @@ class ParetoClassificationController extends Controller
      */
     public function store(StoreParetoClassificationRequest $request): JsonResponse
     {
-        $userId = Auth::id();
-        $validatedData = $request->validated();
-        $validatedData['user_id'] = $userId;
-        $data = ParetoClassification::create($validatedData);
+        $dto = ParetoClassificationDTO::fromStoreRequest($request, (int) Auth::id());
+        $data = $this->storeAction->execute($dto);
         return response()->json($data);
     }
 
     /**
      * Display the specified resource.
      */
-    public function show(ParetoClassification $pareto_classification): JsonResponse
+    public function show(int $id): JsonResponse
     {
-        $data = $pareto_classification;
-        return response()->json($data);
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(ParetoClassification $pareto_classification): JsonResponse
-    {
-        $data = $pareto_classification;
-        return response()->json($data);
+        $pareto = $this->repository->findById($id);
+        if (!$pareto) {
+            return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
+        }
+        return response()->json($pareto);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateParetoClassificationRequest $request, ParetoClassification $pareto_classification): JsonResponse
+    public function update(UpdateParetoClassificationRequest $request, int $id): JsonResponse
     {
-        $validatedData = $request->validated();
-        $data = $pareto_classification->update($validatedData);
-        return response()->json($data);
+        $pareto = $this->repository->findById($id);
+        if (!$pareto) {
+            return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
+        }
+
+        $dto = ParetoClassificationDTO::fromUpdateRequest($request, (int) Auth::id(), $id);
+        $this->updateAction->execute($pareto, $dto);
+
+        return response()->json($pareto->fresh());
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(ParetoClassification $pareto_classification): JsonResponse
+    public function destroy(int $id): JsonResponse
     {
-        if ($pareto_classification->categories()->exists()) {
+        $pareto = $this->repository->findById($id);
+        if (!$pareto) {
+            return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
+        }
+
+        if ($this->repository->getCategories($id)->isNotEmpty()) {
             return response()->json([
                 'message' => 'No se puede eliminar porque ya se está haciendo uso de estos.',
             ], 422);
         }
 
-        $data = $pareto_classification->delete();
-        return response()->json($data);
+        $this->repository->delete($pareto);
+        return response()->json(['status' => 'deleted']);
     }
 
-    public function categories(ParetoClassification $pareto_classification): JsonResponse
+    /**
+     * Get categories associated with a Pareto classification.
+     */
+    public function categories(int $id): JsonResponse
     {
-        $categories = $pareto_classification->categories()
-            ->withCount('categorizationRules')
-            ->orderBy('categorization_rules_count', 'desc')
-            ->get();
-
+        $categories = $this->repository->getCategories($id);
         return response()->json($categories);
     }
 }

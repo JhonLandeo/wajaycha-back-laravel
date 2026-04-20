@@ -4,83 +4,89 @@ declare(strict_types=1);
 
 namespace App\Actions\Transactions;
 
+use App\DTOs\Transactions\TransactionDataDTO;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\TransactionTag;
 use App\Models\TransactionYape;
+use App\Repositories\Contracts\TransactionRepositoryContract;
 use App\Services\CategorizationService;
 use App\Services\ClassificationService;
 use Carbon\Carbon;
 
-class UpdateTransactionAction
+final class UpdateTransactionAction
 {
     public function __construct(
-        protected CategorizationService $categorizationService,
-        protected ClassificationService $classifier
-    ) {}
-
-    /**
-     * @param int $userId
-     * @param Transaction $transaction
-     * @param array<string, mixed> $validatedData
-     * @param array<string, mixed> $requestData
-     * @return Transaction
-     */
-    public function execute(int $userId, Transaction $transaction, array $validatedData, array $requestData): Transaction
-    {
-        if (empty($validatedData['detail_id']) && !empty($requestData['detail_description'])) {
-            $detail = Detail::firstOrCreate([
-                'user_id' => $userId,
-                'description' => $requestData['detail_description']
-            ]);
-            $validatedData['detail_id'] = $detail->id;
-            GenerateEmbeddingForDetail::dispatch($detail, $requestData['category_id'] ?? null);
-        }
-
-        $transaction->update([
-            'amount' => $validatedData['amount'] ?? $transaction->amount,
-            'date_operation' => $validatedData['date_operation'] ?? $transaction->date_operation,
-            'type_transaction' => $validatedData['type_transaction'] ?? $transaction->type_transaction,
-            'detail_id' => $validatedData['detail_id'] ?? $transaction->detail_id,
-            'category_id' => $validatedData['category_id'] ?? $transaction->category_id,
-        ]);
-
-        $newCategoryId = (int)($requestData['category_id'] ?? $transaction->category_id);
-
-        if (!empty($requestData['is_frequent'])) {
-            $this->updateTransactionFrequent($userId, $requestData, $newCategoryId);
-        } else {
-            $this->updateTransactionWithoutFrequent($userId, $requestData, $newCategoryId);
-        }
-        
-        return $transaction;
+        private readonly TransactionRepositoryContract $repository,
+        private readonly CategorizationService $categorizationService,
+        private readonly ClassificationService $classifier
+    ) {
     }
 
-    /**
-     * @param int $userId
-     * @param array<string, mixed> $requestData
-     * @param int $newCategoryId
-     * @return void
-     */
-    private function updateTransactionFrequent(int $userId, array $requestData, int $newCategoryId): void
+    public function execute(TransactionDataDTO $dto): Transaction
     {
-        if (($requestData['source_type'] ?? '') == 'yape_unmatched') {
-            $yapeTransaction = TransactionYape::find($requestData['transaction_id'] ?? 0);
+        $transaction = $this->repository->findById($dto->transaction_id ?? 0);
+        if (!$transaction) {
+            throw new \RuntimeException('Transaction not found');
+        }
+
+        $updateData = [
+            'amount'           => $dto->amount,
+            'date_operation'   => $dto->date_operation,
+            'type_transaction' => $dto->type_transaction,
+        ];
+
+        if ($dto->category_id !== null) {
+            $updateData['category_id'] = $dto->category_id;
+        }
+
+        if ($dto->detail_id !== null) {
+            $updateData['detail_id'] = $dto->detail_id;
+        }
+
+        if (empty($dto->detail_id) && !empty($dto->detail_description)) {
+            /** @var Detail $detail */
+            $detail = Detail::query()->firstOrCreate([
+                'user_id' => $dto->user_id,
+                'description' => $dto->detail_description
+            ]);
+            $updateData['detail_id'] = $detail->id;
+            GenerateEmbeddingForDetail::dispatch($detail, $dto->category_id);
+        }
+
+        $this->repository->update($transaction, $updateData);
+
+        $newCategoryId = $dto->category_id ?? $transaction->category_id;
+
+        if ($dto->is_frequent) {
+            $this->updateTransactionFrequent($dto, $newCategoryId);
+        } else {
+            $this->updateTransactionWithoutFrequent($dto, $newCategoryId);
+        }
+
+        return $transaction->fresh();
+    }
+
+    private function updateTransactionFrequent(TransactionDataDTO $dto, ?int $newCategoryId): void
+    {
+        if ($dto->source_type === 'yape_unmatched') {
+            /** @var TransactionYape|null $yapeTransaction */
+            $yapeTransaction = TransactionYape::query()->find($dto->transaction_id ?? 0);
             if ($yapeTransaction) {
                 $yapeTransaction->category_id = $newCategoryId;
                 $yapeTransaction->save();
 
-                if (($requestData['reason'] ?? '') === 'with_reason' && !empty($requestData['tag_id'])) {
+                if ($dto->reason === 'with_reason' && $dto->tag_id) {
                     $transactionTag = new TransactionTag();
                     $transactionTag->transaction_yape_id = $yapeTransaction->id;
-                    $transactionTag->tag_id = $requestData['tag_id'];
+                    $transactionTag->tag_id = $dto->tag_id;
                     $transactionTag->save();
                 }
 
                 $yapeTransaction->load('detail');
                 $detail = $yapeTransaction->detail;
-                if ($detail) {
+                if ($detail && $newCategoryId) {
                     TransactionYape::query()
                         ->join('details as d', 'transaction_yapes.detail_id', '=', 'd.id')
                         ->where('d.description', $detail->description)
@@ -95,15 +101,15 @@ class UpdateTransactionAction
                 }
             }
         } else {
-            $transaction = Transaction::find($requestData['transaction_id'] ?? 0);
+            $transaction = $this->repository->findById($dto->transaction_id ?? 0);
             if ($transaction) {
                 $transaction->category_id = $newCategoryId;
                 $transaction->save();
-                
+
                 $transaction->load('detail');
                 $detail = $transaction->detail;
 
-                if ($detail) {
+                if ($detail && $newCategoryId) {
                     Transaction::query()
                         ->join('details as d', 'transactions.detail_id', '=', 'd.id')
                         ->where('d.description', $detail->description)
@@ -120,51 +126,47 @@ class UpdateTransactionAction
         }
     }
 
-    /**
-     * @param int $userId
-     * @param array<string, mixed> $requestData
-     * @param int $newCategoryId
-     * @return void
-     */
-    private function updateTransactionWithoutFrequent(int $userId, array $requestData, int $newCategoryId): void
+    private function updateTransactionWithoutFrequent(TransactionDataDTO $dto, ?int $newCategoryId): void
     {
-        if (($requestData['source_type'] ?? '') == 'yape_unmatched') {
-            $yapeTransaction = TransactionYape::find($requestData['transaction_id'] ?? 0);
+        if ($dto->source_type === 'yape_unmatched') {
+            /** @var TransactionYape|null $yapeTransaction */
+            $yapeTransaction = TransactionYape::query()->find($dto->transaction_id ?? 0);
             if ($yapeTransaction) {
                 $yapeTransaction->category_id = $newCategoryId;
                 $yapeTransaction->save();
-                if (($requestData['reason'] ?? '') === 'with_reason' && !empty($requestData['tag_id'])) {
+                if ($dto->reason === 'with_reason' && $dto->tag_id) {
                     $transactionTag = new TransactionTag();
                     $transactionTag->transaction_yape_id = $yapeTransaction->id;
-                    $transactionTag->tag_id = $requestData['tag_id'];
+                    $transactionTag->tag_id = $dto->tag_id;
                     $transactionTag->save();
                 }
                 $yapeTransaction->load('detail');
                 $detail = $yapeTransaction->detail;
-                if ($detail && $this->classifier->isDetailUsefulForLearning($detail->description)) {
+                if ($detail && $newCategoryId && $this->classifier->isDetailUsefulForLearning($detail->description)) {
                     GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
                 }
             }
         } else {
-            $transaction = Transaction::find($requestData['transaction_id'] ?? 0);
+            $transaction = $this->repository->findById($dto->transaction_id ?? 0);
             if ($transaction) {
                 $transaction->category_id = $newCategoryId;
                 $transaction->save();
                 $transaction->load('detail');
                 $detail = $transaction->detail;
-                
-                $this->updateMatchingYapeTransaction($transaction, $userId, $newCategoryId);
-                
-                if ($detail && $this->classifier->isDetailUsefulForLearning($detail->description)) {
+
+                $this->updateMatchingYapeTransaction($transaction, $dto->user_id, $newCategoryId);
+
+                if ($detail && $newCategoryId && $this->classifier->isDetailUsefulForLearning($detail->description)) {
                     GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
                 }
             }
         }
     }
 
-    private function updateMatchingYapeTransaction(Transaction $transaction, int $userId, int $newCategoryId): void
+    private function updateMatchingYapeTransaction(Transaction $transaction, int $userId, ?int $newCategoryId): void
     {
-        $yapeTransaction = TransactionYape::where('amount', $transaction->amount)
+        $yapeTransaction = TransactionYape::query()
+            ->where('amount', $transaction->amount)
             ->where('user_id', $userId)
             ->where('type_transaction', $transaction->type_transaction)
             ->whereDate('date_operation', Carbon::parse($transaction->date_operation)->toDateString())

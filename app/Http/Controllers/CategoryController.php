@@ -1,68 +1,62 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Actions\Categories\StoreCategoryAction;
+use App\Actions\Categories\UpdateCategoryAction;
+use App\DTOs\Categories\CategoryDataDTO;
 use App\Http\Requests\Category\StoreCategoryRequest;
 use App\Http\Requests\Category\UpdateCategoryRequest;
 use App\Models\Category;
-
+use App\Repositories\Contracts\CategoryRepositoryContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
-class CategoryController extends Controller
+final class CategoryController extends Controller
 {
+    public function __construct(
+        private readonly CategoryRepositoryContract $repository,
+        private readonly StoreCategoryAction $storeAction,
+        private readonly UpdateCategoryAction $updateAction
+    ) {
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 10);
-        $page = $request->input('page', 1);
-        $month = $request->input('month', date('m'));
-        $year = $request->input('year', date('Y'));
-        $userId = Auth::id();
-        $statement = DB::select("select * from get_monthly_category_budget_report(?,?,?,?,?)", [
-            $page,
-            $perPage,
-            $userId,
-            $month,
-            $year
-        ]);
-        $paginator = new LengthAwarePaginator(
-            $statement,
-            $statement[0]->total_records ?? 0,
-            $perPage,
-            $page
-        );
+        $perPage = (int) $request->input('per_page', 10);
+        $page = (int) $request->input('page', 1);
+        $month = (int) $request->input('month', date('m'));
+        $year = (int) $request->input('year', date('Y'));
+        $userId = (int) Auth::id();
+
+        $paginator = $this->repository->getMonthlyReport($userId, $month, $year, $page, $perPage);
+
         return response()->json($paginator);
     }
 
-
     /**
-     * Display a listing of the resource.
+     * Display a listing of all resources for the authenticated user.
      */
     public function all(): JsonResponse
     {
-        $userId = Auth::id();
-        $categories = Category::query()
-            ->where('user_id', $userId)
-            ->where(function ($query) {
-                $query->whereNotNull('parent_id')
-                    ->orWhereDoesntHave('children');
-            })
-            ->with('paretoClassification')
-            ->withCount('categorizationRules')
-            ->orderBy('categorization_rules_count', 'desc')
-            ->get();
+        $userId = (int) Auth::id();
+        $categories = $this->repository->getAllForUser($userId);
 
         return response()->json($categories);
     }
 
-    public function show(Category $category): JsonResponse
+    public function show(int $id): JsonResponse
     {
+        $category = $this->repository->findById($id);
+        if (!$category) {
+            return response()->json(['message' => 'Categoría no encontrada'], 404);
+        }
         return response()->json($category);
     }
 
@@ -71,47 +65,73 @@ class CategoryController extends Controller
      */
     public function store(StoreCategoryRequest $request): JsonResponse
     {
-        $userId = Auth::id();
-        $validatedData = $request->validated();
-        $validatedData['user_id'] = $userId;
-        $categories = Category::create($validatedData);
-        return response()->json($categories, 201);
+        $dto = CategoryDataDTO::fromStoreRequest($request, (int) Auth::id());
+        $category = $this->storeAction->execute($dto);
+        return response()->json($category, 201);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateCategoryRequest $request, Category $category): JsonResponse
+    public function update(UpdateCategoryRequest $request, int $id): JsonResponse
     {
-        $validatedData = $request->validated();
-        $category->update($validatedData);
-        return response()->json($category);
+        $category = $this->repository->findById($id);
+        if (!$category) {
+            return response()->json(['message' => 'Categoría no encontrada'], 404);
+        }
+
+        $dto = CategoryDataDTO::fromUpdateRequest($request, (int) Auth::id());
+        $updatedCategory = $this->updateAction->execute($category, $dto);
+
+        return response()->json($updatedCategory);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Category $category): JsonResponse
+    public function destroy(int $id): JsonResponse
     {
+        $category = $this->repository->findById($id);
+        if (!$category) {
+            return response()->json(['message' => 'Categoría no encontrada'], 404);
+        }
+
         if ($category->transactions()->exists()) {
             return response()->json([
                 'message' => 'No se puede eliminar la categoría porque tiene transacciones asociadas'
             ], 422);
         }
-        $data = $category->delete();
-        return response()->json($data);
+
+        $this->repository->delete($category);
+        return response()->json(['status' => 'deleted']);
     }
 
-    public function patchPareto(\App\Models\Category $category, Request $request): JsonResponse
+    /**
+     * Patch Pareto classification for a category.
+     */
+    public function patchPareto(int $id, Request $request): JsonResponse
     {
+        $category = $this->repository->findById($id);
+        if (!$category) {
+            return response()->json(['message' => 'Categoría no encontrada'], 404);
+        }
+
         $request->validate([
             'pareto_classification_id' => 'sometimes|nullable|exists:pareto_classifications,id',
         ]);
 
-        $category->update([
-            'pareto_classification_id' => $request->pareto_classification_id
-        ]);
+        // Wrap in a DTO to reuse UpdateCategoryAction logic while keeping decoupling
+        $dto = new CategoryDataDTO(
+            name: $category->name,
+            type: $category->type,
+            monthly_budget: (float) $category->monthly_budget,
+            user_id: (int) $category->user_id,
+            parent_id: $category->parent_id,
+            pareto_classification_id: $request->pareto_classification_id ? (int) $request->pareto_classification_id : null
+        );
 
-        return response()->json($category);
+        $this->updateAction->execute($category, $dto);
+
+        return response()->json($category->fresh());
     }
 }

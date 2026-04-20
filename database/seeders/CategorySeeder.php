@@ -1,10 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\Category;
 use App\Models\ParetoClassification;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -18,34 +19,50 @@ class CategorySeeder extends Seeder
         $pareto = ParetoClassification::pluck('id', 'name')->toArray();
         $categories = [
             // Fijos
-            ['name' => 'Vivienda', 'pareto_classification_id' => $pareto['Fijos'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Telefonia', 'pareto_classification_id' => $pareto['Fijos'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Servicios básicos', 'pareto_classification_id' => $pareto['Fijos'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Seguros', 'pareto_classification_id' => $pareto['Fijos'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Vivienda', 'pareto_name' => 'Fijos', 'type' => 'expense'],
+            ['name' => 'Telefonia', 'pareto_name' => 'Fijos', 'type' => 'expense'],
+            ['name' => 'Servicios básicos', 'pareto_name' => 'Fijos', 'type' => 'expense'],
+            ['name' => 'Seguros', 'pareto_name' => 'Fijos', 'type' => 'expense'],
             // Variables
-            ['name' => 'Salario', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Transporte', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Alimentación', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Entretenimiento', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Prestamos', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Salud', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Vestimenta', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Donaciones', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Favores', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Educacion', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Viajes', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Freelance', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Bienestar Personal', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Alimentacion fuera de casa', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Gastos para mi enamorada', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Intereses', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Transferencia interna', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Regalos y detalles', 'pareto_classification_id' => $pareto['Variables'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Salario', 'pareto_name' => 'Variables', 'type' => 'income'],
+            ['name' => 'Transporte', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Alimentación', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Entretenimiento', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Prestamos', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Salud', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Vestimenta', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Donaciones', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Favores', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Educacion', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Viajes', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Freelance', 'pareto_name' => 'Variables', 'type' => 'income'],
+            ['name' => 'Bienestar Personal', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Alimentacion fuera de casa', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Gastos para mi enamorada', 'pareto_name' => 'Variables', 'type' => 'expense'],
+            ['name' => 'Intereses', 'pareto_name' => 'Variables', 'type' => 'income'],
+            ['name' => 'Transferencia interna', 'pareto_name' => 'Variables', 'type' => 'transfer'],
+            ['name' => 'Regalos y detalles', 'pareto_name' => 'Variables', 'type' => 'expense'],
             // Ahorro
-            ['name' => 'Inversiones', 'pareto_classification_id' => $pareto['Ahorro'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Fondo de emergencia', 'pareto_classification_id' => $pareto['Ahorro'], 'user_id' => 1, 'monthly_budget' => 1000, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Inversiones', 'pareto_name' => 'Ahorro', 'type' => 'transfer'],
+            ['name' => 'Fondo de emergencia', 'pareto_name' => 'Ahorro', 'type' => 'transfer'],
         ];
 
-        Category::insert($categories);
+        foreach ($categories as $catData) {
+            $category = Category::create([
+                'name' => $catData['name'],
+                'user_id' => 1,
+                'type' => $catData['type'],
+                'monthly_budget' => 1000,
+            ]);
+
+            if (isset($pareto[$catData['pareto_name']])) {
+                DB::table('category_pareto_assignments')->insert([
+                    'category_id' => $category->id,
+                    'pareto_classification_id' => $pareto[$catData['pareto_name']],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
     }
 }

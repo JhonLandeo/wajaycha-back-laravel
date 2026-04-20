@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Models\ParetoClassification;
 use App\Models\Category;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 it('puede crear una clasificación pareto', function () {
     $user = $this->createUserWithCategories();
@@ -24,15 +27,13 @@ it('puede crear una clasificación pareto', function () {
 });
 
 it('puede listar clasificaciones pareto del usuario autenticado', function () {
-    // 1. Al crear el usuario, tu Observer ya debería crear las 3 clasificaciones
     $user = User::factory()->create();
     $headers = $this->actingAsJwtUser($user);
 
-    // 2. No llames a ParetoClassification::factory() aquí, porque duplicarías
     $response = $this->getJson('/api/all-pareto-classification', $headers);
 
     $response->assertStatus(200)
-        ->assertJsonCount(3); // Esto debería pasar ahora
+        ->assertJsonCount(3); 
 });
 
 it('no puede eliminar pareto con categorías asignadas', function () {
@@ -40,9 +41,15 @@ it('no puede eliminar pareto con categorías asignadas', function () {
     $headers = $this->actingAsJwtUser($user);
 
     $pareto = ParetoClassification::factory()->create(['user_id' => $user->id]);
-    Category::factory()->create([
+    $category = Category::factory()->create([
         'user_id' => $user->id,
-        'pareto_classification_id' => $pareto->id
+    ]);
+
+    DB::table('category_pareto_assignments')->insert([
+        'category_id' => $category->id,
+        'pareto_classification_id' => $pareto->id,
+        'created_at' => now(),
+        'updated_at' => now(),
     ]);
 
     $response = $this->deleteJson('/api/pareto-classification/' . $pareto->id, [], $headers);
@@ -55,10 +62,18 @@ it('puede obtener las categorías de una clasificación pareto', function () {
     $headers = $this->actingAsJwtUser($user);
 
     $pareto = ParetoClassification::factory()->create(['user_id' => $user->id]);
-    Category::factory()->count(2)->create([
+    $categories = Category::factory()->count(2)->create([
         'user_id' => $user->id,
-        'pareto_classification_id' => $pareto->id
     ]);
+
+    foreach ($categories as $category) {
+        DB::table('category_pareto_assignments')->insert([
+            'category_id' => $category->id,
+            'pareto_classification_id' => $pareto->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
 
     $response = $this->getJson('/api/pareto-classification/' . $pareto->id . '/categories', $headers);
 

@@ -17,7 +17,7 @@ final readonly class TransactionFilterDTO
         public ?string $type,
         public ?float $amount,
         public ?string $search,
-        public ?int $category,
+        public ?string $category,
         public bool $recurring,
         public bool $weekend,
         public bool $workday
@@ -34,7 +34,7 @@ final readonly class TransactionFilterDTO
             type: $request->input('type'),
             amount: $request->filled('amount') ? (float) $request->input('amount') : null,
             search: $request->input('search'),
-            category: $request->filled('category') ? (int) $request->input('category') : null,
+            category: $request->input('category') ? (string) $request->input('category') : null,
             recurring: filter_var($request->input('recurring', false), FILTER_VALIDATE_BOOLEAN),
             weekend: filter_var($request->input('weekend', false), FILTER_VALIDATE_BOOLEAN),
             workday: filter_var($request->input('workday', false), FILTER_VALIDATE_BOOLEAN)

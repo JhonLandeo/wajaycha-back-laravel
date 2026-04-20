@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories\Contracts;
 
 use App\DTOs\Transactions\TransactionFilterDTO;
+use App\Models\Transaction;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator as LengthAwarePaginatorContract;
 
 interface TransactionRepositoryContract
@@ -25,4 +26,12 @@ interface TransactionRepositoryContract
      * @return LengthAwarePaginatorContract<int, \App\Models\Transaction>
      */
     public function summaryByCategory(int $userId, ?int $year, ?int $month, ?string $type, int $perPage, int $page): LengthAwarePaginatorContract;
+
+    public function findById(int $id): ?Transaction;
+
+    public function create(array $data): Transaction;
+
+    public function update(Transaction $transaction, array $data): bool;
+
+    public function delete(Transaction $transaction): bool;
 }

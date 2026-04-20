@@ -4,34 +4,41 @@ declare(strict_types=1);
 
 namespace App\Actions\Transactions;
 
+use App\DTOs\Transactions\TransactionDataDTO;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
+use App\Repositories\Contracts\TransactionRepositoryContract;
 
-class StoreTransactionAction
+final class StoreTransactionAction
 {
-    /**
-     * @param int $userId
-     * @param array<string, mixed> $validatedData
-     * @param string|null $detailDescription
-     * @param int|null $categoryId
-     * @return Transaction
-     */
-    public function execute(int $userId, array $validatedData, ?string $detailDescription, ?int $categoryId): Transaction
-    {
-        $validatedData['user_id'] = $userId;
+    public function __construct(
+        private readonly TransactionRepositoryContract $repository
+    ) {
+    }
 
-        if (empty($validatedData['detail_id']) && !empty($detailDescription)) {
-            $detail = Detail::firstOrCreate([
-                'user_id' => $userId,
-                'description' => $detailDescription
+    public function execute(TransactionDataDTO $dto): Transaction
+    {
+        $data = [
+            'amount' => $dto->amount,
+            'date_operation' => $dto->date_operation,
+            'type_transaction' => $dto->type_transaction,
+            'user_id' => $dto->user_id,
+            'category_id' => $dto->category_id,
+            'detail_id' => $dto->detail_id,
+            'is_manual' => $dto->is_manual,
+        ];
+
+        if (empty($data['detail_id']) && !empty($dto->detail_description)) {
+            /** @var Detail $detail */
+            $detail = Detail::query()->firstOrCreate([
+                'user_id' => $dto->user_id,
+                'description' => $dto->detail_description
             ]);
-            $validatedData['detail_id'] = $detail->id;
-            GenerateEmbeddingForDetail::dispatch($detail, $categoryId);
+            $data['detail_id'] = $detail->id;
+            GenerateEmbeddingForDetail::dispatch($detail, $dto->category_id);
         }
 
-        $validatedData['is_manual'] = true;
-
-        return Transaction::create($validatedData);
+        return $this->repository->create($data);
     }
 }

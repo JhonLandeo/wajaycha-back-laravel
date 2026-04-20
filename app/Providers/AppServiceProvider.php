@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
 use App\Models\User;
@@ -17,6 +19,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             \App\Repositories\Contracts\TransactionRepositoryContract::class,
             \App\Repositories\TransactionRepository::class
+        );
+
+        $this->app->bind(
+            \App\Repositories\Contracts\CategoryRepositoryContract::class,
+            \App\Repositories\CategoryRepository::class
+        );
+
+        $this->app->bind(
+            \App\Repositories\Contracts\ParetoRepositoryContract::class,
+            \App\Repositories\ParetoRepository::class
         );
     }
 

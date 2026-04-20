@@ -78,7 +78,7 @@ it('puede actualizar una transacción manual propia', function () {
         'type_transaction' => 'expense'
     ], $headers);
 
-    $response->assertStatus(201);
+    $response->assertStatus(200);
     $this->assertDatabaseHas('transactions', [
         'id' => $transaction->id,
         'amount' => 200.00
