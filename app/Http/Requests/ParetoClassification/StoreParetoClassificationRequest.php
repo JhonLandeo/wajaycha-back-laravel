@@ -3,6 +3,7 @@
 namespace App\Http\Requests\ParetoClassification;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreParetoClassificationRequest extends FormRequest
 {
@@ -17,8 +18,20 @@ class StoreParetoClassificationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|max:255',
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('pareto_classifications')->where('user_id', (int) $this->user()?->id),
+            ],
             'percentage' => 'required|numeric|between:0,100',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'name.unique' => 'Ya existe una clasificación con ese nombre.',
         ];
     }
 }
