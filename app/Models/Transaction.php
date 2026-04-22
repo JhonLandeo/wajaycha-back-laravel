@@ -43,6 +43,7 @@ class Transaction extends Model
         'detail_id',
         'yape_id',
         'is_manual',
+        'message',
     ];
 
     public function detail(): BelongsTo

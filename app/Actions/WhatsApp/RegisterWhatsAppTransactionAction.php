@@ -59,8 +59,8 @@ class RegisterWhatsAppTransactionAction
         );
 
         // E. Parseamos la fecha
-        $dateOp = $dto->dateOperation 
-            ? Carbon::parse($dto->dateOperation)->format('Y-m-d H:i:s') 
+        $dateOp = $dto->dateOperation
+            ? Carbon::parse($dto->dateOperation)->format('Y-m-d H:i:s')
             : Carbon::now()->format('Y-m-d H:i:s');
 
         // F. Guardar transacción final
