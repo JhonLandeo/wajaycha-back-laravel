@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property int $user_id
  * @property int|null $payment_service_id
  * @property int|null $financial_entity_id
- * @property string $status
+ * @property \App\Enums\ImportStatus $status
  * @property-read string|null $financial_entity_name
  * @property-read string|null $payment_service_name
  * @property-read string $url
@@ -74,5 +74,12 @@ class Import extends Model
     public function getUrlAttribute(): string
     {
         return Storage::url('files/' . $this->name);
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'status' => \App\Enums\ImportStatus::class,
+        ];
     }
 }

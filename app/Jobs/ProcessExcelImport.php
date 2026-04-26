@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Imports\TransactionYapeImport;
 use App\Models\Import;
+use App\Enums\ImportStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Foundation\Queue\Queueable;
@@ -33,14 +34,14 @@ class ProcessExcelImport implements ShouldQueue
      */
     public function handle(): void
     {
-        Import::where('id', $this->importId)->update(['status' => 'processing']);
+        Import::where('id', $this->importId)->update(['status' => ImportStatus::PROCESSING]);
         try {
             Excel::import(new TransactionYapeImport($this->userId), $this->filePath);
-            Import::where('id', $this->importId)->update(['status' => 'completed']);
+            Import::where('id', $this->importId)->update(['status' => ImportStatus::COMPLETED]);
         } catch (\Throwable $th) {
             Log::error('Error processing Excel import for user ' . $this->userId . ': ' . $th->getMessage());
             Import::where('id', $this->importId)->update([
-                'status' => 'failed',
+                'status' => ImportStatus::FAILED,
                 'error_message' => $th->getMessage()
             ]);
         }

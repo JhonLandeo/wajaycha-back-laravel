@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\DTOs\TransactionDataDTO;
 use App\Models\Detail;
 use App\Models\Import;
+use App\Enums\ImportStatus;
 use App\Models\Transaction;
 use App\Models\TransactionTag;
 use App\Models\TransactionYape;
@@ -53,7 +54,7 @@ class ProcessPdfImport implements ShouldQueue
 
     public function handle(): void
     {
-        Import::where('id', $this->importId)->update(['status' => 'processing']);
+        Import::where('id', $this->importId)->update(['status' => ImportStatus::PROCESSING]);
         $filePath = Storage::path($this->storedPath);
 
         try {
@@ -107,13 +108,13 @@ class ProcessPdfImport implements ShouldQueue
 
             $this->processParsedTransactions($parsedTransactions);
 
-            Import::where('id', $this->importId)->update(['status' => 'completed']);
+            Import::where('id', $this->importId)->update(['status' => ImportStatus::COMPLETED]);
             DB::commit();
         } catch (Throwable $th) {
             Log::error("Error en Job ProcessPdfImport (ID: {$this->importId}): " . $th->getMessage());
             DB::rollBack();
             Import::where('id', $this->importId)->update([
-                'status' => 'failed',
+                'status' => ImportStatus::FAILED,
                 'error_message' => $th->getMessage()
             ]);
         }

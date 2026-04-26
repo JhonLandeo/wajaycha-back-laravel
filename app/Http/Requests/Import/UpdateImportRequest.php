@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Import;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Enums\ImportStatus;
+use Illuminate\Validation\Rules\Enum;
 
 class UpdateImportRequest extends FormRequest
 {
@@ -18,7 +20,7 @@ class UpdateImportRequest extends FormRequest
     {
         return [
             'name' => 'sometimes|string|max:255',
-            'status' => 'sometimes|string|in:pending,processing,completed,error',
+            'status' => ['sometimes', 'string', new Enum(ImportStatus::class)],
         ];
     }
 }

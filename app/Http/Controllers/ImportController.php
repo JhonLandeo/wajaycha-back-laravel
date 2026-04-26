@@ -8,6 +8,7 @@ use App\Jobs\ProcessPdfImport;
 use App\Jobs\ProcessYapeImport;
 use App\Models\FinancialEntity;
 use App\Models\Import;
+use App\Enums\ImportStatus;
 use App\Models\PaymentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -58,7 +59,8 @@ class ImportController extends Controller
                 'payment_service' => $item->paymentService?->name,
                 'url' => Storage::url('files/' . $item->name),
                 'created_at' => Carbon::parse($item->created_at)->format('Y-m-d H:i:s'),
-                'status' => $item->status,
+                'status' => $item->status->value,
+                'status_label' => $item->status->label(),
                 'extension' => $item->extension
             ];
         });
@@ -92,7 +94,7 @@ class ImportController extends Controller
             $import->size = $file->getSize();
             $import->user_id = $userId;
             $import->financial_entity_id = $accountId;
-            $import->status = 'pending';
+            $import->status = ImportStatus::PENDING;
             $import->save();
 
             ProcessPdfImport::dispatch(
