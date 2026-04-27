@@ -106,7 +106,7 @@ return new class extends Migration
                                         'monthly_budget', cs.monthly_budget,
                                         'spent', cs.spent,
                                         'type', cs.type
-                                    )
+                                    ) ORDER BY cs.monthly_budget DESC
                                 ) FILTER (WHERE cs.id IS NOT NULL) AS categories
                             FROM pareto_classifications pc
                             LEFT JOIN category_summaries cs ON cs.pareto_classification_id = pc.id
