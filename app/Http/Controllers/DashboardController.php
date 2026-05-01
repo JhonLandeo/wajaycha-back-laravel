@@ -99,6 +99,7 @@ class DashboardController extends Controller
     {
         $year = $request->input('year', null);
         $month = $request->input('month', null);
+        $search = $request->input('search');
         $userId = Auth::id();
 
         $nameExpression = "COALESCE(c.name, 'Sin categorizar')";
@@ -124,6 +125,10 @@ class DashboardController extends Controller
 
         if ($month) {
             $query->whereMonth('t.date_operation', $month);
+        }
+
+        if ($search) {
+            $query->where('c.name', 'ILIKE', '%' . $search . '%');
         }
 
         if ($userId) {

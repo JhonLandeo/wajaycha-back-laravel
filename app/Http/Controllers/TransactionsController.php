@@ -22,8 +22,7 @@ final class TransactionsController extends Controller
         private readonly TransactionRepositoryContract $repository,
         private readonly StoreTransactionAction $storeAction,
         private readonly UpdateTransactionAction $updateAction
-    ) {
-    }
+    ) {}
 
     /**
      * Display a listing of the resource.
@@ -57,9 +56,10 @@ final class TransactionsController extends Controller
         $year = $request->input('year') ? (int) $request->input('year') : null;
         $month = $request->input('month') ? (int) $request->input('month') : null;
         $type = (string) $request->input('type');
+        $search = $request->input('search');
         $userId = (int) Auth::id();
 
-        $results = $this->repository->summaryByCategory($userId, $year, $month, $type, $perPage, $page);
+        $results = $this->repository->summaryByCategory($userId, $year, $month, $type, $perPage, $page, $search);
 
         return response()->json($results);
     }
@@ -71,15 +71,11 @@ final class TransactionsController extends Controller
     {
         $transaction = $this->repository->findById($id);
         if (!$transaction) {
-             return response()->json(['message' => 'Transacción no encontrada'], 404);
+            return response()->json(['message' => 'Transacción no encontrada'], 404);
         }
 
         if ($transaction->user_id !== Auth::id()) {
             return response()->json(['message' => 'No autorizado'], 403);
-        }
-        
-        if (!$transaction->is_manual) {
-            return response()->json(['message' => 'Solo las transacciones manuales pueden ser editadas.'], 403);
         }
 
         $dto = TransactionDataDTO::fromUpdateRequest($request, (int) Auth::id(), $id);

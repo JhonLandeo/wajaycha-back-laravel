@@ -79,9 +79,10 @@ final class TransactionRepository implements TransactionRepositoryContract
      * @param string|null $type
      * @param int $perPage
      * @param int $page
+     * @param string|null $search
      * @return LengthAwarePaginatorContract<int, \App\Models\Transaction>
      */
-    public function summaryByCategory(int $userId, ?int $year, ?int $month, ?string $type, int $perPage, int $page): LengthAwarePaginatorContract
+    public function summaryByCategory(int $userId, ?int $year, ?int $month, ?string $type, int $perPage, int $page, ?string $search = null): LengthAwarePaginatorContract
     {
         $query = Transaction::query()
             ->leftJoin('details as d', 'd.id', '=', 'transactions.detail_id')
@@ -106,6 +107,10 @@ final class TransactionRepository implements TransactionRepositoryContract
 
         if ($type) {
             $query->where('transactions.type_transaction', $type);
+        }
+
+        if ($search) {
+            $query->where('sc.name', 'ILIKE', '%' . $search . '%');
         }
 
         $query->where('transactions.user_id', $userId);

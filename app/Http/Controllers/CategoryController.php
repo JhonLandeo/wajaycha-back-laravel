@@ -33,9 +33,10 @@ final class CategoryController extends Controller
         $page = (int) $request->input('page', 1);
         $month = (int) $request->input('month', date('m'));
         $year = (int) $request->input('year', date('Y'));
+        $search = $request->input('search');
         $userId = (int) Auth::id();
 
-        $paginator = $this->repository->getMonthlyReport($userId, $month, $year, $page, $perPage);
+        $paginator = $this->repository->getMonthlyReport($userId, $month, $year, $page, $perPage, $search);
 
         return response()->json($paginator);
     }
@@ -43,10 +44,11 @@ final class CategoryController extends Controller
     /**
      * Display a listing of all resources for the authenticated user.
      */
-    public function all(): JsonResponse
+    public function all(Request $request): JsonResponse
     {
         $userId = (int) Auth::id();
-        $categories = $this->repository->getAllForUser($userId);
+        $search = $request->input('search');
+        $categories = $this->repository->getAllForUser($userId, $search);
 
         return response()->json($categories);
     }

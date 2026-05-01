@@ -26,13 +26,13 @@ final class CategoryRepository implements CategoryRepositoryContract
             ->get();
     }
 
-    public function getMonthlyReport(int $userId, int $month, int $year, int $page, int $perPage): LengthAwarePaginator
+    public function getMonthlyReport(int $userId, int $month, int $year, int $page, int $perPage, ?string $search = null): LengthAwarePaginator
     {
         // Rule 02 Violation Fix: Explicit columns instead of SELECT *
         $results = DB::select(
             'SELECT id, name, monthly_budget, spent, available_budget, percentage_spent, rule_quantity, total_records 
-             FROM get_monthly_category_budget_report(?, ?, ?, ?, ?)',
-            [$page, $perPage, $userId, $month, $year]
+             FROM get_monthly_category_budget_report(?, ?, ?, ?, ?, ?)',
+            [$page, $perPage, $userId, $month, $year, $search]
         );
 
         $total = empty($results) ? 0 : (int) $results[0]->total_records;
@@ -46,11 +46,14 @@ final class CategoryRepository implements CategoryRepositoryContract
         );
     }
 
-    public function getAllForUser(int $userId): Collection
+    public function getAllForUser(int $userId, ?string $search = null): Collection
     {
         // Rule 02 Violation Fix (Eager Loading): Using with() and withCount()
         return Category::query()
             ->where('user_id', $userId)
+            ->when($search, function ($query, $search) {
+                $query->where('name', 'ILIKE', '%' . $search . '%');
+            })
             ->where(function ($query) {
                 $query->whereNotNull('parent_id')
                     ->orWhereDoesntHave('children');

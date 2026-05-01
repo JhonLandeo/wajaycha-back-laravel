@@ -23,9 +23,10 @@ interface TransactionRepositoryContract
      * @param string|null $type
      * @param int $perPage
      * @param int $page
+     * @param string|null $search
      * @return LengthAwarePaginatorContract<int, \App\Models\Transaction>
      */
-    public function summaryByCategory(int $userId, ?int $year, ?int $month, ?string $type, int $perPage, int $page): LengthAwarePaginatorContract;
+    public function summaryByCategory(int $userId, ?int $year, ?int $month, ?string $type, int $perPage, int $page, ?string $search = null): LengthAwarePaginatorContract;
 
     public function findById(int $id): ?Transaction;
 

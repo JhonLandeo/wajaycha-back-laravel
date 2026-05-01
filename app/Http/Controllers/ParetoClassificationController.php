@@ -111,9 +111,10 @@ final class ParetoClassificationController extends Controller
     /**
      * Get categories associated with a Pareto classification.
      */
-    public function categories(int $id): JsonResponse
+    public function categories(int $id, Request $request): JsonResponse
     {
-        $categories = $this->repository->getCategories($id);
+        $search = $request->input('search');
+        $categories = $this->repository->getCategories($id, $search);
         return response()->json($categories);
     }
 }

@@ -56,12 +56,15 @@ final class ParetoRepository implements ParetoRepositoryContract
         );
     }
 
-    public function getCategories(int $paretoId): Collection
+    public function getCategories(int $paretoId, ?string $search = null): Collection
     {
         return Category::query()
             ->select('categories.*')
             ->join('category_pareto_assignments', 'categories.id', '=', 'category_pareto_assignments.category_id')
             ->where('category_pareto_assignments.pareto_classification_id', $paretoId)
+            ->when($search, function ($query, $search) {
+                $query->where('categories.name', 'ILIKE', '%' . $search . '%');
+            })
             ->withCount('categorizationRules')
             ->orderBy('categorization_rules_count', 'desc')
             ->get();

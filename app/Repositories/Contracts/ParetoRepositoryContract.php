@@ -16,7 +16,7 @@ interface ParetoRepositoryContract
 
     public function getMonthlyReport(int $userId, ?int $month, ?int $year, int $page, int $perPage): LengthAwarePaginator;
 
-    public function getCategories(int $paretoId): Collection;
+    public function getCategories(int $paretoId, ?string $search = null): Collection;
 
     public function create(array $data): ParetoClassification;
 

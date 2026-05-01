@@ -14,9 +14,9 @@ interface CategoryRepositoryContract
 
     public function findByUserId(int $userId): Collection;
 
-    public function getMonthlyReport(int $userId, int $month, int $year, int $page, int $perPage): LengthAwarePaginator;
+    public function getMonthlyReport(int $userId, int $month, int $year, int $page, int $perPage, ?string $search = null): LengthAwarePaginator;
 
-    public function getAllForUser(int $userId): Collection;
+    public function getAllForUser(int $userId, ?string $search = null): Collection;
 
     public function delete(Category $category): bool;
 
