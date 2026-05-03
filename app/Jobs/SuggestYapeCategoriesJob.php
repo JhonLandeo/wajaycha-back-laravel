@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\TransactionYape;
+use App\Models\Transaction;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,7 +30,8 @@ class SuggestYapeCategoriesJob implements ShouldQueue
         Log::info("Iniciando SuggestYapeCategoriesJob para User: {$this->userId}");
 
         // 1. Obtenemos todas las transacciones de Yape SIN categoría
-        $uncategorizedTxs = TransactionYape::where('user_id', $this->userId)
+        $uncategorizedTxs = Transaction::where('user_id', $this->userId)
+            ->where('source_type', 'import_app')
             ->whereNull('category_id')
             ->get();
 
@@ -46,13 +47,9 @@ class SuggestYapeCategoriesJob implements ShouldQueue
             $dayOfWeek = Carbon::parse($tx_new->date_operation)->dayOfWeek; // 0=Domingo, 6=Sábado
 
             // 3. Ejecutamos la consulta k-NN
-            $nearestNeighbor = TransactionYape::where('user_id', $this->userId)
-                ->whereNotNull('category_id') // Solo buscar en las ya categorizadas
-                
-                // Filtro Fuerte: Solo buscar montos en un rango de +/- 50%
-                // (Evita que un almuerzo de S/10 se compare con un pago de S/500)
+            $nearestNeighbor = Transaction::where('user_id', $this->userId)
+                ->whereNotNull('category_id') 
                 ->whereBetween('amount', [$tx_new->amount * 0.5, $tx_new->amount * 1.5]) 
-                
                 ->select('category_id')
                 
                 // 4. Cálculo de "Distancia" (El corazón de la lógica)

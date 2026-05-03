@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('transactions', function (Blueprint $table) {
-            $table->boolean('is_manual')->default(false);
+            if (!Schema::hasColumn('transactions', 'is_manual')) {
+                $table->boolean('is_manual')->default(false);
+            }
         });
     }
 

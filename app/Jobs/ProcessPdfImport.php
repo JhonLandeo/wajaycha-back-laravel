@@ -8,7 +8,6 @@ use App\Models\Import;
 use App\Enums\ImportStatus;
 use App\Models\Transaction;
 use App\Models\TransactionTag;
-use App\Models\TransactionYape;
 use App\Services\CategorizationService;
 use App\Services\TransactionAnalyzer;
 use Illuminate\Bus\Queueable;
@@ -144,7 +143,9 @@ class ProcessPdfImport implements ShouldQueue
             $finalCategoryId = null;
             $finalYapeId = null;
 
-            $transactionYape = TransactionYape::where('user_id', $this->userId)
+            // Buscamos un registro de Yape unificado que coincida
+            $transactionYape = Transaction::where('user_id', $this->userId)
+                ->where('source_type', 'import_app')
                 ->whereDate('date_operation', Carbon::parse($txData->date_operation)->toDateString())
                 ->where('amount', $txData->amount)
                 ->where('type_transaction', $txData->type_transaction)
@@ -153,15 +154,11 @@ class ProcessPdfImport implements ShouldQueue
 
             if ($transactionYape) {
                 $yapeIdsFounds[] = $transactionYape->id;
-            }
-
-            if ($transactionYape) {
                 $finalYapeId = $transactionYape->id;
+                $finalCategoryId = $transactionYape->category_id;
             }
 
-            if ($transactionYape && $transactionYape->category_id) {
-                $finalCategoryId = $transactionYape->category_id;
-            } else {
+            if (!$finalCategoryId) {
                 $finalCategoryId = $this->categorizationService->findCategory($this->userId, $detail);
             }
 
@@ -175,30 +172,22 @@ class ProcessPdfImport implements ShouldQueue
                 ],
                 [
                     'category_id' => $finalCategoryId,
-                    'yape_id' => $finalYapeId,
+                    'matched_transaction_id' => $finalYapeId,
+                    'source_type' => 'import_statement',
+                    'financial_entity_id' => 1,
                 ]
             );
 
             // 3. Actualizar las etiquetas si es necesario
             if ($finalYapeId) {
-                $yapeTag = TransactionYape::find($finalYapeId)->tags()->first(); // De momento solo una etiqueta por Yape
-                if ($yapeTag) {
-                    $tag = TransactionTag::where('tag_id', $yapeTag->tag_id)
-                        ->where('transaction_yape_id', $yapeTag->transaction_yape_id)
-                        ->first();
-                    if ($tag) {
-                        DB::table('transaction_tag')
-                            ->where('transaction_yape_id', $yapeTag->transaction_yape_id)
-                            ->where('tag_id', $yapeTag->tag_id)
-                            ->update(['transaction_id' => $transaction->id]);
-                    } else {
-                        TransactionTag::create([
-                            'tag_id' => $yapeTag->tag_id,
-                            'transaction_yape_id' => $yapeTag->transaction_yape_id,
-                            'transaction_id' => $transaction->id,
-                        ]);
-                    }
-                }
+                // Como ahora todo está en transaction_tag.transaction_id, 
+                // movemos los tags del Yape a la transacción manual si aplica
+                DB::table('transaction_tag')
+                    ->where('transaction_id', $finalYapeId)
+                    ->update(['transaction_id' => $transaction->id]);
+                
+                // Opcionalmente, podemos marcar el Yape como matched para que no aparezca en reportes
+                // $transactionYape->update(['source_type' => 'yape_matched']);
             }
         }
     }

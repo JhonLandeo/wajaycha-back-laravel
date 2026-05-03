@@ -44,6 +44,10 @@ class Transaction extends Model
         'yape_id',
         'is_manual',
         'message',
+        'source_type',
+        'financial_entity_id',
+        'payment_service_id',
+        'matched_transaction_id',
     ];
 
     public function detail(): BelongsTo

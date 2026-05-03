@@ -3,7 +3,7 @@
 namespace App\Imports;
 
 use App\Models\Detail;
-use App\Models\TransactionYape;
+use App\Models\Transaction;
 use App\Services\CategorizationService;
 use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
@@ -59,14 +59,15 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         $descriptionRaw = $isExpense ? $row['Destino'] : $row['Origen'];
 
         // Verificamos si la transacción YA existe
-        $yapeRecord = TransactionYape::query()
-            ->from('transaction_yapes as ty')
+        $yapeRecord = Transaction::query()
+            ->from('transactions as ty')
             ->join('details as d', 'ty.detail_id', '=', 'd.id')
             ->where('message', $row['Mensaje'])
             ->where('d.description', $descriptionRaw)
             ->where('amount', (float) $row['Monto'])
             ->whereBetween('date_operation', [$startDate, $endDate])
             ->where('ty.user_id', $this->userId)
+            ->where('ty.source_type', 'import_app')
             ->first();
 
         if ($yapeRecord) {
@@ -108,7 +109,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             $messageRaw
         );
 
-        return TransactionYape::create([
+        return Transaction::create([
             'message' => $messageRaw,
             'amount' => (float) $row['Monto'],
             'date_operation' => $dateOperation,
@@ -116,6 +117,10 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             'user_id' => $this->userId,
             'detail_id' => $detail->id,
             'category_id' => $categoryId,
+            'financial_entity_id' => 1,
+            'payment_service_id' => 1,
+            'source_type' => 'import_app',
+            'is_manual' => false,
         ]);
     }
 

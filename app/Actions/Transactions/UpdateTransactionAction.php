@@ -9,7 +9,6 @@ use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\TransactionTag;
-use App\Models\TransactionYape;
 use App\Repositories\Contracts\TransactionRepositoryContract;
 use App\Services\CategorizationService;
 use App\Services\ClassificationService;
@@ -70,111 +69,72 @@ final class UpdateTransactionAction
 
     private function updateTransactionFrequent(TransactionDataDTO $dto, ?int $newCategoryId): void
     {
-        if ($dto->source_type === 'yape_unmatched') {
-            /** @var TransactionYape|null $yapeTransaction */
-            $yapeTransaction = TransactionYape::query()->find($dto->transaction_id ?? 0);
-            if ($yapeTransaction) {
-                $yapeTransaction->category_id = $newCategoryId;
-                $yapeTransaction->save();
+        $transaction = $this->repository->findById($dto->transaction_id ?? 0);
+        if ($transaction) {
+            $transaction->category_id = $newCategoryId;
+            $transaction->save();
 
-                if ($dto->reason === 'with_reason' && $dto->tag_id) {
-                    $transactionTag = new TransactionTag();
-                    $transactionTag->transaction_yape_id = $yapeTransaction->id;
-                    $transactionTag->tag_id = $dto->tag_id;
-                    $transactionTag->save();
-                }
-
-                $yapeTransaction->load('detail');
-                $detail = $yapeTransaction->detail;
-                if ($detail && $newCategoryId) {
-                    TransactionYape::query()
-                        ->join('details as d', 'transaction_yapes.detail_id', '=', 'd.id')
-                        ->where('d.description', $detail->description)
-                        ->whereNull('transaction_yapes.category_id')
-                        ->update(['category_id' => $newCategoryId]);
-
-                    $this->categorizationService->createExactRule(
-                        $yapeTransaction->user_id,
-                        $detail->id,
-                        $newCategoryId
-                    );
-                }
+            if ($dto->reason === 'with_reason' && $dto->tag_id) {
+                $transactionTag = new TransactionTag();
+                $transactionTag->transaction_id = $transaction->id;
+                $transactionTag->tag_id = $dto->tag_id;
+                $transactionTag->save();
             }
-        } else {
-            $transaction = $this->repository->findById($dto->transaction_id ?? 0);
-            if ($transaction) {
-                $transaction->category_id = $newCategoryId;
-                $transaction->save();
 
-                $transaction->load('detail');
-                $detail = $transaction->detail;
+            $transaction->load('detail');
+            $detail = $transaction->detail;
+            if ($detail && $newCategoryId) {
+                Transaction::query()
+                    ->join('details as d', 'transactions.detail_id', '=', 'd.id')
+                    ->where('d.description', $detail->description)
+                    ->whereNull('transactions.category_id')
+                    ->update(['category_id' => $newCategoryId]);
 
-                if ($detail && $newCategoryId) {
-                    Transaction::query()
-                        ->join('details as d', 'transactions.detail_id', '=', 'd.id')
-                        ->where('d.description', $detail->description)
-                        ->whereNull('transactions.category_id')
-                        ->update(['category_id' => $newCategoryId]);
-
-                    $this->categorizationService->createExactRule(
-                        $transaction->user_id,
-                        $detail->id,
-                        $newCategoryId
-                    );
-                }
+                $this->categorizationService->createExactRule(
+                    $transaction->user_id,
+                    $detail->id,
+                    $newCategoryId
+                );
             }
         }
     }
 
     private function updateTransactionWithoutFrequent(TransactionDataDTO $dto, ?int $newCategoryId): void
     {
-        if ($dto->source_type === 'yape_unmatched') {
-            /** @var TransactionYape|null $yapeTransaction */
-            $yapeTransaction = TransactionYape::query()->find($dto->transaction_id ?? 0);
-            if ($yapeTransaction) {
-                $yapeTransaction->category_id = $newCategoryId;
-                $yapeTransaction->save();
-                if ($dto->reason === 'with_reason' && $dto->tag_id) {
-                    $transactionTag = new TransactionTag();
-                    $transactionTag->transaction_yape_id = $yapeTransaction->id;
-                    $transactionTag->tag_id = $dto->tag_id;
-                    $transactionTag->save();
-                }
-                $yapeTransaction->load('detail');
-                $detail = $yapeTransaction->detail;
-                if ($detail && $newCategoryId && $this->classifier->isDetailUsefulForLearning($detail->description)) {
-                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
-                }
+        $transaction = $this->repository->findById($dto->transaction_id ?? 0);
+        if ($transaction) {
+            $transaction->category_id = $newCategoryId;
+            $transaction->save();
+            
+            if ($dto->reason === 'with_reason' && $dto->tag_id) {
+                $transactionTag = new TransactionTag();
+                $transactionTag->transaction_id = $transaction->id;
+                $transactionTag->tag_id = $dto->tag_id;
+                $transactionTag->save();
             }
-        } else {
-            $transaction = $this->repository->findById($dto->transaction_id ?? 0);
-            if ($transaction) {
-                $transaction->category_id = $newCategoryId;
-                $transaction->save();
-                $transaction->load('detail');
-                $detail = $transaction->detail;
 
-                $this->updateMatchingYapeTransaction($transaction, $dto->user_id, $newCategoryId);
+            $transaction->load('detail');
+            $detail = $transaction->detail;
 
-                if ($detail && $newCategoryId && $this->classifier->isDetailUsefulForLearning($detail->description)) {
-                    GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
-                }
+            // Search for other transactions (like Yape imports) that might match this one to update their category too
+            $this->updateMatchingOtherTransactions($transaction, $dto->user_id, $newCategoryId);
+
+            if ($detail && $newCategoryId && $this->classifier->isDetailUsefulForLearning($detail->description)) {
+                GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
             }
         }
     }
 
-    private function updateMatchingYapeTransaction(Transaction $transaction, int $userId, ?int $newCategoryId): void
+    private function updateMatchingOtherTransactions(Transaction $transaction, int $userId, ?int $newCategoryId): void
     {
-        $yapeTransaction = TransactionYape::query()
+        // Now that everything is in the same table, we look for other transactions 
+        // with the same amount/date but different source_type
+        Transaction::query()
             ->where('amount', $transaction->amount)
             ->where('user_id', $userId)
             ->where('type_transaction', $transaction->type_transaction)
             ->whereDate('date_operation', Carbon::parse($transaction->date_operation)->toDateString())
-            ->first();
-
-        if ($yapeTransaction) {
-            $yapeTransaction->category_id = $newCategoryId;
-            $yapeTransaction->save();
-        }
+            ->where('id', '!=', $transaction->id)
+            ->update(['category_id' => $newCategoryId]);
     }
 }

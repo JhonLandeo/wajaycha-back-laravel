@@ -7,7 +7,7 @@ use App\Http\Requests\Detail\UpdateDetailRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
-use App\Models\TransactionYape;
+
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

@@ -23,7 +23,6 @@ class TransactionTag extends Model
 
     protected $fillable = [
         'transaction_id',
-        'transaction_yape_id',
         'tag_id',
     ];
 }
