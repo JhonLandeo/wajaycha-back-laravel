@@ -179,3 +179,37 @@ it('avisa al remitente cuando el job falla inesperadamente', function () {
 
     expect(lastTelegramReply())->toContain('error inesperado');
 });
+
+it('avisa y no registra cuando el medio de la foto no se puede descargar', function () {
+    telegramSender();
+
+    // Http::fake() acumula stubs en vez de reemplazarlos, asi que el del beforeEach
+    // seguiria ganando. Se cambia el token para que la URL de getFile caiga en el
+    // comodin, que responde ok sin result.file_path: exactamente lo que Telegram
+    // devuelve para un archivo inexistente.
+    config()->set('services.telegram.bot_token', 'TOKEN-SIN-STUB');
+
+    runTelegramJob('123456789', null, 'file-inexistente', CaptureFixtures::validMovement());
+
+    expect(Transaction::count())->toBe(0)
+        ->and(lastTelegramReply())->toContain('No pude leer');
+});
+
+it('avisa y no registra cuando la IA no lee la foto', function () {
+    telegramSender();
+
+    runTelegramJob('123456789', null, 'file-9', null);
+
+    expect(Transaction::count())->toBe(0)
+        ->and(lastTelegramReply())->toContain('No pude leer');
+});
+
+it('avisa y no registra cuando la foto no es un comprobante', function () {
+    telegramSender();
+
+    runTelegramJob('123456789', null, 'file-9', CaptureFixtures::unparseableMovement());
+
+    // La foto se descargo bien y Gemini la leyo: simplemente no era un movimiento.
+    expect(Transaction::count())->toBe(0)
+        ->and(lastTelegramReply())->toContain('no parece un movimiento');
+});

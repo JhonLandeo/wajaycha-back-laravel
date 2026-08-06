@@ -183,17 +183,22 @@ WhatsApp code as its first implementation.
 
 ## Deviations recorded at apply
 
-1. **Ten commits, not five slices.** Slices 3, 4 and 5 each exceeded the 400-line
-   review budget once implemented, and were split at real seams rather than at the
-   line count: 3a/3b (schema vs runtime), 4a/4b (issuance vs redemption), and slice 5
-   in five commits (secret boundary → deduplication → adapter → capture job → ingress).
+1. **Eleven implementation commits, not five slices.** Slices 3, 4 and 5 each exceeded
+   the 400-line review budget once implemented, and were split at real seams rather
+   than at the line count: 3a/3b (schema vs runtime), 4a/4b (issuance vs redemption),
+   and slice 5 in five commits (secret boundary → deduplication → adapter → capture
+   job → ingress). The full range `0dbe82e..HEAD` holds 18 commits once the docs,
+   chore and merge commits are counted alongside them.
 2. **One commit outside this list.** `9661acf` added direct coverage for
    `ProcessWhatsAppImage::handle()`, `ProcessWhatsAppMessage::handle()` and their
    `failed()` handlers. Neither had any test; that gap let a CRITICAL reach review, and
    slice 5 builds on those same jobs.
-3. **Task 5.9 landed slightly differently.** Choosing the largest photo variant lives in
-   `TelegramChannel::largestPhotoUnder()` and is called by the job before `fetchMedia`,
-   because the capture port takes a single media reference. Same behaviour, port intact.
+3. **Task 5.9 landed slightly differently, then was corrected.** Choosing the largest
+   photo variant lives in `TelegramChannel::largestPhotoUnder()`. It was first called
+   by the job, which forced a docblock downcast past the three-method port; the
+   change-level review caught that, and `365b825` moved the selection into the Telegram
+   webhook controller so the job speaks only the port and receives an already-chosen
+   file id.
 4. **`users.whatsapp_phone` was not dropped.** Registration still writes it and no task
    covered changing that path; capture no longer reads it. Removal belongs to archive,
    alongside `legacy_whatsapp_phone`.
