@@ -13,10 +13,10 @@ use Illuminate\Support\Facades\DB;
 
 final class ParetoRepository implements ParetoRepositoryContract
 {
-    public function findById(int $id): ?ParetoClassification
+    public function findById(int $id, int $userId): ?ParetoClassification
     {
         /** @var ParetoClassification|null */
-        return ParetoClassification::query()->find($id);
+        return ParetoClassification::query()->whereKey($id)->where('user_id', $userId)->first();
     }
 
     public function getAllForUser(int $userId): Collection

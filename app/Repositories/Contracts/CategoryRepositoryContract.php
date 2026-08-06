@@ -10,7 +10,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 interface CategoryRepositoryContract
 {
-    public function findById(int $id): ?Category;
+    public function findById(int $id, int $userId): ?Category;
 
     public function findByUserId(int $userId): Collection;
 

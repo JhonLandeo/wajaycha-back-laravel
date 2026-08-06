@@ -65,7 +65,7 @@ final class ParetoClassificationController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        $pareto = $this->repository->findById($id);
+        $pareto = $this->repository->findById($id, (int) Auth::id());
         if (!$pareto) {
             return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
         }
@@ -77,7 +77,7 @@ final class ParetoClassificationController extends Controller
      */
     public function update(UpdateParetoClassificationRequest $request, int $id): JsonResponse
     {
-        $pareto = $this->repository->findById($id);
+        $pareto = $this->repository->findById($id, (int) Auth::id());
         if (!$pareto) {
             return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
         }
@@ -93,7 +93,7 @@ final class ParetoClassificationController extends Controller
      */
     public function destroy(int $id): JsonResponse
     {
-        $pareto = $this->repository->findById($id);
+        $pareto = $this->repository->findById($id, (int) Auth::id());
         if (!$pareto) {
             return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
         }

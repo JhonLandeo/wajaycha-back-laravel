@@ -28,7 +28,7 @@ interface TransactionRepositoryContract
      */
     public function summaryByCategory(int $userId, ?int $year, ?int $month, ?string $type, int $perPage, int $page, ?string $search = null): LengthAwarePaginatorContract;
 
-    public function findById(int $id): ?Transaction;
+    public function findById(int $id, int $userId): ?Transaction;
 
     public function create(array $data): Transaction;
 
