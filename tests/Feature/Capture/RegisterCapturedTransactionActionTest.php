@@ -55,20 +55,24 @@ it('crea un nuevo detail si no existe coincidencia por trigrama', function () {
 it('asigna la categoría correcta usando CategorizationService', function () {
     $user = User::factory()->create();
 
-    Category::factory()->create(['id' => 999, 'user_id' => $user->id]);
+    // El id lo asigna la secuencia. Fijarlo a mano choca con las categorias que el
+    // UserObserver siembra: las secuencias de PostgreSQL no vuelven atras con el
+    // rollback de cada test, asi que tarde o temprano la secuencia alcanza el valor
+    // fijado y el test revienta segun cuantos tests hayan corrido antes.
+    $category = Category::factory()->create(['user_id' => $user->id]);
 
     $analyzerMock = Mockery::mock(TransactionAnalyzer::class);
     $analyzerMock->shouldReceive('analyze')->andReturn(['entity' => 'supermercado', 'type' => 'expense']);
 
     $catServiceMock = Mockery::mock(CategorizationService::class);
-    $catServiceMock->shouldReceive('findCategory')->andReturn(999);
+    $catServiceMock->shouldReceive('findCategory')->andReturn($category->id);
 
     $action = new RegisterCapturedTransactionAction($analyzerMock, $catServiceMock, app(DetailResolver::class));
     $dto = new ParsedReceiptDTO(true, 50.00, 'Supermercado', null, now()->toIso8601String(), 'expense', null);
 
     $transaction = $action->execute($user, $dto);
 
-    expect($transaction->category_id)->toBe(999);
+    expect($transaction->category_id)->toBe($category->id);
 });
 
 it('persiste la transacción con los datos del DTO', function () {
