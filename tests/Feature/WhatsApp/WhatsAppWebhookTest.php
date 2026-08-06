@@ -6,16 +6,16 @@ use App\Jobs\ProcessWhatsAppImage;
 use Illuminate\Support\Facades\Config;
 
 it('verifica el webhook con token correcto devuelve el challenge', function () {
-    Config::set('services.whatsapp.webhook_verify_token', 'mi_secreto_yape_123');
+    Config::set('services.whatsapp.verify_token', 'test-verify-token');
 
-    $response = $this->get('/api/whatsapp/webhook?hub_mode=subscribe&hub_verify_token=mi_secreto_yape_123&hub_challenge=123456');
+    $response = $this->get('/api/whatsapp/webhook?hub_mode=subscribe&hub_verify_token=test-verify-token&hub_challenge=123456');
 
     $response->assertStatus(200);
     $this->assertEquals('123456', $response->getContent());
 });
 
 it('rechaza la verificación con token incorrecto', function () {
-    Config::set('services.whatsapp.webhook_verify_token', 'my-secret-token');
+    Config::set('services.whatsapp.verify_token', 'test-verify-token');
 
     $response = $this->get('/api/whatsapp/webhook?hub_mode=subscribe&hub_verify_token=wrong-token&hub_challenge=123456');
 
