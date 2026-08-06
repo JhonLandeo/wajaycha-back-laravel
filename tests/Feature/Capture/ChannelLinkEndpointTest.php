@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ChannelLinkToken;
 use App\Models\User;
 use App\Services\Capture\ChannelLinkTokenIssuer;
+use App\Services\Capture\ChannelLinkTokenRedeemer;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -14,7 +15,7 @@ beforeEach(function () {
     config()->set('services.telegram.bot_username', 'wajaycha_bot');
 });
 
-it('entrega un deep link al usuario autenticado', function () {
+it('entrega un deep link redimible al usuario autenticado', function () {
     $user = User::factory()->create();
 
     $response = $this->postJson('/api/channel-link-token', [], $this->actingAsJwtUser($user));
@@ -25,11 +26,12 @@ it('entrega un deep link al usuario autenticado', function () {
 
     expect($deepLink)->toStartWith('https://t.me/wajaycha_bot?start=');
 
-    // El token del enlace es el que quedo guardado, no uno decorativo. El canje en
-    // si llega en el siguiente slice.
+    // El token del enlace tiene que servir de verdad, no solo parecer un token.
     parse_str((string) parse_url($deepLink, PHP_URL_QUERY), $query);
 
-    expect(ChannelLinkToken::sole()->token_hash)->toBe(hash('sha256', $query['start']));
+    expect(ChannelLinkToken::sole()->token_hash)->toBe(hash('sha256', $query['start']))
+        ->and(app(ChannelLinkTokenRedeemer::class)->redeem('telegram', '123456789', $query['start']))
+        ->toBeTrue();
 });
 
 it('nunca devuelve el token suelto en la respuesta', function () {
