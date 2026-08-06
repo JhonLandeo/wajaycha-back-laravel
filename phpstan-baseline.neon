@@ -1,0 +1,97 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Method App\\Http\\Requests\\ParetoClassification\\StoreParetoClassificationRequest\:\:messages\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Requests/ParetoClassification/StoreParetoClassificationRequest.php
+
+		-
+			message: '#^Method App\\Http\\Requests\\ParetoClassification\\UpdateParetoClassificationRequest\:\:messages\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Requests/ParetoClassification/UpdateParetoClassificationRequest.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Transaction\:\:\$suggested_category_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Jobs/SuggestYapeCategoriesJob.php
+
+		-
+			message: '#^Method App\\Repositories\\CategoryRepository\:\:create\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/CategoryRepository.php
+
+		-
+			message: '#^Method App\\Repositories\\CategoryRepository\:\:update\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/CategoryRepository.php
+
+		-
+			message: '#^Method App\\Repositories\\Contracts\\CategoryRepositoryContract\:\:create\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/Contracts/CategoryRepositoryContract.php
+
+		-
+			message: '#^Method App\\Repositories\\Contracts\\CategoryRepositoryContract\:\:update\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/Contracts/CategoryRepositoryContract.php
+
+		-
+			message: '#^Method App\\Repositories\\Contracts\\ParetoRepositoryContract\:\:create\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/Contracts/ParetoRepositoryContract.php
+
+		-
+			message: '#^Method App\\Repositories\\Contracts\\ParetoRepositoryContract\:\:update\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/Contracts/ParetoRepositoryContract.php
+
+		-
+			message: '#^Method App\\Repositories\\Contracts\\TransactionRepositoryContract\:\:create\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/Contracts/TransactionRepositoryContract.php
+
+		-
+			message: '#^Method App\\Repositories\\Contracts\\TransactionRepositoryContract\:\:update\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/Contracts/TransactionRepositoryContract.php
+
+		-
+			message: '#^Method App\\Repositories\\ParetoRepository\:\:create\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/ParetoRepository.php
+
+		-
+			message: '#^Method App\\Repositories\\ParetoRepository\:\:update\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/ParetoRepository.php
+
+		-
+			message: '#^Method App\\Repositories\\TransactionRepository\:\:create\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/TransactionRepository.php
+
+		-
+			message: '#^Method App\\Repositories\\TransactionRepository\:\:update\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Repositories/TransactionRepository.php
+
+		-
+			message: '#^PHPDoc tag @var contains generic interface Illuminate\\Contracts\\Pagination\\LengthAwarePaginator but does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Repositories/TransactionRepository.php
