@@ -186,6 +186,12 @@ class ImportController extends Controller
             return response()->json(['message' => 'Import no encontrado'], 404);
         }
 
+        if (!Storage::exists($import->path)) {
+            // The row survives its file: a cleanup, a failed upload or a disk migration
+            // leaves the record pointing at nothing. Report it instead of throwing a 500.
+            return response()->json(['message' => 'El archivo del import ya no está disponible'], 410);
+        }
+
         return Storage::download($import->path, $import->name);
     }
 }
