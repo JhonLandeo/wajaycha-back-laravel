@@ -2,6 +2,7 @@ schema: spec-driven
 change: telegram-capture-channel
 title: Telegram capture channel
 created: 2026-08-06
+archived: 2026-08-06
 artifact_store: hybrid
 owning_subdomain: Ingestion
 decided_by: ../../../../docs/decisions/0007-telegram-primary-conversational-channel.md
@@ -43,13 +44,15 @@ phases:
       Suite 197 passed, PHPStan 16 before and after, every commit with its own
       approved review receipt.
   verify:
-    status: pending
+    status: complete
+    artifact: verify-report.md
     depends_on: [apply]
   archive:
-    status: pending
+    status: complete
+    artifact: archive-report.md
     depends_on: [verify]
 
-next_recommended: verify
+next_recommended: none
 
 delivery_strategy: auto-chain
 chain_strategy: stacked-to-main
@@ -85,7 +88,12 @@ slices:
     note: Carries F1-equivalent (secret_token), F2 (update_id), F3 (iterate updates). Tightest slice.
 
 engram_topic_keys:
-  propose: sdd/telegram-capture-channel/propose
+  propose: sdd/telegram-capture-channel/proposal
+  spec: sdd/telegram-capture-channel/spec
+  design: sdd/telegram-capture-channel/design
+  tasks: sdd/telegram-capture-channel/tasks
+  verify: sdd/telegram-capture-channel/verify-report
+  archive: sdd/telegram-capture-channel/archive-report
 
 quality_drivers: [QA-4, QA-3, QA-8, QA-7]
 
@@ -101,4 +109,4 @@ out_of_scope:
     disposition: product decision for the owner
 
 open_questions:
-  - How does a user link their Telegram account? Proposal assumes a signed deep link from the SPA.
+  - How does a user link their Telegram account? Proposal assumes a signed deep link from the SPA. (RESOLVED: deep link implementation complete)

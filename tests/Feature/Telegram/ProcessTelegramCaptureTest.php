@@ -185,8 +185,9 @@ it('avisa y no registra cuando el medio de la foto no se puede descargar', funct
 
     // Http::fake() acumula stubs en vez de reemplazarlos, asi que el del beforeEach
     // seguiria ganando. Se cambia el token para que la URL de getFile caiga en el
-    // comodin, que responde ok sin result.file_path: exactamente lo que Telegram
-    // devuelve para un archivo inexistente.
+    // comodin, que responde ok sin result.file_path. Telegram, para un archivo que no
+    // existe, responde ok:false —eso lo cubre TelegramChannelTest—; esta es la otra
+    // rama: una respuesta exitosa a la que le falta el campo que necesitamos.
     config()->set('services.telegram.bot_token', 'TOKEN-SIN-STUB');
 
     runTelegramJob('123456789', null, 'file-inexistente', CaptureFixtures::validMovement());
