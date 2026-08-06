@@ -30,7 +30,6 @@ class TransactionFactory extends Factory
             'date_operation'   => fake()->dateTimeBetween('-6 months', 'now')->format('Y-m-d H:i:s'),
             'type_transaction' => fake()->randomElement(['expense', 'income']),
             'is_manual'        => true,
-            'yape_id'          => null,
         ];
     }
 
