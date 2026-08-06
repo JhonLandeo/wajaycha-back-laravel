@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Middleware\VerifyTelegramSecretToken;
 use App\Jobs\ProcessTelegramCapture;
 use App\Models\ProcessedChannelUpdate;
+use App\Services\Capture\TelegramChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 
@@ -151,4 +152,38 @@ it('acota cuantos updates procesa de una sola entrega', function () {
     // descartado queda registrado en vez de desaparecer en silencio.
     Queue::assertPushed(ProcessTelegramCapture::class, 100);
     expect(ProcessedChannelUpdate::count())->toBe(100);
+});
+
+it('no encola nada cuando ninguna variante de la foto entra en el limite', function () {
+    postUpdate([
+        'update_id' => 50,
+        'message' => [
+            'chat' => ['id' => 123456789],
+            'photo' => [['file_id' => 'enorme', 'file_size' => TelegramChannel::MAX_PHOTO_BYTES + 1]],
+        ],
+    ])->assertOk();
+
+    // Elegir la variante es conocimiento de Telegram y vive en este borde, asi que
+    // una foto inservible ni siquiera llega a la cola.
+    Queue::assertNothingPushed();
+    expect(ProcessedChannelUpdate::count())->toBe(1);
+});
+
+it('encola el file id ya elegido, no el arreglo de variantes', function () {
+    postUpdate([
+        'update_id' => 51,
+        'message' => [
+            'chat' => ['id' => 123456789],
+            'photo' => [
+                ['file_id' => 'miniatura', 'file_size' => 1_000],
+                ['file_id' => 'grande', 'file_size' => 800_000],
+            ],
+        ],
+    ])->assertOk();
+
+    Queue::assertPushed(function (ProcessTelegramCapture $job) {
+        $prop = (new ReflectionClass($job))->getProperty('mediaReference');
+
+        return $prop->getValue($job) === 'grande';
+    });
 });

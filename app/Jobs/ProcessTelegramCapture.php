@@ -7,10 +7,10 @@ namespace App\Jobs;
 use App\Actions\Capture\RegisterCapturedTransactionAction;
 use App\Services\AI\GeminiTextService;
 use App\Services\AI\GeminiVisionService;
+use App\Services\Capture\CaptureChannel;
 use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
 use App\Services\Capture\ChannelLinkTokenRedeemer;
-use App\Services\Capture\TelegramChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -33,12 +33,12 @@ class ProcessTelegramCapture implements ShouldQueue
     private const LINK_PREFIX = '/start ';
 
     /**
-     * @param  array<int, array<string, mixed>>  $photo  Telegram's renditions of one photo.
+     * @param  string|null  $mediaReference  The already-chosen file id, if this was a photo.
      */
     public function __construct(
         private readonly string $chatId,
         private readonly ?string $text = null,
-        private readonly array $photo = [],
+        private readonly ?string $mediaReference = null,
     ) {}
 
     public function handle(
@@ -49,7 +49,6 @@ class ProcessTelegramCapture implements ShouldQueue
         GeminiTextService $textService,
         RegisterCapturedTransactionAction $registerAction,
     ): void {
-        /** @var TelegramChannel $channel */
         $channel = $channels->for('telegram');
 
         // 1. VINCULACION: /start <token> llega antes que cualquier identidad, porque
@@ -71,7 +70,7 @@ class ProcessTelegramCapture implements ShouldQueue
         }
 
         // 3. PARSEAR: foto o texto, mismo destino
-        $parsed = $this->photo !== []
+        $parsed = $this->mediaReference !== null
             ? $this->parsePhoto($channel, $vision)
             : $textService->parseText((string) $this->text);
 
@@ -118,7 +117,7 @@ class ProcessTelegramCapture implements ShouldQueue
         return $this->text !== null && str_starts_with($this->text, self::LINK_PREFIX);
     }
 
-    private function link(TelegramChannel $channel, ChannelLinkTokenRedeemer $redeemer): void
+    private function link(CaptureChannel $channel, ChannelLinkTokenRedeemer $redeemer): void
     {
         $token = trim(substr((string) $this->text, strlen(self::LINK_PREFIX)));
 
@@ -133,17 +132,9 @@ class ProcessTelegramCapture implements ShouldQueue
         $channel->reply($this->chatId, '❌ Ese enlace no es válido o ya fue usado. Genera uno nuevo desde la app.');
     }
 
-    private function parsePhoto(TelegramChannel $channel, GeminiVisionService $vision): mixed
+    private function parsePhoto(CaptureChannel $channel, GeminiVisionService $vision): mixed
     {
-        $fileId = $channel->largestPhotoUnder($this->photo);
-
-        if ($fileId === null) {
-            Log::warning("❌ Telegram: ninguna variante utilizable para el chat {$this->chatId}.");
-
-            return null;
-        }
-
-        $media = $channel->fetchMedia($fileId);
+        $media = $channel->fetchMedia((string) $this->mediaReference);
 
         return $media ? $vision->parseReceipt($media->bytes, $media->mimeType) : null;
     }

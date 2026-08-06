@@ -13,7 +13,6 @@ use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
 use App\Services\Capture\ChannelLinkTokenIssuer;
 use App\Services\Capture\ChannelLinkTokenRedeemer;
-use App\Services\Capture\TelegramChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\CaptureFixtures;
@@ -52,7 +51,7 @@ function telegramSender(string $chatId = '123456789'): User
 function runTelegramJob(
     string $chatId,
     ?string $text = null,
-    array $photo = [],
+    ?string $mediaReference = null,
     ?ParsedReceiptDTO $parsed = null,
 ): void {
     $vision = Mockery::mock(GeminiVisionService::class);
@@ -61,7 +60,7 @@ function runTelegramJob(
     $textService = Mockery::mock(GeminiTextService::class);
     $textService->shouldReceive('parseText')->andReturn($parsed);
 
-    (new ProcessTelegramCapture($chatId, $text, $photo))->handle(
+    (new ProcessTelegramCapture($chatId, $text, $mediaReference))->handle(
         app(CaptureChannelRegistry::class),
         app(ChannelIdentityResolver::class),
         app(ChannelLinkTokenRedeemer::class),
@@ -82,20 +81,17 @@ function lastTelegramReply(): ?string
 it('registra la transaccion de un remitente vinculado que manda texto', function () {
     $user = telegramSender();
 
-    runTelegramJob('123456789', 'gaste 25.50 en la bodega', [], CaptureFixtures::validMovement());
+    runTelegramJob('123456789', 'gaste 25.50 en la bodega', null, CaptureFixtures::validMovement());
 
     expect(Transaction::sole()->user_id)->toBe($user->id)
         ->and(lastTelegramReply())->toContain('Registrado')
         ->and(lastTelegramReply())->toContain('25.50');
 });
 
-it('registra la transaccion de una foto eligiendo la variante mas grande', function () {
+it('registra la transaccion de una foto por su file id', function () {
     $user = telegramSender();
 
-    runTelegramJob('123456789', null, [
-        ['file_id' => 'miniatura', 'file_size' => 1_000],
-        ['file_id' => 'grande', 'file_size' => 800_000],
-    ], CaptureFixtures::validMovement());
+    runTelegramJob('123456789', null, 'grande', CaptureFixtures::validMovement());
 
     expect(Transaction::sole()->user_id)->toBe($user->id)
         ->and(lastTelegramReply())->toContain('Registrado');
@@ -105,7 +101,7 @@ it('registra la transaccion de una foto eligiendo la variante mas grande', funct
 });
 
 it('no registra nada y explica como vincular cuando el chat es desconocido', function () {
-    runTelegramJob('999999999', 'gaste 20 en el taxi', [], CaptureFixtures::validMovement());
+    runTelegramJob('999999999', 'gaste 20 en el taxi', null, CaptureFixtures::validMovement());
 
     expect(Transaction::count())->toBe(0)
         ->and(lastTelegramReply())->toContain('no está vinculada');
@@ -115,7 +111,7 @@ it('atribuye la transaccion al dueño del chat, no a cualquier usuario', functio
     $owner = telegramSender();
     $otro = User::factory()->create();
 
-    runTelegramJob('123456789', 'gaste 25.50', [], CaptureFixtures::validMovement());
+    runTelegramJob('123456789', 'gaste 25.50', null, CaptureFixtures::validMovement());
 
     expect(Transaction::sole()->user_id)->toBe($owner->id)
         ->and(Transaction::where('user_id', $otro->id)->count())->toBe(0);
@@ -124,7 +120,7 @@ it('atribuye la transaccion al dueño del chat, no a cualquier usuario', functio
 it('avisa y no registra cuando la IA no responde', function () {
     telegramSender();
 
-    runTelegramJob('123456789', 'gaste algo', [], null);
+    runTelegramJob('123456789', 'gaste algo', null, null);
 
     expect(Transaction::count())->toBe(0)
         ->and(lastTelegramReply())->toContain('No pude leer');
@@ -133,21 +129,10 @@ it('avisa y no registra cuando la IA no responde', function () {
 it('avisa y no registra cuando el mensaje no describe un movimiento', function () {
     telegramSender();
 
-    runTelegramJob('123456789', 'hola que tal', [], CaptureFixtures::unparseableMovement());
+    runTelegramJob('123456789', 'hola que tal', null, CaptureFixtures::unparseableMovement());
 
     expect(Transaction::count())->toBe(0)
         ->and(lastTelegramReply())->toContain('no parece un movimiento');
-});
-
-it('avisa cuando ninguna variante de la foto es utilizable', function () {
-    telegramSender();
-
-    runTelegramJob('123456789', null, [
-        ['file_id' => 'enorme', 'file_size' => TelegramChannel::MAX_PHOTO_BYTES + 1],
-    ], CaptureFixtures::validMovement());
-
-    expect(Transaction::count())->toBe(0)
-        ->and(lastTelegramReply())->toContain('No pude leer');
 });
 
 it('vincula la cuenta cuando llega /start con un token valido', function () {
@@ -182,7 +167,7 @@ it('responde lo mismo ante un /start con token invalido, vencido o ya usado', fu
 it('no intenta parsear un /start como si fuera un movimiento', function () {
     telegramSender();
 
-    runTelegramJob('123456789', '/start token-inventado', [], CaptureFixtures::validMovement());
+    runTelegramJob('123456789', '/start token-inventado', null, CaptureFixtures::validMovement());
 
     // Aunque la IA devolveria un movimiento valido, /start nunca llega ahi.
     expect(Transaction::count())->toBe(0);

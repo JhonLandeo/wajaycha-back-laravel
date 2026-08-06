@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Capture;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessTelegramCapture;
 use App\Services\Capture\ChannelUpdateDeduplicator;
+use App\Services\Capture\TelegramChannel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -37,7 +38,7 @@ class TelegramWebhookController extends Controller
      * It always answers 200: a non-2xx makes Telegram redeliver, and a payload we
      * cannot use will not become usable on the second attempt.
      */
-    public function receive(Request $request, ChannelUpdateDeduplicator $dedup): Response
+    public function receive(Request $request, ChannelUpdateDeduplicator $dedup, TelegramChannel $telegram): Response
     {
         $updates = $this->updatesIn($request->all());
 
@@ -64,7 +65,7 @@ class TelegramWebhookController extends Controller
                 continue;
             }
 
-            $this->dispatchUpdate($update);
+            $this->dispatchUpdate($update, $telegram);
         }
 
         return response('OK', 200);
@@ -91,7 +92,7 @@ class TelegramWebhookController extends Controller
     }
 
     /** @param array<string, mixed> $update */
-    private function dispatchUpdate(array $update): void
+    private function dispatchUpdate(array $update, TelegramChannel $telegram): void
     {
         $message = $update['message'] ?? null;
         $chatId = isset($message['chat']['id']) ? (string) $message['chat']['id'] : null;
@@ -105,7 +106,17 @@ class TelegramWebhookController extends Controller
         }
 
         if (isset($message['photo']) && is_array($message['photo'])) {
-            ProcessTelegramCapture::dispatch($chatId, null, $message['photo']);
+            // Elegir entre las variantes es conocimiento de Telegram, y este
+            // controlador ya es de Telegram. El job solo habla el puerto.
+            $fileId = $telegram->largestPhotoUnder($message['photo']);
+
+            if ($fileId === null) {
+                Log::warning("ℹ️ Telegram: ninguna variante utilizable del chat {$chatId}, se ignora.");
+
+                return;
+            }
+
+            ProcessTelegramCapture::dispatch($chatId, null, $fileId);
 
             return;
         }

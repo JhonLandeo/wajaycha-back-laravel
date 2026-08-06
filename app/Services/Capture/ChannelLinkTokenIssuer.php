@@ -57,9 +57,7 @@ class ChannelLinkTokenIssuer
         if (trim($bot) === '') {
             // Fallar fuerte y temprano. Sin el username el enlace sale como
             // https://t.me/?start=... : una URL con 200 OK que no lleva a ningun
-            // lado y que nadie detecta hasta que un usuario se queja. El resto de
-            // la config de Telegram recien llega en el proximo slice, asi que esta
-            // ventana de mala configuracion es real, no hipotetica.
+            // lado y que nadie detecta hasta que un usuario se queja.
             throw new RuntimeException(
                 'services.telegram.bot_username no esta configurado: no se puede construir el deep link de vinculacion.'
             );

@@ -21,7 +21,7 @@ return new class extends Migration
             $table->id();
 
             $table->string('channel', 20)
-                ->comment('Canal de captura que entrego el update: telegram, whatsapp.');
+                ->comment('Canal de captura que entrego el update. Hoy solo telegram; WhatsApp deduplica por wamid en un cambio aparte.');
 
             $table->string('external_update_id', 64)
                 ->comment('Identificador de la entrega en su canal: update_id de Telegram.');
