@@ -22,6 +22,9 @@ Route::prefix('whatsapp')->group(function () {
     Route::post('/flows', [WhatsAppFlowController::class, 'handle']);
 });
 
+Route::post('telegram/webhook', [\App\Http\Controllers\Capture\TelegramWebhookController::class, 'receive'])
+    ->middleware(\App\Http\Middleware\VerifyTelegramSecretToken::class);
+
 Route::post('register', [JWTAuthController::class, 'register']);
 Route::post('login', [JWTAuthController::class, 'login']);
 
