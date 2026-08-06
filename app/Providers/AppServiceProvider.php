@@ -37,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
             \App\Services\Capture\CaptureChannelRegistry::class,
             fn ($app) => new \App\Services\Capture\CaptureChannelRegistry([
                 $app->make(\App\Services\Capture\WhatsAppChannel::class),
+                $app->make(\App\Services\Capture\TelegramChannel::class),
             ])
         );
     }
