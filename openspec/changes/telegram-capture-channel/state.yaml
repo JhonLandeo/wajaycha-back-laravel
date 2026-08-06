@@ -30,8 +30,18 @@ phases:
     artifact: tasks.md
     depends_on: [spec, design]
   apply:
-    status: pending
+    status: complete
+    artifact: engram:sdd/telegram-capture-channel/apply-progress
     depends_on: [tasks]
+    note: |
+      Implemented across ten commits on feat/telegram-capture-channel rather than the
+      five the plan forecast. Slices 3, 4 and 5 each exceeded the 400-line review
+      budget and were split at real seams: schema vs runtime, issuance vs redemption,
+      and boundary -> dedup -> adapter -> job -> ingress. One commit outside the task
+      list added direct coverage for the two WhatsApp job handlers, whose absence had
+      already let a CRITICAL reach review.
+      Suite 197 passed, PHPStan 16 before and after, every commit with its own
+      approved review receipt.
   verify:
     status: pending
     depends_on: [apply]
@@ -39,7 +49,7 @@ phases:
     status: pending
     depends_on: [verify]
 
-next_recommended: apply
+next_recommended: verify
 
 delivery_strategy: auto-chain
 chain_strategy: stacked-to-main

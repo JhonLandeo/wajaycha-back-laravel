@@ -14,13 +14,16 @@ uses(RefreshDatabase::class);
  * Exercises the real migration file rather than a service standing in for it, because
  * the migration owns its own copy of the normalisation on purpose.
  */
+function channelIdentityMigration(): object
+{
+    return require database_path('migrations/2026_08_06_120000_create_channel_identities_table.php');
+}
+
 function runChannelIdentityMigration(): void
 {
     Schema::dropIfExists('channel_identities');
 
-    $migration = require database_path('migrations/2026_08_06_120000_create_channel_identities_table.php');
-
-    $migration->up();
+    channelIdentityMigration()->up();
 }
 
 it('copia el telefono normalizado y conserva el original', function () {
@@ -135,4 +138,19 @@ it('crea el indice unico que impide dos usuarios sobre la misma cuenta de canal'
         'channel' => 'whatsapp',
         'external_id' => '51999888777',
     ]))->toThrow(Illuminate\Database\QueryException::class);
+});
+
+it('deja los telefonos originales intactos al revertir', function () {
+    $user = User::factory()->create(['whatsapp_phone' => '+51 999 888 777']);
+
+    runChannelIdentityMigration();
+
+    expect(ChannelIdentity::count())->toBe(1);
+
+    channelIdentityMigration()->down();
+
+    // down() solo suelta la tabla. Los valores originales nunca se movieron de
+    // users.whatsapp_phone, y eso es exactamente lo que hace reversible al cambio.
+    expect(Schema::hasTable('channel_identities'))->toBeFalse()
+        ->and($user->fresh()->whatsapp_phone)->toBe('+51 999 888 777');
 });
