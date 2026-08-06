@@ -33,7 +33,11 @@ jobs:
           coverage: none
 
       - name: Prepare environment
-        run: cp .env.example .env
+        # See the note in quality.yaml: the shipped Sentry DSN placeholder is
+        # rejected at boot and breaks composer install.
+        run: |
+          cp .env.example .env
+          sed -i '/^SENTRY_LARAVEL_DSN=/d' .env
 
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
