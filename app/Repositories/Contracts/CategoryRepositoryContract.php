@@ -10,6 +10,14 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 interface CategoryRepositoryContract
 {
+    /**
+     * Find a Category belonging to $userId, or null.
+     *
+     * $userId is an AUTHORIZATION BOUNDARY, not a convenience filter. Resolving by id
+     * alone returns another user's record, which is how every endpoint in this API came
+     * to be exploitable. A caller that cannot supply the owner has no business calling
+     * this method.
+     */
     public function findById(int $id, int $userId): ?Category;
 
     public function findByUserId(int $userId): Collection;

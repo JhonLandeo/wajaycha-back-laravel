@@ -44,8 +44,19 @@ class DetailsController extends Controller
         return response()->json($detail, 201);
     }
 
-    public function update(UpdateDetailRequest $request, Detail $detail): JsonResponse
+    public function update(UpdateDetailRequest $request, int $id): JsonResponse
     {
+        // Resolved explicitly rather than by route-model binding, which matches on the
+        // primary key alone and would hand over another user's Detail.
+        $detail = Detail::query()
+            ->whereKey($id)
+            ->where('user_id', (int) Auth::id())
+            ->first();
+
+        if (!$detail) {
+            return response()->json(['message' => 'Detalle no encontrado'], 404);
+        }
+
         $data = $detail->update($request->validated());
         return response()->json($data);
     }
