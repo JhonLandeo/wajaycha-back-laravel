@@ -6,7 +6,12 @@ on:
       - main
 
 jobs:
+  # Production deploys are gated: no green suite, no deploy.
+  quality:
+    uses: ./.github/workflows/quality.yaml
+
   deploy:
+    needs: quality
     runs-on: ubuntu-latest
 
     steps:
