@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    # Pushes to main are gated by deploy.yaml, which runs the same reusable
+    # quality workflow. Ignoring main here avoids running it twice.
+    branches-ignore:
+      - main
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yaml
+
+  formatting:
+    name: Formatting (changed files)
+    runs-on: ubuntu-latest
+    # Fail fast instead of occupying a runner up to the 360-minute default.
+    timeout-minutes: 10
+    # Needs a base branch to diff against, so pull requests only.
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Pint needs the base branch history to compute the diff.
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Prepare environment
+        # See the note in quality.yaml: the shipped Sentry DSN placeholder is
+        # rejected at boot and breaks composer install.
+        run: |
+          cp .env.example .env
+          sed -i '/^SENTRY_LARAVEL_DSN=/d' .env
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Check formatting of files changed in this pull request
+        # Scoped deliberately. The existing codebase is not Pint-clean, and a
+        # repository-wide reformat is exactly the big-bang change ADR-0005
+        # rejects. New and modified code must be clean; legacy is left alone
+        # until a change touches it for its own reasons.
+        #
+        # The base branch reaches the shell through an environment variable
+        # rather than direct `${{ }}` interpolation: expressions expanded into a
+        # run block are substituted before the shell parses the line, which is
+        # the standard GitHub Actions script-injection shape.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: ./vendor/bin/pint --test --diff="origin/$BASE_REF"

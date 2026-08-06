@@ -1,6 +1,9 @@
 includes:
     - vendor/larastan/larastan/extension.neon
     - vendor/nesbot/carbon/extension.neon
+    # Pre-existing level-6 findings, frozen so CI blocks regressions only.
+    # Shrink it as modules are touched; never regenerate it to hide new errors.
+    - phpstan-baseline.neon
 parameters:
 
     paths:

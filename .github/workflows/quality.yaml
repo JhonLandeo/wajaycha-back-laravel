@@ -1,0 +1,95 @@
+name: Quality
+
+# Reusable gate. Called by ci.yaml for branches and pull requests, and by
+# deploy.yaml as a prerequisite of the production deploy.
+on:
+  workflow_call:
+
+jobs:
+  quality:
+    name: Static analysis and tests
+    runs-on: ubuntu-latest
+    # Production deploys now depend on this job, so a hung service container or
+    # a stalled external dependency must fail fast rather than occupy a runner
+    # up to the 360-minute default.
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        # The suite requires real PostgreSQL: migrations create the `vector`,
+        # `pg_trgm` and `unaccent` extensions, and entity resolution depends on
+        # trigram similarity. pgvector ships `vector`; the other two come from
+        # postgres-contrib in the base image.
+        image: pgvector/pgvector:pg16
+        env:
+          # Must match DB_DATABASE in phpunit.xml.
+          POSTGRES_DB: wajaycha-1
+          POSTGRES_USER: wajaycha
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wajaycha -d wajaycha-1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # phpunit.xml already owns DB_CONNECTION, DB_DATABASE, CACHE_STORE and
+      # QUEUE_CONNECTION. Only the connection coordinates belong here.
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USERNAME: wajaycha
+      DB_PASSWORD: secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # Matches the php8.4-fpm that deploy.yaml reloads in production.
+          # composer.json allows ^8.2, so CI deliberately runs the version
+          # production actually uses.
+          php-version: '8.4'
+          extensions: pdo_pgsql, pgsql, mbstring, bcmath, intl, zip, gd, exif
+          # Neither xdebug nor pcov is installed, so coverage cannot be
+          # measured and nothing may gate on it.
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Prepare environment
+        # Written before composer install: post-autoload-dump boots the
+        # application to run package:discover.
+        run: |
+          cp .env.example .env
+          # .env.example ships SENTRY_LARAVEL_DSN=dns, a placeholder the Sentry
+          # SDK rejects at boot. Booting is exactly what package:discover does,
+          # so composer install fails before a single test runs. Dropping the
+          # line leaves the DSN unset, which disables Sentry.
+          sed -i '/^SENTRY_LARAVEL_DSN=/d' .env
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Generate application keys
+        # Tests authenticate with real JWTs via TestCase::actingAsJwtUser,
+        # so a JWT secret is required, not optional.
+        run: |
+          php artisan key:generate
+          php artisan jwt:secret --force
+
+      - name: Static analysis
+        # 1G because the default 128M limit crashes the parallel workers.
+        # Pre-existing findings are frozen in phpstan-baseline.neon, so this
+        # blocks regressions only.
+        run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+      - name: Tests
+        run: php artisan test
