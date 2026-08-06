@@ -9,6 +9,10 @@ jobs:
   quality:
     name: Static analysis and tests
     runs-on: ubuntu-latest
+    # Production deploys now depend on this job, so a hung service container or
+    # a stalled external dependency must fail fast rather than occupy a runner
+    # up to the 360-minute default.
+    timeout-minutes: 20
 
     services:
       postgres:

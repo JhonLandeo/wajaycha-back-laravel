@@ -13,6 +13,9 @@ jobs:
   deploy:
     needs: quality
     runs-on: ubuntu-latest
+    # An SSH step that hangs would otherwise hold the deploy open for hours
+    # with the application left in maintenance mode.
+    timeout-minutes: 15
 
     steps:
     - name: Deploy to Server via SSH
