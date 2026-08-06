@@ -13,3 +13,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command(SendSummaryTransactionsByDay::class)->dailyAt('20:08');
 Schedule::command(SendSummaryTransactionByMonth::class)->monthlyOn(1, '08:00');
+Schedule::command(\App\Console\Commands\PruneChannelLinkTokens::class)->hourly();

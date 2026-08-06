@@ -27,6 +27,8 @@ Route::post('login', [JWTAuthController::class, 'login']);
 
 Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('logout', [JWTAuthController::class, 'logout']);
+    Route::post('channel-link-token', [\App\Http\Controllers\Capture\ChannelLinkController::class, 'issue'])
+        ->middleware('throttle:6,1');
     Route::post('kpi-data', [DashboardController::class, 'kpiData']);
     Route::post('top-data', [DashboardController::class, 'topFiveData']);
     Route::post('weekly-data', [DashboardController::class, 'getWeeklyData']);
