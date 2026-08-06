@@ -45,6 +45,7 @@ return [
     ],
     'telegram' => [
         'bot_username' => env('TELEGRAM_BOT_USERNAME'),
+        'secret_token' => env('TELEGRAM_SECRET_TOKEN'),
     ],
 
     'whatsapp' => [
