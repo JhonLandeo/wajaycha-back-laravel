@@ -2,9 +2,9 @@
 
 namespace App\Imports;
 
-use App\Models\Detail;
 use App\Models\Transaction;
 use App\Services\CategorizationService;
+use App\Services\DetailResolver;
 use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -19,12 +19,14 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
     protected int $userId;
     protected TransactionAnalyzer $transactionAnalyzer;
     protected CategorizationService $categorizationService;
+    protected DetailResolver $detailResolver;
 
     public function __construct(int $userId)
     {
         $this->userId = $userId;
         $this->transactionAnalyzer = app(TransactionAnalyzer::class);
         $this->categorizationService = app(CategorizationService::class);
+        $this->detailResolver = app(DetailResolver::class);
     }
 
     public function headingRow(): int
@@ -80,24 +82,13 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         $features = $this->transactionAnalyzer->analyze($descriptionRaw);
         $cleanEntity = $features['entity'];
 
-        // 2. Buscamos el detalle INTELIGENTEMENTE
-        $detail = $this->findExistingDetail($cleanEntity);
-        Log::info("🔍 Buscando Detalle para Entidad Limpia: {$cleanEntity}. " . ($detail ? "Encontrado ID: {$detail->id}" : "No encontrado."));
-
-        // 3. Si no existe ni parecido, creamos uno nuevo
-        if (!$detail) {
-            $detail = Detail::create([
-                'user_id' => $this->userId,
-                'description' => $descriptionRaw,
-                'operation_type' => $features['type'],
-                'entity_clean' => $cleanEntity
-            ]);
-            Log::info("🆕 Nuevo Detalle creado: {$descriptionRaw} (Clean: {$cleanEntity})");
-        } else {
-            if (empty($detail->entity_clean)) {
-                $detail->update(['entity_clean' => $cleanEntity]);
-            }
-        }
+        // 2. Resolvemos el detalle contra Entity Resolution
+        $detail = $this->detailResolver->resolveOrCreate(
+            $this->userId,
+            $descriptionRaw,
+            $cleanEntity,
+            $features['type']
+        );
 
         // 4. Categorizamos (Pasando el Mensaje)
         $messageRaw = $row['Mensaje'];
@@ -124,20 +115,4 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         ]);
     }
 
-    /**
-     * Busca un detalle existente usando Trigramas sobre la entidad limpia
-     */
-    private function findExistingDetail(string $cleanEntity): ?Detail
-    {
-        // Umbral de similitud (ajusta según pruebas, 0.6 suele ser seguro)
-        $threshold = 0.6;
-
-        return Detail::where('user_id', $this->userId)
-            ->where(function ($query) use ($cleanEntity, $threshold) {
-                $query->where('entity_clean', $cleanEntity)
-                    ->orWhereRaw('similarity(entity_clean, ?) > ?', [$cleanEntity, $threshold]);
-            })
-            ->orderByRaw('similarity(entity_clean, ?) DESC', [$cleanEntity])
-            ->first();
-    }
 }
