@@ -7,13 +7,14 @@ namespace Database\Factories;
 use App\Models\ParetoClassification;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Pest\Support\Str;
 
 /**
  * @extends Factory<ParetoClassification>
  */
 class ParetoClassificationFactory extends Factory
 {
+    private static int $sequence = 0;
+
     protected $model = ParetoClassification::class;
 
     /**
@@ -21,13 +22,16 @@ class ParetoClassificationFactory extends Factory
      */
     public function definition(): array
     {
-        $classes = ['Variables', 'Fijos', 'Ahorro'];
+        // UserObserver seeds every new user with 'Fijos', 'Variables' and
+        // 'Ahorro', and unq_pareto_classifications_user_id_name forbids
+        // repeating a name per user. Generated names must therefore never
+        // reuse the defaults; a counter guarantees that.
+        $index = ++self::$sequence;
 
         return [
-            // Quitamos el ->unique()
-            'name' => $this->faker->randomElement($classes),
+            'name' => "Clasificación {$index}",
             'percentage' => fake()->randomFloat(2, 10, 80),
-            'user_id'    => User::factory(),
+            'user_id' => User::factory(),
         ];
     }
 }

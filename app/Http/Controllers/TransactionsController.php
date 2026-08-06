@@ -78,6 +78,10 @@ final class TransactionsController extends Controller
             return response()->json(['message' => 'No autorizado'], 403);
         }
 
+        if (!$transaction->is_manual) {
+            return response()->json(['message' => 'Solo las transacciones manuales pueden ser editadas.'], 403);
+        }
+
         $dto = TransactionDataDTO::fromUpdateRequest($request, (int) Auth::id(), $id);
         $this->updateAction->execute($dto);
 
