@@ -32,12 +32,13 @@ class ProcessWhatsAppImage implements ShouldQueue
     public function handle(
         \App\Services\AI\GeminiVisionService $geminiService,
         \App\Services\Capture\CaptureChannelRegistry $channels,
+        \App\Services\Capture\ChannelIdentityResolver $identities,
         \App\Actions\Capture\RegisterCapturedTransactionAction $registerAction
     ): void {
         $channel = $channels->for('whatsapp');
 
-        // 1. IDENTIFICAR AL USUARIO
-        $user = \App\Models\User::where('whatsapp_phone', $this->from)->first();
+        // 1. IDENTIFICAR AL USUARIO POR SU IDENTIDAD DE CANAL
+        $user = $identities->resolve($channel->key(), $this->from);
 
         if (!$user) {
             Log::warning("❌ WhatsApp: Número no registrado ({$this->from}).");

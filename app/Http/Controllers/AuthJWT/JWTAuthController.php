@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
+use App\Services\Capture\ChannelIdentityLinker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -16,7 +17,7 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 class JWTAuthController extends Controller
 {
     // User registration
-    public function register(RegisterRequest $request): JsonResponse
+    public function register(RegisterRequest $request, ChannelIdentityLinker $linker): JsonResponse
     {
         $validatedData = $request->validated();
 
@@ -27,6 +28,10 @@ class JWTAuthController extends Controller
             'whatsapp_phone' => $validatedData['whatsapp_phone'] ?? null,
             'password' => Hash::make($validatedData['password']),
         ]);
+
+        // La captura resuelve al remitente por su identidad de canal, no por la
+        // columna. Sin esto el usuario queda invisible para el bot.
+        $linker->linkWhatsApp($user, $validatedData['whatsapp_phone'] ?? null);
 
         $token = JWTAuth::fromUser($user);
 
@@ -54,7 +59,6 @@ class JWTAuthController extends Controller
         }
     }
 
-
     // Get authenticated user
     public function getUser(): JsonResponse
     {
@@ -73,9 +77,11 @@ class JWTAuthController extends Controller
     {
         try {
             Auth::guard('api')->logout();
+
             return response()->json(['message' => 'Successfully logged out']);
         } catch (\Exception $e) {
-            Log::error('Logout Error: ' . $e->getMessage());
+            Log::error('Logout Error: '.$e->getMessage());
+
             return response()->json(['error' => 'Failed to logout'], 500);
         }
     }
