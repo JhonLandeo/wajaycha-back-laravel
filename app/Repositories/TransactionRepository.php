@@ -121,10 +121,10 @@ final class TransactionRepository implements TransactionRepositoryContract
             ->paginate($perPage, ['*'], 'page', $page);
     }
 
-    public function findById(int $id): ?Transaction
+    public function findById(int $id, int $userId): ?Transaction
     {
         /** @var Transaction|null */
-        return Transaction::query()->find($id);
+        return Transaction::query()->whereKey($id)->where('user_id', $userId)->first();
     }
 
     public function create(array $data): Transaction

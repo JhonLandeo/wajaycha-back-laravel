@@ -25,7 +25,7 @@ final class UpdateTransactionAction
 
     public function execute(TransactionDataDTO $dto): Transaction
     {
-        $transaction = $this->repository->findById($dto->transaction_id ?? 0);
+        $transaction = $this->repository->findById($dto->transaction_id ?? 0, $dto->user_id);
         if (!$transaction) {
             throw new \RuntimeException('Transaction not found');
         }
@@ -69,7 +69,7 @@ final class UpdateTransactionAction
 
     private function updateTransactionFrequent(TransactionDataDTO $dto, ?int $newCategoryId): void
     {
-        $transaction = $this->repository->findById($dto->transaction_id ?? 0);
+        $transaction = $this->repository->findById($dto->transaction_id ?? 0, $dto->user_id);
         if ($transaction) {
             $transaction->category_id = $newCategoryId;
             $transaction->save();
@@ -101,7 +101,7 @@ final class UpdateTransactionAction
 
     private function updateTransactionWithoutFrequent(TransactionDataDTO $dto, ?int $newCategoryId): void
     {
-        $transaction = $this->repository->findById($dto->transaction_id ?? 0);
+        $transaction = $this->repository->findById($dto->transaction_id ?? 0, $dto->user_id);
         if ($transaction) {
             $transaction->category_id = $newCategoryId;
             $transaction->save();

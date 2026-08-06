@@ -10,7 +10,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 interface ParetoRepositoryContract
 {
-    public function findById(int $id): ?ParetoClassification;
+    public function findById(int $id, int $userId): ?ParetoClassification;
 
     public function getAllForUser(int $userId): Collection;
 

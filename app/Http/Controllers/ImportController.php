@@ -119,8 +119,13 @@ class ImportController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateImportRequest $request, Import $import): JsonResponse
+    public function update(UpdateImportRequest $request, int $id): JsonResponse
     {
+        $import = $this->findOwnedImport($id);
+        if (!$import) {
+            return response()->json(['message' => 'Import no encontrado'], 404);
+        }
+
         $data = $import->update($request->validated());
         return response()->json($data);
     }
@@ -128,10 +133,31 @@ class ImportController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Import $import): JsonResponse
+    public function destroy(int $id): JsonResponse
     {
+        $import = $this->findOwnedImport($id);
+        if (!$import) {
+            return response()->json(['message' => 'Import no encontrado'], 404);
+        }
+
         $data = $import->delete();
         return response()->json($data);
+    }
+
+    /**
+     * Resolve an Import that belongs to the authenticated user.
+     *
+     * Route-model binding is deliberately not used here: it resolves by primary key
+     * alone, which exposed every other user's import — including the raw statement
+     * file behind download().
+     */
+    private function findOwnedImport(int $id): ?Import
+    {
+        /** @var Import|null */
+        return Import::query()
+            ->whereKey($id)
+            ->where('user_id', (int) Auth::id())
+            ->first();
     }
 
 
@@ -147,9 +173,19 @@ class ImportController extends Controller
         return response()->json($data);
     }
 
-    public function download(int $id): StreamedResponse
+    /**
+     * Stream the file the user originally uploaded.
+     *
+     * This returns the raw bank statement or Yape export, not a derived summary, so the
+     * ownership scope here is the difference between a private document and a public one.
+     */
+    public function download(int $id): StreamedResponse|JsonResponse
     {
-        $import = Import::find($id);
+        $import = $this->findOwnedImport($id);
+        if (!$import) {
+            return response()->json(['message' => 'Import no encontrado'], 404);
+        }
+
         return Storage::download($import->path, $import->name);
     }
 }

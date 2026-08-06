@@ -12,10 +12,10 @@ use Illuminate\Support\Facades\DB;
 
 final class CategoryRepository implements CategoryRepositoryContract
 {
-    public function findById(int $id): ?Category
+    public function findById(int $id, int $userId): ?Category
     {
         /** @var Category|null $category */
-        $category = Category::query()->find($id);
+        $category = Category::query()->whereKey($id)->where('user_id', $userId)->first();
         return $category;
     }
 
