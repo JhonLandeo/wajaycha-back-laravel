@@ -65,9 +65,9 @@ return new class extends Migration
             $table->timestampTz('spoken_at')
                 ->comment('Momento en que se reclamo la observacion. El reclamo ocurre ANTES del envio: el indice unico solo puede arbitrar entre el barrido y la captura si el insert precede al mensaje.');
 
-            $table->timestampTz('delivered_at')
+            $table->timestampTz('sent_at')
                 ->nullable()
-                ->comment('Momento en que reply() retorno sin excepcion. NO es acuse de entrega: el adaptador registra y traga los fallos HTTP. Una fila con spoken_at y delivered_at NULL indica que el proceso murio entre el reclamo y el envio.');
+                ->comment('Momento en que reply() volvio. NO prueba entrega: el canal registra y se traga los no-2xx, asi que esto solo separa "el worker murio entre reclamar y enviar" de "la llamada volvio".');
 
             $table->timestampsTz();
 

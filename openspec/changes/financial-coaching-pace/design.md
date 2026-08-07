@@ -42,7 +42,7 @@ delivery; `FinancialCoachingService` decides nothing about arithmetic. Neither t
 |---|---|---|---|
 | `FinancialCoachingService` | `App\Services\Coaching` | **The owning service.** `speak(User $user, CoachingScope $scope): bool`. Sequences: snapshot → evaluate → ladder → cause → claim → compose → send → confirm. | via collaborators |
 | `PaceEvaluator` | `App\Services\Coaching` | Pure arithmetic: expected, projected close, band, lumpiness, ordering. No facades, no Eloquent, no `now()`. | **no** |
-| `SpokenObservationLedger` | `App\Services\Coaching` | The spoken-observation memory. `highestBandFor()`, `claim()`, `confirmDelivered()`. | yes |
+| `SpokenObservationLedger` | `App\Services\Coaching` | The spoken-observation memory. `highestBandFor()`, `claim()`, `confirmSent()`. | yes |
 | `CoachingMessageComposer` | `App\Services\Coaching` | Observations → Spanish text. No decisions about *whether* to speak. | no |
 | `CategoryMonthSnapshot`, `PaceObservation`, `MonthCursor`, `PaceThresholds`, `CoachingScope` | `App\DTOs\Coaching` | Immutable readonly DTOs (core rule: DTOs for complex parameters). | no |
 | `RunCoachingSweep` | `App\Console\Commands` | `app:run-coaching-sweep`. Iterates reachable users, calls `speak()`, prints counters. | no |
@@ -266,11 +266,11 @@ that category for the rest of the month.
 That cost is bounded and instrumented rather than hidden:
 
 - `spoken_at` is written at claim time.
-- `delivered_at` is written after `reply()` returns without throwing. **This is not proof of
+- `sent_at` is written after `reply()` returns without throwing. **This is not proof of
   delivery** — `TelegramChannel::reply()` logs and swallows a non-2xx response and returns `void`.
   It proves only that the process survived the call. It exists to distinguish *"the worker died
   between claim and send"* from *"the send returned"*, which is the difference an operator needs.
-- Rows with `spoken_at IS NOT NULL AND delivered_at IS NULL` are the operator's queryable signal.
+- Rows with `spoken_at IS NOT NULL AND sent_at IS NULL` are the operator's queryable signal.
 - **No automatic retry.** Retrying would require reopening the band, which reintroduces duplicates.
   Recovery is manual (delete the row), matching the existing no-retry contract of `reply()` on both
   channels.
@@ -336,7 +336,7 @@ in-database dictionary must stay internally consistent.
 | `day_of_month` | `smallInteger` | no | `Dia del mes, en la zona horaria de referencia, sobre el que se hablo. Se guarda para poder auditar el mensaje sin recalcular el calendario.` |
 | `entry_point` | `varchar(12)` | no | `Que voz hablo: sweep (barrido programado) o capture (chequeo al registrar). Ambas comparten reglas; esto solo permite observarlas por separado.` |
 | `spoken_at` | `timestampTz` | no | `Momento en que se reclamo la observacion. El reclamo ocurre ANTES del envio: el indice unico solo puede arbitrar entre el barrido y la captura si el insert precede al mensaje.` |
-| `delivered_at` | `timestampTz` | yes | `Momento en que reply() retorno sin excepcion. NO es acuse de entrega: el adaptador registra y traga los fallos HTTP. Una fila con spoken_at y delivered_at NULL indica que el proceso murio entre el reclamo y el envio.` |
+| `sent_at` | `timestampTz` | yes | `Momento en que reply() retorno sin excepcion. NO es acuse de entrega: el adaptador registra y traga los fallos HTTP. Una fila con spoken_at y sent_at NULL indica que el proceso murio entre el reclamo y el envio.` |
 | `created_at` / `updated_at` | `timestampsTz` | — | — |
 
 Table comment:
@@ -356,7 +356,7 @@ band-ladder lookup. Adding one would be a redundant write cost on every claim.
 `period_month` is the one deliberate exception, justified in its own comment above.
 
 Model: `App\Models\CoachingObservation` — `$fillable`, `period_month` cast to `immutable_date`,
-`spoken_at`/`delivered_at` cast to `immutable_datetime`, `is_lumpy` to `boolean`.
+`spoken_at`/`sent_at` cast to `immutable_datetime`, `is_lumpy` to `boolean`.
 
 ### No other schema change
 
@@ -446,7 +446,7 @@ sequenceDiagram
             Res-->>Coach: ChannelIdentity
             Coach->>Tg: reply(chatId, texto)
             Note right of Tg: sin parse_mode; los fallos se registran y se tragan
-            Coach->>Led: confirmDelivered(ids)  %% delivered_at
+            Coach->>Led: confirmSent(ids)  %% sent_at
             Coach-->>Cmd: true
         end
     end
@@ -492,7 +492,7 @@ sequenceDiagram
             Coach->>Led: claim(...)  %% INSERT; el barrido pudo ganar
             alt reclamada
                 Coach->>Tg: reply(chatId, texto)
-                Coach->>Led: confirmDelivered(id)
+                Coach->>Led: confirmSent(id)
                 Coach-->>Job: true
             else ya reclamada
                 Coach-->>Job: false (el barrido ya lo dijo hoy)
@@ -544,8 +544,8 @@ Composition rules:
 
 | Failure | Behaviour |
 |---|---|
-| Telegram `sendMessage` non-2xx | `reply()` logs and swallows (existing contract). `delivered_at` is still set — it only proves the call returned. The band stays claimed. No retry. |
-| Worker dies between claim and send | Row with `spoken_at` set, `delivered_at` NULL. Operator-queryable. Manual recovery only. |
+| Telegram `sendMessage` non-2xx | `reply()` logs and swallows (existing contract). `sent_at` is still set — it only proves the call returned. The band stays claimed. No retry. |
+| Worker dies between claim and send | Row with `spoken_at` set, `sent_at` NULL. Operator-queryable. Manual recovery only. |
 | Sweep and capture race | Constraint arbitrates. Loser is silent. Never a duplicate band. |
 | `expenseBudgetSnapshotsForMonth` exceeds the 500-category ceiling | **Throws.** Coaching a truncated category list would produce confidently wrong silence. |
 | Cause query returns nothing while `spent > 0` | Structurally impossible without `HAVING`. If it ever happens, the observation is dropped rather than sent causeless (D9 invariant). |
@@ -602,7 +602,7 @@ touched (ADR-0005), not a redesign of the report.
 | `app/DTOs/Coaching/PaceThresholds.php` | Create | `minDayForProjection, overrunMargin, lumpyShare, maxObservations`. From config. |
 | `app/DTOs/Coaching/CoachingScope.php` | Create | `sweep()` / `forCategory(int $id, float $amount)`. |
 | `app/Services/Coaching/PaceEvaluator.php` | Create | Pure. Fork 1's testable core. |
-| `app/Services/Coaching/SpokenObservationLedger.php` | Create | Claim-by-insert, band ladder, `confirmDelivered()`. |
+| `app/Services/Coaching/SpokenObservationLedger.php` | Create | Claim-by-insert, band ladder, `confirmSent()`. |
 | `app/Services/Coaching/CoachingMessageComposer.php` | Create | §6. |
 | `app/Services/Coaching/FinancialCoachingService.php` | Create | **The owning service.** `speak(User, CoachingScope): bool`. |
 | `app/Console/Commands/RunCoachingSweep.php` | Create | `app:run-coaching-sweep` + summary counters. |
@@ -675,7 +675,7 @@ None blocking. Two decisions carry stated, accepted costs rather than uncertaint
 - [ ] The `pgsql.timezone` pin changes month bucketing for existing reports if the database server is
       not already `America/Lima`. The verification step in D3 turns this from an unknown into a
       checked fact before merge. Could not be verified from source alone.
-- [ ] `delivered_at` is not an acknowledgement. Turning it into one requires `reply()` to return a
+- [ ] `sent_at` is not an acknowledgement. Turning it into one requires `reply()` to return a
       result, which is a port change this change deliberately does not make.
 - [ ] The monthly email's broken blade (§8) is wider than the proposal recorded. It is fixed here
       because the command is already being touched (ADR-0005); if the owner prefers to isolate it,

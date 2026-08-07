@@ -181,20 +181,20 @@ it('marca como entregadas solo las observaciones que se le nombran', function ()
     $this->ledger->claim(claimAttempt($this, ['band' => 'projected_over', 'projectedAmount' => 460.0]));
     $sinEntregar = CoachingObservation::where('id', '!=', $entregada->id)->sole();
 
-    $this->ledger->confirmDelivered([$entregada->id]);
+    $this->ledger->confirmSent([$entregada->id]);
 
-    // spoken_at sin delivered_at es la señal que un operador puede consultar:
+    // spoken_at sin sent_at es la señal que un operador puede consultar:
     // "se reclamo pero el envio nunca volvio". No puede quedar marcada de mas.
-    expect($entregada->fresh()->delivered_at)->not->toBeNull()
-        ->and($sinEntregar->fresh()->delivered_at)->toBeNull();
+    expect($entregada->fresh()->sent_at)->not->toBeNull()
+        ->and($sinEntregar->fresh()->sent_at)->toBeNull();
 });
 
 it('no toca nada cuando la lista viene vacia', function () {
     $this->ledger->claim(claimAttempt($this));
 
-    $this->ledger->confirmDelivered([]);
+    $this->ledger->confirmSent([]);
 
-    expect(CoachingObservation::sole()->delivered_at)->toBeNull();
+    expect(CoachingObservation::sole()->sent_at)->toBeNull();
 });
 
 it('no marca entregada una observacion que nunca se reclamo', function () {
@@ -202,9 +202,9 @@ it('no marca entregada una observacion que nunca se reclamo', function () {
     $existente = CoachingObservation::sole();
 
     // Un id que no existe no puede crear ni resucitar nada.
-    $this->ledger->confirmDelivered([$existente->id + 999]);
+    $this->ledger->confirmSent([$existente->id + 999]);
 
-    expect($existente->fresh()->delivered_at)->toBeNull()
+    expect($existente->fresh()->sent_at)->toBeNull()
         ->and(CoachingObservation::count())->toBe(1);
 });
 

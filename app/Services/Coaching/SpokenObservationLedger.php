@@ -114,11 +114,11 @@ class SpokenObservationLedger
      * logs and swallows non-2xx responses and returns void. It only separates
      * "the worker died between claim and send" from "the send returned", which
      * is the operator-queryable signal a row with `spoken_at` set and
-     * `delivered_at` NULL represents.
+     * `sent_at` NULL represents.
      *
      * @param  int[]  $observationIds
      */
-    public function confirmDelivered(array $observationIds): void
+    public function confirmSent(array $observationIds): void
     {
         if ($observationIds === []) {
             return;
@@ -126,7 +126,7 @@ class SpokenObservationLedger
 
         CoachingObservation::query()
             ->whereIn('id', $observationIds)
-            ->update(['delivered_at' => now()]);
+            ->update(['sent_at' => now()]);
     }
 
     /**

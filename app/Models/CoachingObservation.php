@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $band
  * @property bool $is_lumpy
  * @property \Illuminate\Support\Carbon $spoken_at
- * @property \Illuminate\Support\Carbon|null $delivered_at
+ * @property \Illuminate\Support\Carbon|null $sent_at
  */
 class CoachingObservation extends Model
 {
@@ -38,7 +38,7 @@ class CoachingObservation extends Model
         'day_of_month',
         'entry_point',
         'spoken_at',
-        'delivered_at',
+        'sent_at',
     ];
 
     /** @return array<string, string> */
@@ -48,7 +48,7 @@ class CoachingObservation extends Model
             'period_month' => 'immutable_date',
             'is_lumpy' => 'boolean',
             'spoken_at' => 'immutable_datetime',
-            'delivered_at' => 'immutable_datetime',
+            'sent_at' => 'immutable_datetime',
         ];
     }
 
