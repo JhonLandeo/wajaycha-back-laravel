@@ -96,7 +96,7 @@ Consequences that must be handled in the repository method, not hidden:
    Precedent exists: `FinancialReportService::getBudgetDeviation()` already calls it with `(1, 100)`.
 2. The function returns no `type` column. The repository intersects the rows with
    `Category::where('user_id', …)->where('type', 'expense')->pluck('id')` — one extra indexed query.
-   Income and savings categories are excluded before the evaluator ever sees them.
+   Only `type = 'expense'` reaches the evaluator. `categories.type` is an enum of `income`, `expense` and `transfer`; there is no `savings` value, so the filter is positive rather than a list of exclusions.
 3. The function's `spent` is **expenses minus income within the category**. That is correct budget
    behaviour (a refund restores budget) and is kept. Categories with `spent <= 0` are skipped.
 4. The function returns leaf categories only (`parent_id IS NOT NULL OR NOT EXISTS children`), so

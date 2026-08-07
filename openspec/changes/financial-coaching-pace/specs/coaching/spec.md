@@ -203,7 +203,7 @@ the same band.
 ### Requirement: Expense categories only
 
 The system SHALL evaluate pace, level and blindness only for categories of type `expense`;
-income and savings categories SHALL NOT be evaluated.
+only categories whose `type` is `expense` SHALL be evaluated. The column is an enum of `income`, `expense` and `transfer` — there is no `savings` value in this schema, so filtering positively on `expense` is both stricter and truthful.
 
 *Traces to the owner's stated scope.*
 

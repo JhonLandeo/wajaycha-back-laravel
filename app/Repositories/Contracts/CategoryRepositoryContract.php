@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Repositories\Contracts;
 
+use App\DTOs\Coaching\CategoryMonthSnapshot;
+use App\Exceptions\Coaching\TooManyCategoriesException;
 use App\Models\Category;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -31,4 +33,24 @@ interface CategoryRepositoryContract
     public function update(Category $category, array $data): bool;
 
     public function create(array $data): Category;
+
+    /**
+     * Leaf **expense** categories with spend this month, shaped for `PaceEvaluator`
+     * (design.md D2, §5.1). Wraps `get_monthly_category_budget_report`, the same
+     * function the SPA reads, so `spent` never disagrees with the report.
+     *
+     * Categories with `monthly_budget = 0` ARE included when they have spend —
+     * phase 4's blindness detection depends on them; the evaluator ignores them,
+     * this repository must not filter them out. Categories with `spent <= 0` are
+     * skipped (design.md D2 item 3): a budgeted category with no spend has nothing
+     * to project, and an unbudgeted category with no spend is not blindness either.
+     *
+     * @return CategoryMonthSnapshot[]
+     *
+     * @throws TooManyCategoriesException when the function's own `total_records`
+     *                                    exceeds `config('coaching.max_categories')` — coaching a truncated
+     *                                    category list would produce confidently wrong silence, never a
+     *                                    silent truncation.
+     */
+    public function expenseBudgetSnapshotsForMonth(int $userId, int $month, int $year): array;
 }
