@@ -1,0 +1,297 @@
+schema: spec-driven
+change: financial-coaching-pace
+title: Pace-aware spending coach
+created: 2026-08-06
+artifact_store: hybrid
+owning_subdomain: Financial Coaching
+also_touches: [Ingestion, Notification]
+decided_by: ../../../../docs/decisions/0007-telegram-primary-conversational-channel.md
+branch: feat/telegram-capture-channel
+supersedes_intent_of: financial-coaching-clarify
+
+phases:
+  explore:
+    status: complete
+    artifact: exploration.md
+    note: |
+      Mirrored from Engram sdd/financial-coaching-pace/explore. Its findings are
+      load-bearing and are cited throughout the proposal rather than restated.
+  propose:
+    status: complete
+    artifact: proposal.md
+  spec:
+    status: complete
+    depends_on: [propose]
+    artifact: specs/coaching/spec.md, specs/ingestion/spec.md
+  design:
+    status: complete
+    depends_on: [propose]
+    artifact: design.md
+    note: |
+      Owns the binding decision on fork 1 (where the pace arithmetic lives). The
+      proposal recommends PHP with a bounded set-based exception, but does not bind it.
+      Fork 2 (disposition of the two scheduled summaries) is recommended AND bound by
+      the proposal — it is a product decision, not a design one; design only sequences it.
+  tasks:
+    status: complete
+    depends_on: [spec, design]
+    artifact: tasks.md
+  apply:
+    status: pending
+    depends_on: [tasks]
+  verify:
+    status: pending
+    depends_on: [apply]
+  archive:
+    status: pending
+    depends_on: [verify]
+
+next_recommended: [apply]
+
+delivery_strategy: auto-chain
+chain_strategy: stacked-to-main
+delivery_note: |
+  Separate commits on ONE branch, not a branch per slice. Carried forward from the
+  telegram-capture-channel change on the owner's explicit feedback that many chained
+  branches are expensive to review and to maintain.
+
+review_workload_forecast: |
+  400-line budget risk: High. Estimated ~950 authored lines across 6 slices.
+  Decision needed before apply: No — auto-chain is already cached.
+  Chained PRs recommended: Yes, as stacked commits on one branch.
+  Slice 6 must not land before slice 4: deleting the daily summary removes a message
+  the owner receives today, and the sweep must already replace it.
+
+slices:
+  - id: 1
+    title: Pace evaluation core
+    kind: behaviour + tests
+    estimated_lines: 220
+    note: |
+      Pure evaluator: expected = budget * d/D, projected = spent * D/d, the lumpy rule,
+      the severity bands, the minimum-elapsed-days floor. Unit-testable with no database,
+      which is fork 1's whole argument. tests/Unit is effectively unused today; this is
+      its first real occupant.
+  - id: 2
+    title: Category-month data access
+    kind: data access
+    estimated_lines: 130
+    note: |
+      Budget report per user-month via CategoryRepository (it already calls
+      get_monthly_category_budget_report). Cause breakdown via get_transactions_by_detail.
+      Largest-transaction share MUST NOT come from that function — its HAVING COUNT > 1
+      drops exactly the single large purchase the lumpy rule looks for.
+  - id: 3
+    title: Spoken-observation memory
+    kind: schema + behaviour
+    estimated_lines: 150
+    note: |
+      Purely additive migration. Keyed by user, year-month, category, observation kind
+      and severity band. Written under a database uniqueness constraint, not a
+      read-then-write: no per-user job serialisation exists, so the sweep and a
+      capture-time check can race.
+  - id: 4
+    title: Scheduled sweep
+    kind: integration
+    estimated_lines: 230
+    note: |
+      Reverse identity lookup (user -> channel identity, Telegram preferred; a
+      WhatsApp-only user is not coached). Message composition in Spanish. Sent through
+      the existing TelegramChannel::reply() — NO port change is needed, unlike the
+      shelved clarify change.
+  - id: 5
+    title: Capture-time check
+    kind: integration
+    estimated_lines: 120
+    note: |
+      Hooks after RegisterCapturedTransactionAction succeeds in ProcessTelegramCapture.
+      Speaks only about the category the new transaction landed in, and only if that
+      transaction is what crossed the line. Consults the same evaluation as the sweep.
+  - id: 6
+    title: Retire the daily summary, repair the monthly one
+    kind: cleanup + bugfix
+    estimated_lines: 100
+    note: |
+      Delete SendSummaryTransactionsByDay and its schedule entry. In
+      SendSummaryTransactionByMonth, fix sum('real') -> sum('spent') (getBudgetDeviation
+      selects the column AS spent, so "Gasto Real" has always rendered S/ 0.00) and
+      remove the WhatsApp push; the email stays. MUST land at or after slice 4.
+
+engram_topic_keys:
+  explore: sdd/financial-coaching-pace/explore
+  propose: sdd/financial-coaching-pace/proposal
+  spec: sdd/financial-coaching-pace/spec
+  design: sdd/financial-coaching-pace/design
+  tasks: sdd/financial-coaching-pace/tasks
+
+quality_drivers: [QA-8, QA-1, QA-2, QA-3]
+quality_notes: |
+  QA-8 is why ADR-0007 exists and is what makes the scheduled sweep non-negotiable — a
+  channel that permits unprompted outbound with no approval and no time window.
+  QA-1 is what this risks: every message is friction. The proposal caps it explicitly
+  (1 message per capture, 1 per sweep run, at most 3 observations, band-based
+  re-speaking only, blindness at most monthly, and silence as a valid outcome).
+  QA-2 and QA-3 bear on trusting the narrated numbers: a miscategorised transaction
+  becomes a spoken accusation, mitigated by always naming the merchants behind the
+  number so a wrong reading is visibly wrong.
+
+capabilities:
+  new:
+    - name: financial-coaching
+      summary: |
+        Pace evaluation, lumpy-versus-linear rule, blindness reporting, spoken-observation
+        memory, speaking budget, and the definition of a valid silence.
+  modified:
+    - name: ingestion
+      summary: |
+        A successful bot capture may now be followed by at most one coaching message on
+        the same channel, emitted by Coaching rather than by the capture path.
+
+forks:
+  - id: pace-arithmetic-location
+    summary: |
+      Where the pace arithmetic lives — PHP in the owning Coaching service, or a new
+      SQL function get_category_pace_report().
+    options:
+      - id: A
+        summary: PHP over rows the existing repositories already return.
+      - id: B
+        summary: A new SQL function, matching the codebase's dominant pattern.
+    recommendation: A
+    recommendation_reasoning: |
+      1. The pace rules are product judgement (speaking margin, lumpiness threshold,
+         re-speaking bands) and will be tuned repeatedly against real messages. In PHP
+         that is a config change and a unit test; in SQL it is a migration.
+      2. Technical-debt item 10 already names nine business-rule SQL functions with no
+         single entry point that "cannot be tested without a live database". A tenth on a
+         brand-new subdomain's first commit deepens documented debt deliberately.
+      3. No performance argument opposes it: aggregation stays in SQL; pace is per-row
+         arithmetic over ~20 rows per user at ~100 users.
+    bounded_exception: |
+      Cause breakdown and largest-transaction share are genuinely set-based and stay in
+      the database, reached through repository methods. Any new SQL object must be pure
+      aggregation with no threshold baked in, documented per .agents/rules/02-database-dba.md.
+    binding_decision_owner: sdd-design
+
+  - id: existing-scheduled-summaries
+    summary: |
+      SendSummaryTransactionsByDay and SendSummaryTransactionByMonth are both hardcoded
+      to $userId = 1 and the literal '+51 992 291 220', push through WhatsApp directly,
+      and are both defective. Building a coach beside them means two systems pushing
+      messages with different truthfulness.
+    defects_confirmed:
+      - get_summary_transaction_by_day() carries a hardcoded v_amount_total NUMERIC := 2000
+        whole-account budget, reached by raw DB::select bypassing FinancialReportService.
+      - SendSummaryTransactionByMonth sums 'real'; FinancialReportService::getBudgetDeviation
+        selects the column AS 'spent'. "Gasto Real" has always rendered S/ 0.00.
+    options: [fix, replace, absorb, leave]
+    recommendation: absorb-daily-repair-monthly
+    recommendation_reasoning: |
+      Delete the daily command: its "meta de gasto diario" IS the pace arithmetic this
+      change builds honestly, computed from an invented budget. Fixing it means deciding
+      an account-level monthly budget the per-category budgets already answer better, and
+      then maintaining pace twice. It is the direct collision with the one-voice
+      requirement — a user told two different budgets on the same day believes neither.
+      Keep the monthly EMAIL, repaired: a report the user opens is not the coach speaking
+      unprompted and does not compete for the voice. Its WhatsApp push does, and goes.
+      Rejected "leave them": ships a known contradiction on the same channel class.
+      Rejected "fix in place": builds pace twice and requires inventing a budget.
+    subdomain_crossing_justification: |
+      The Notification touch is a deletion plus a one-line defect fix, not new logic. The
+      one-voice requirement is unsatisfiable while a second scheduler pushes contradicting
+      numbers, so the disposition cannot be deferred without shipping the contradiction.
+    cost_accepted: |
+      The owner loses the daily WhatsApp message the day this lands. Mitigated by slice
+      ordering only — slice 6 may not precede slice 4.
+    bound_by: propose # product decision, not a design one; design only sequences it
+
+out_of_scope:
+  - id: advice
+    summary: No advice, suggestions or next steps. The coach narrates; the user decides.
+    disposition: explicit owner decision
+  - id: actual-percentage-as-behaviour
+    summary: |
+      actual_percentage is SUM(budget in bucket) / SUM(budget of all non-income
+      categories) — budget-allocation weight, NOT spending behaviour. Nothing computes a
+      bucket's share of actual spend. The genuine declared-versus-real pair is
+      `percentage` against `percentage_spent`.
+    disposition: MUST never be narrated as "what you really do", anywhere
+  - id: dialogue
+    summary: No buttons, no callback_query, no reply handling. The coach speaks and stops.
+    disposition: stays shelved with financial-coaching-clarify
+  - id: lumpiness-schema
+    summary: No "is fixed" flag, no cadence column, no reliance on the Fijos/Variables naming.
+    disposition: derived from the spending itself; the naming convention is unenforced
+  - id: transactions-by-detail-having
+    summary: |
+      get_transactions_by_detail() has HAVING COUNT(t.id) > 1 and silently drops
+      single-transaction merchants, so a category blown by one purchase has no cause.
+    disposition: worked around, NOT fixed — changing it would change the SPA recurring view
+  - id: whatsapp-coaching
+    summary: No WhatsApp coaching path ships here.
+    disposition: its 24-hour window makes unprompted sends template-gated (ADR-0007)
+  - id: technical-debt-at-large
+    summary: Items 1, 2 and 10 are not addressed; item 10 informs fork 1 only.
+    disposition: recorded, out of scope
+  - id: spa-and-cascade
+    summary: No SPA surface and no change to the categorization cascade.
+    disposition: out of scope
+
+confirmed_non_blockers:
+  - id: outbound-port
+    summary: |
+      reply() on both channels is a context-free send, already reusable for an unprompted
+      message. NO CaptureChannel change is needed — unlike the shelved clarify change,
+      which needed an interactive ask() capability.
+  - id: load
+    summary: |
+      Both report functions are properly indexed; a daily sweep at ~100 users is cheap.
+
+risks:
+  - A miscategorised transaction becomes a spoken accusation (QA-2); mitigated by always naming the merchants behind the number.
+  - The cause breakdown is missing exactly when a category was blown by one purchase (HAVING COUNT > 1). That is the lumpy case and must be served from raw transaction data.
+  - Early-month projection amplifies noise — spent * D/d at d=1 projects 30x. A minimum-elapsed-days floor is mandatory.
+  - Day-of-month is timezone-sensitive and date_operation is timestamptz; pace is meaningless if day 1 is ambiguous.
+  - No per-user job serialisation exists; the sweep and a capture-time check can race. The spoken-observation write must be constraint-enforced.
+  - Every category may sit at monthly_budget = 0, leaving only blindness to report. That is designed behaviour, not a failure.
+  - A WhatsApp-only user is never coached — deliberate per ADR-0007, stated not hidden.
+  - Deleting the daily summary removes a message the owner receives today.
+  - Nothing anywhere remembers what was already said; the memory table is the only thing that makes "one voice" enforceable.
+
+open_questions:
+  - id: q1
+    question: What margin makes a category worth speaking about?
+    assumed: Projected close exceeds budget by >= 10%, or actual spend already exceeds budget.
+  - id: q2
+    question: What counts as lumpy?
+    assumed: One transaction is >= 50% of the category's month-to-date spend — report level, do not project.
+  - id: q3
+    question: How early in the month may it project?
+    assumed: Day 5. Before that, only actual overspend speaks.
+  - id: q4
+    question: How many observations may one message carry?
+    assumed: 3, ordered by severity; the rest stay silent.
+  - id: q5
+    question: When may it re-speak about the same category in the same month?
+    assumed: Only on crossing into a worse band (on pace -> projected over -> already over). Never the same band twice.
+  - id: q6
+    question: How often does the sweep run?
+    assumed: Daily, once, at a fixed hour. Weekly would make "el día 12" a lie half the time.
+  - id: q7
+    question: Is the monthly-close email kept at all?
+    assumed: Yes, repaired, email only. Turning month-close into a coach message is a separate change.
+  - id: q8
+    question: Which timezone defines day-of-month?
+    assumed: America/Lima.
+  - id: q9
+    question: Should the coach ever speak about income or savings categories?
+    assumed: No — expense categories only. Pace over a savings target is a different, inverted rule.
+
+rollback: |
+  Every coaching slice reverts by reverting its commit. The only schema step — the
+  spoken-observation table — is purely additive; drop it. No existing column, row,
+  migration or SQL function is modified. Without a deploy: remove the sweep from the
+  schedule and set the per-user message cap to 0, which silences both entry points and
+  restores today's capture behaviour exactly. Fork 2 is pure code; reverting restores both
+  commands and routes/console.php restores both schedule entries. Nothing touches the
+  Gemini integration, queue payloads, or the categorization cascade.
