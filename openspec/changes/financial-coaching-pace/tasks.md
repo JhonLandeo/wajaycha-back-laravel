@@ -83,27 +83,29 @@ Unit 6 **must not land before Unit 4** (overlap window, design §8).
 
 ## Phase 6: Retire the daily summary; repair the monthly one (commit 6 — not before commit 4)
 
-- [ ] 6.1 RED `tests/Feature/Services/FinancialReportServiceBudgetDeviationTest.php`: `getBudgetDeviation()` rows carry non-null `variance` (`budgeted - spent`) and `status` (`spent > budgeted ? 'Excedido' : 'Dentro'`).
-- [ ] 6.2 GREEN modify `app/Services/FinancialReportService.php::getBudgetDeviation()` to compute `variance` and `status`.
-- [ ] 6.3 RED `tests/Feature/Console/SendSummaryTransactionByMonthTest.php`: the queued email (`Mail::fake()`) carries a non-zero real spend and a non-blank category name; asserts **zero** `Http::fake()` calls (WhatsApp push removed).
-- [ ] 6.4 GREEN remove the WhatsApp block from `app/Console/Commands/SendSummaryTransactionByMonth.php`; fix `resources/views/emails/summary_month.blade.php` to `$item->name`, `$item->spent`, `sum('spent')`, `sum('variance')`.
-- [ ] 6.5 Delete `app/Console/Commands/SendSummaryTransactionsByDay.php`, `app/Mail/NotificationSummaryByDay.php` and both entries in `routes/console.php`. No RED test — pure deletion. Verify `php artisan list` no longer shows `app:send-summary-transactions-by-day`.
+- [x] 6.1 RED `tests/Feature/Services/FinancialReportServiceBudgetDeviationTest.php`: `getBudgetDeviation()` rows carry non-null `variance` (`budgeted - spent`) and `status` (`spent > budgeted ? 'Excedido' : 'Dentro'`). Confirmed genuine RED first: `Undefined property: stdClass::$variance` on both cases (over-budget → `Excedido`, under-budget → `Dentro`) before any production change — the service didn't emit either property yet.
+- [x] 6.2 GREEN modify `app/Services/FinancialReportService.php::getBudgetDeviation()` to compute `variance` and `status`. Implemented via `->map()` over the existing collection (`$row->variance = $row->budgeted - $row->spent`; `$row->status = $row->spent > $row->budgeted ? 'Excedido' : 'Dentro'`) — no change to the underlying SQL function (design.md §9: read-only). Both triangulated cases green immediately.
+- [x] 6.3 RED `tests/Feature/Console/SendSummaryTransactionByMonthTest.php`: the queued email (`Mail::fake()`) carries a non-zero real spend and a non-blank category name; asserts **zero** `Http::fake()` calls (WhatsApp push removed). The "non-zero spend" assertion passed on first run — the mailable already stored the correct `spent`/`name` data; the defect was confined to the view and the WhatsApp block reading nonexistent properties, exactly as design.md §8 records. The "zero WhatsApp calls" assertion genuinely failed first (`Requests were recorded.`), proving the push was still live.
+- [x] 6.4 GREEN remove the WhatsApp block (and the now-unused `WhatsAppNotificationService $waService` parameter) from `app/Console/Commands/SendSummaryTransactionByMonth.php`; fix `resources/views/emails/summary_month.blade.php` to `$item->name`, `$item->spent`, `sum('spent')`, `sum('variance')`. Added a third test asserting `->render()` on the real `NotificationSummaryByMonth` mailable — `Mail::fake()` intercepts before the view renders, so the two RED/GREEN tests alone cannot prove the blade itself is fixed; this closes that gap and asserts the fixture category's real budgeted/spent/variance figures appear (not a blanket "no S/ 0.00 anywhere" — `UserObserver` seeds legitimate zero-budget default categories on user creation, which would have made that stricter assertion a false negative).
+- [x] 6.5 Deleted `app/Console/Commands/SendSummaryTransactionsByDay.php` and `app/Mail/NotificationSummaryByDay.php`. No RED test — pure deletion, as specified. Grepped the whole tree (excluding `openspec/`, `.git/`, `vendor/`, `node_modules/`) before deleting: found and removed **three** references beyond `routes/console.php`'s two lines — the `use` import and `Schedule::command(...)->dailyAt('20:08')` call (routes/console.php), **plus** a third, undocumented reference in `bootstrap/app.php`'s `->withCommands([SendSummaryTransactionsByDay::class])`, which would have fataled on every boot once the class was gone. Removed that array entry and its `use` import too — not explicitly named in this task's text, but required by the task's own "Care" instruction ("verify nothing else references either class before deleting — grep, do not assume"). `resources/views/emails/summary_day.blade.php` is now an orphaned, unreferenced view; left in place (not named in this task, low-risk leftover, listed below in Deferred). Verified via `php artisan list` (no `app:send-summary-transactions-by-day`, `app:run-coaching-sweep` and `app:send-summary-transaction-by-month` present) and `php artisan schedule:list` (20:00 sweep and 08:00-on-the-1st monthly entries present; 20:08 entry gone; `inspire`/prune entries untouched).
 
 ## Definition of Done
 
-- [ ] Every RED/GREEN pair above passes under `php artisan test`.
-- [ ] `./vendor/bin/phpstan analyse` (Larastan level 6) clean; `./vendor/bin/pint --test` clean.
-- [ ] D3 before/after timezone comparison (task 2.3) recorded before merge.
-- [ ] No composed message ever contains `actual_percentage` or a Pareto bucket share (4.4).
-- [ ] `--dry-run` claims nothing (4.8).
-- [ ] Every observation with `spent > 0` names the category and at least one merchant (D9 invariant, proven by 4.4/4.7).
-- [ ] `app:send-summary-transactions-by-day` no longer exists and is off the schedule (6.5).
-- [ ] Commit 6 lands strictly after commit 4 in history.
+- [x] Every RED/GREEN pair above passes under `php artisan test` — 306/306 full suite (up from 301/301 baseline before this batch; +5 net: 2 new `FinancialReportServiceBudgetDeviationTest` + 3 new `SendSummaryTransactionByMonthTest`).
+- [x] `./vendor/bin/phpstan analyse` (Larastan level 6) clean; `./vendor/bin/pint --test` clean. Phpstan: 16 errors, all pre-existing baseline (confirmed via `--error-format=raw` grep — zero in `FinancialReportService.php`, `SendSummaryTransactionByMonth.php`, `bootstrap/app.php`, `routes/console.php`, or either new test file). Pint: 3 style issues auto-fixed on first `pint` run (unrelated pre-existing formatting on files this phase touched anyway — `single_quote`, `no_superfluous_phpdoc_tags`, import ordering, `class_attributes_separation`, `statement_indentation`); `pint --test` clean after.
+- [ ] D3 before/after timezone comparison (task 2.3) recorded before merge. **Not implementable by `sdd-apply`** — release-gate step for the owner, requires a production database copy that does not exist in this environment. Left unchecked deliberately; do not tick without actually running the comparison before merge.
+- [x] No composed message ever contains `actual_percentage` or a Pareto bucket share (4.4). Proven in Phase 4; unaffected by this batch (`CoachingMessageComposer` untouched).
+- [x] `--dry-run` claims nothing (4.8). Proven in Phase 4; unaffected by this batch.
+- [x] Every observation with `spent > 0` names the category and at least one merchant (D9 invariant, proven by 4.4/4.7). Proven in Phase 4; unaffected by this batch.
+- [x] `app:send-summary-transactions-by-day` no longer exists and is off the schedule (6.5). Verified via `php artisan list` and `php artisan schedule:list` (see 6.5 above).
+- [ ] Commit 6 lands strictly after commit 4 in history. **Not yet applicable** — per explicit instruction ("Do NOT commit"), the working tree for this batch is left uncommitted, same as every prior phase's apply batch. Commit 4 already exists in history at `958ab26`; this item becomes satisfiable the moment commit 6 is actually created, which is outside this apply run's scope.
 
 ## Deferred
 
 | Item | Why |
 |---|---|
+| `resources/views/emails/summary_day.blade.php` | Orphaned by 6.5 — its only consumer, `App\Mail\NotificationSummaryByDay`, was deleted. Not named in task 6.5's text; left in place as a low-risk unreferenced file rather than expanding the task's explicit deletion list |
+| `get_summary_transaction_by_day()` SQL function/migration | Unused after 6.5; deleting a shipped migration is a separate decision, out of scope (per explicit instruction) |
 | `users.timezone` column / per-user `MonthCursor` | Design D3 boundary condition; single-market Peru assumption, explicitly out of scope |
 | Fixing `get_transactions_by_detail()`'s `HAVING COUNT>1` | Would change the SPA's recurring-transactions view; worked around via new repository methods (D5), not fixed |
 | `sent_at` as a real delivery acknowledgement | Requires a `reply()` port change; deliberately not made here |
