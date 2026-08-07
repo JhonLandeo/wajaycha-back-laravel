@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Coaching;
 
+use App\DTOs\Coaching\ClaimAttempt;
 use App\Models\CoachingObservation;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -24,6 +25,16 @@ use Illuminate\Support\Facades\DB;
  * decides "never speak downward" via `highestBandFor()`, and that decision is
  * explicitly NOT correctness-critical: under a race the worst outcome is one
  * extra message that was genuinely warranted, never a duplicate band.
+ *
+ * Task 4.0, decision 2: `highestBandFor()` stays subject-scoped rather than
+ * gaining a bulk "per-user map" sibling. Design §5.2's sweep diagram sketches a
+ * single "banda maxima por sujeto" call, but the sweep (phase 4.6/4.7, not built
+ * in this batch) only ever needs it for the ≤3 observations `PaceEvaluator`
+ * already truncated to, over a category count design.md states as ≤~20 per user —
+ * looping per surviving category is cheap and each lookup is already covered by
+ * the unique index's leading columns (`user_id, period_month, subject_key`). A
+ * bulk sibling would add untested speculative surface with no caller yet; adding
+ * one later is additive, not breaking.
  */
 class SpokenObservationLedger
 {
@@ -37,19 +48,8 @@ class SpokenObservationLedger
      * (user, period_month, subject_key, band) is spoken, false for every replay —
      * by this caller or by whichever concurrent caller already claimed it.
      */
-    public function claim(
-        int $userId,
-        CarbonImmutable $periodMonth,
-        string $subjectKey,
-        string $band,
-        ?int $categoryId,
-        bool $isLumpy,
-        float $budgetAmount,
-        float $spentAmount,
-        ?float $projectedAmount,
-        int $dayOfMonth,
-        string $entryPoint,
-    ): bool {
+    public function claim(ClaimAttempt $attempt): bool
+    {
         try {
             // Savepoint propio: en PostgreSQL una violacion de constraint aborta
             // la transaccion que la contiene, asi que sin esto atrapar la
@@ -57,17 +57,17 @@ class SpokenObservationLedger
             // envuelva (el mismo defecto de forma que ya se corrigio tres veces
             // en este codebase).
             DB::transaction(fn () => CoachingObservation::create([
-                'user_id' => $userId,
-                'period_month' => self::normalisePeriod($periodMonth),
-                'subject_key' => $subjectKey,
-                'category_id' => $categoryId,
-                'band' => $band,
-                'is_lumpy' => $isLumpy,
-                'budget_amount' => $budgetAmount,
-                'spent_amount' => $spentAmount,
-                'projected_amount' => $projectedAmount,
-                'day_of_month' => $dayOfMonth,
-                'entry_point' => $entryPoint,
+                'user_id' => $attempt->userId,
+                'period_month' => self::normalisePeriod($attempt->periodMonth),
+                'subject_key' => $attempt->subjectKey,
+                'category_id' => $attempt->categoryId,
+                'band' => $attempt->band,
+                'is_lumpy' => $attempt->isLumpy,
+                'budget_amount' => $attempt->budgetAmount,
+                'spent_amount' => $attempt->spentAmount,
+                'projected_amount' => $attempt->projectedAmount,
+                'day_of_month' => $attempt->dayOfMonth,
+                'entry_point' => $attempt->entryPoint,
                 'spoken_at' => now(),
             ]));
 

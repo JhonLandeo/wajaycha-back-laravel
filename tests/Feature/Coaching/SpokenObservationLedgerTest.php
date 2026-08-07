@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\DTOs\Coaching\ClaimAttempt;
 use App\Models\Category;
 use App\Models\CoachingObservation;
 use App\Models\User;
@@ -20,14 +21,12 @@ beforeEach(function () {
 });
 
 /**
- * Builds the argument list for SpokenObservationLedger::claim(), overridable per
- * scenario so every test only states what actually varies.
- *
- * @return array<string, mixed>
+ * Builds a ClaimAttempt for SpokenObservationLedger::claim(), overridable per
+ * scenario so every test only states what actually varies (task 4.0, decision 1).
  */
-function claimArgs(Tests\TestCase $test, array $overrides = []): array
+function claimAttempt(Tests\TestCase $test, array $overrides = []): ClaimAttempt
 {
-    return array_merge([
+    $args = array_merge([
         'userId' => $test->user->id,
         'periodMonth' => $test->periodMonth,
         'subjectKey' => "category:{$test->category->id}",
@@ -40,33 +39,35 @@ function claimArgs(Tests\TestCase $test, array $overrides = []): array
         'dayOfMonth' => 12,
         'entryPoint' => 'sweep',
     ], $overrides);
+
+    return new ClaimAttempt(...$args);
 }
 
 it('claims a band the first time it is spoken', function () {
-    expect($this->ledger->claim(...claimArgs($this)))->toBeTrue()
+    expect($this->ledger->claim(claimAttempt($this)))->toBeTrue()
         ->and(CoachingObservation::count())->toBe(1);
 });
 
 it('refuses a second claim of the same user, period, subject and band', function () {
-    $this->ledger->claim(...claimArgs($this));
+    $this->ledger->claim(claimAttempt($this));
 
-    expect($this->ledger->claim(...claimArgs($this)))->toBeFalse()
+    expect($this->ledger->claim(claimAttempt($this)))->toBeFalse()
         ->and(CoachingObservation::count())->toBe(1);
 });
 
 it('does not poison the enclosing transaction when a duplicate claim is caught (25P02 regression)', function () {
-    $this->ledger->claim(...claimArgs($this));
+    $this->ledger->claim(claimAttempt($this));
 
     DB::transaction(function () {
         // Savepoint propio dentro de claim(): esto prueba que atrapar la
         // violacion de constraint no deja abortada la transaccion que envuelve
         // esta llamada, cosa que en PostgreSQL (SQLSTATE 25P02) pasaria sin el
         // savepoint que claim() abre internamente.
-        expect($this->ledger->claim(...claimArgs($this)))->toBeFalse();
+        expect($this->ledger->claim(claimAttempt($this)))->toBeFalse();
 
         // La prueba real: una escritura DISTINTA, en la MISMA transaccion
         // envolvente, inmediatamente despues de la violacion atrapada.
-        expect($this->ledger->claim(...claimArgs($this, ['band' => 'projected_over', 'projectedAmount' => 460.0])))
+        expect($this->ledger->claim(claimAttempt($this, ['band' => 'projected_over', 'projectedAmount' => 460.0])))
             ->toBeTrue();
     });
 
@@ -97,7 +98,7 @@ it('lets exactly one of two concurrent claims of the same band win, and the lose
     });
 
     try {
-        $result = $this->ledger->claim(...claimArgs($this));
+        $result = $this->ledger->claim(claimAttempt($this));
     } finally {
         // En finally a proposito: si claim() llegara a propagar una excepcion no
         // esperada, el listener quedaria vivo e insertaria una fila fantasma en
@@ -114,23 +115,23 @@ it('lets exactly one of two concurrent claims of the same band win, and the lose
     // todavia puede reclamar.
     expect($result)->toBeFalse()
         ->and(fn () => CoachingObservation::count())->not->toThrow(Exception::class)
-        ->and($this->ledger->claim(...claimArgs($this)))
+        ->and($this->ledger->claim(claimAttempt($this)))
         ->toBeTrue();
 });
 
 it('lets a worse band claim after a better one was already spoken', function () {
-    expect($this->ledger->claim(...claimArgs($this, ['band' => 'projected_over', 'projectedAmount' => 460.0])))->toBeTrue();
+    expect($this->ledger->claim(claimAttempt($this, ['band' => 'projected_over', 'projectedAmount' => 460.0])))->toBeTrue();
 
     // over_budget y projected_over son tuplas distintas en el indice unico:
     // claim() no conoce la escalera, solo arbitra por el (user, mes, sujeto,
     // banda) exacto. Ambas escrituras tienen que sobrevivir.
-    expect($this->ledger->claim(...claimArgs($this, ['band' => 'over_budget'])))->toBeTrue()
+    expect($this->ledger->claim(claimAttempt($this, ['band' => 'over_budget'])))->toBeTrue()
         ->and(CoachingObservation::count())->toBe(2);
 });
 
 it('reports the highest severity band regardless of insertion order', function () {
-    $this->ledger->claim(...claimArgs($this, ['band' => 'projected_over', 'projectedAmount' => 460.0]));
-    $this->ledger->claim(...claimArgs($this, ['band' => 'over_budget']));
+    $this->ledger->claim(claimAttempt($this, ['band' => 'projected_over', 'projectedAmount' => 460.0]));
+    $this->ledger->claim(claimAttempt($this, ['band' => 'over_budget']));
 
     expect($this->ledger->highestBandFor($this->user->id, $this->periodMonth, "category:{$this->category->id}"))
         ->toBe('over_budget');
@@ -142,14 +143,14 @@ it('returns null from highestBandFor when nothing has been spoken yet', function
 });
 
 it('claims blindness once per month', function () {
-    expect($this->ledger->claim(...claimArgs($this, [
+    expect($this->ledger->claim(claimAttempt($this, [
         'subjectKey' => 'blindness',
         'band' => 'blind',
         'categoryId' => null,
         'budgetAmount' => 0.0,
     ])))->toBeTrue();
 
-    expect($this->ledger->claim(...claimArgs($this, [
+    expect($this->ledger->claim(claimAttempt($this, [
         'subjectKey' => 'blindness',
         'band' => 'blind',
         'categoryId' => null,
@@ -160,7 +161,7 @@ it('claims blindness once per month', function () {
 });
 
 it('starts a new period_month with an empty ladder', function () {
-    $this->ledger->claim(...claimArgs($this, ['band' => 'over_budget']));
+    $this->ledger->claim(claimAttempt($this, ['band' => 'over_budget']));
 
     $nextMonth = $this->periodMonth->addMonthNoOverflow();
 
@@ -169,15 +170,15 @@ it('starts a new period_month with an empty ladder', function () {
 
     // Y el mes nuevo puede volver a reclamar exactamente la misma banda: el
     // mes cerrado nunca se vuelve a coachear (design.md D3).
-    expect($this->ledger->claim(...claimArgs($this, ['periodMonth' => $nextMonth, 'band' => 'over_budget'])))
+    expect($this->ledger->claim(claimAttempt($this, ['periodMonth' => $nextMonth, 'band' => 'over_budget'])))
         ->toBeTrue();
 });
 
 it('marca como entregadas solo las observaciones que se le nombran', function () {
-    $this->ledger->claim(...claimArgs($this));
+    $this->ledger->claim(claimAttempt($this));
     $entregada = CoachingObservation::sole();
 
-    $this->ledger->claim(...claimArgs($this, ['band' => 'projected_over', 'projectedAmount' => 460.0]));
+    $this->ledger->claim(claimAttempt($this, ['band' => 'projected_over', 'projectedAmount' => 460.0]));
     $sinEntregar = CoachingObservation::where('id', '!=', $entregada->id)->sole();
 
     $this->ledger->confirmDelivered([$entregada->id]);
@@ -189,7 +190,7 @@ it('marca como entregadas solo las observaciones que se le nombran', function ()
 });
 
 it('no toca nada cuando la lista viene vacia', function () {
-    $this->ledger->claim(...claimArgs($this));
+    $this->ledger->claim(claimAttempt($this));
 
     $this->ledger->confirmDelivered([]);
 
@@ -197,7 +198,7 @@ it('no toca nada cuando la lista viene vacia', function () {
 });
 
 it('no marca entregada una observacion que nunca se reclamo', function () {
-    $this->ledger->claim(...claimArgs($this));
+    $this->ledger->claim(claimAttempt($this));
     $existente = CoachingObservation::sole();
 
     // Un id que no existe no puede crear ni resucitar nada.
@@ -211,11 +212,11 @@ it('trata cualquier dia del mismo mes como el mismo periodo', function () {
     $primero = CarbonImmutable::create(2026, 8, 1);
     $veintidos = CarbonImmutable::create(2026, 8, 22);
 
-    expect($this->ledger->claim(...claimArgs($this, ['periodMonth' => $primero])))->toBeTrue();
+    expect($this->ledger->claim(claimAttempt($this, ['periodMonth' => $primero])))->toBeTrue();
 
     // Mismo sujeto, misma banda, otro dia del mismo mes. Si el ledger guardara la
     // fecha tal cual, el indice unico no ligaria y el coach hablaria de nuevo.
-    expect($this->ledger->claim(...claimArgs($this, ['periodMonth' => $veintidos])))->toBeFalse()
+    expect($this->ledger->claim(claimAttempt($this, ['periodMonth' => $veintidos])))->toBeFalse()
         ->and(CoachingObservation::count())->toBe(1);
 
     expect($this->ledger->highestBandFor($this->user->id, $veintidos, 'category:1'))
