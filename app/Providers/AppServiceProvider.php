@@ -29,6 +29,11 @@ class AppServiceProvider extends ServiceProvider
             \App\Repositories\ParetoRepository::class
         );
 
+        $this->app->bind(
+            \App\Repositories\Contracts\DashboardRepositoryContract::class,
+            \App\Repositories\DashboardRepository::class
+        );
+
         // Capture channels are resolved by key, so adding an adapter is a registration
         // here rather than an edit to every caller.
         $this->app->singleton(
