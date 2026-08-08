@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Repositories\Contracts;
 
+use Illuminate\Pagination\LengthAwarePaginator;
+
 /**
  * Reads over the Detail catalogue.
  *
@@ -31,4 +33,35 @@ interface DetailRepositoryContract
      * @return array<int, object{id: int, name: string, created_at: string, category_name: ?string, total_count: int}>
      */
     public function listForUser(int $userId, int $perPage, int $page): array;
+
+    /**
+     * The caller's details that are already a categorisation rule for $categoryId.
+     *
+     * Scoped by both: a rule belongs to a user and to a category, and matching on the
+     * category alone would list another user's rules for a category name they share.
+     */
+    public function paginateRulesForCategory(
+        int $userId,
+        int $categoryId,
+        int $perPage,
+        int $page
+    ): LengthAwarePaginator;
+
+    /**
+     * Uncategorised details closest to what $categoryId already looks like.
+     *
+     * The category's shape is the average embedding of the details already assigned to
+     * it, and candidates are ordered by cosine distance from it. A category with no
+     * embedded detail has no shape to compare against, so it yields nothing rather than
+     * an arbitrary ordering — an empty page is the honest answer, not a failure.
+     *
+     * Details that are already a rule are excluded: suggesting what the user has
+     * already decided is noise.
+     */
+    public function paginateSuggestionsForCategory(
+        int $userId,
+        int $categoryId,
+        int $perPage,
+        int $page
+    ): LengthAwarePaginator;
 }
