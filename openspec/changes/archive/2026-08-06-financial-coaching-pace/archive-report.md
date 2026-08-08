@@ -106,3 +106,35 @@ coexisted deliberately for two commits.
   duplicate a transaction.
 - Add a tenth business-rule SQL function. The pace arithmetic is PHP and unit-tested
   without a database.
+
+
+---
+
+## Follow-up status — updated 2026-08-07
+
+Closed in `441b50a` (branch `chore/close-recorded-followups`):
+
+- **`createExactRule()` could never update a rule.** Split by intent:
+  `rememberInferredRule()` keeps `firstOrCreate` for the cascade's guesses,
+  `setRule()` overwrites for explicit user corrections. Both correction paths moved
+  to `setRule()`. This was the live bug the shelved `financial-coaching-clarify`
+  change had planned to fix.
+- **`CategorizationService` had no tests.** It has a cascade regression net now
+  (`CategorizationCascadeTest`, `CategorizationRuleWritesTest`).
+- **The unreachable `DetailResolver` backfill branch** and its vacuous test.
+- **The unguarded `ChannelIdentity::creating` listener** in `ChannelIdentityLinkerTest`.
+- **The orphaned `summary_day` template.**
+- **Broken documentation links** in both merged specs.
+
+Still open, each for a stated reason rather than by neglect:
+
+| Item | Why it stays open |
+|---|---|
+| Task 2.3, production-copy timezone comparison | The owner's release gate. Cannot be performed outside production. |
+| `sent_at` is not proof of delivery | Making it real requires changing the capture port, which the design refused. |
+| Drop `users.whatsapp_phone` / `legacy_whatsapp_phone` | Registration still writes the former. A change of its own, with a data migration. |
+| `SendSummaryTransactionByMonth` hardcodes `$userId = 1` | Un-hardcoding it would start emailing every user. The owner's call. |
+| Delete the unused `get_summary_transaction_by_day()` | Removing a shipped migration is its own decision. |
+| Claim-by-insert idiom duplicated across three services | Currently identical and identically tested in all three. Extract when a fourth appears. |
+| `"Desconocido WhatsApp"` fallback | **Attempted and reverted.** `similarity('desconocido whatsapp','desconocido')` is 0.571 against `DetailResolver`'s 0.6 threshold, so renaming it splits the historical grouping into two `Detail` rows and orphans any rule learned on the old one. Needs a data migration to do safely. |
+| A WhatsApp-only user is never coached | Accepted consequence of ADR-0007's 24-hour window; observable in the sweep's summary line. |
