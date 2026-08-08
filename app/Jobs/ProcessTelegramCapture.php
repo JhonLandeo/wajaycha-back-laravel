@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Actions\Capture\RegisterCapturedTransactionAction;
+use App\DTOs\Coaching\CoachingScope;
+use App\Models\User;
 use App\Services\AI\GeminiTextService;
 use App\Services\AI\GeminiVisionService;
 use App\Services\Capture\CaptureChannel;
 use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
 use App\Services\Capture\ChannelLinkTokenRedeemer;
+use App\Services\Coaching\FinancialCoachingService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -87,7 +90,7 @@ class ProcessTelegramCapture implements ShouldQueue
         }
 
         // 4. REGISTRAR (ORQUESTACION)
-        $registerAction->execute($user, $parsed);
+        $transaction = $registerAction->execute($user, $parsed);
 
         // 5. CONFIRMAR
         $isExpense = $parsed->type === 'expense';
@@ -97,6 +100,34 @@ class ProcessTelegramCapture implements ShouldQueue
             '✅ Registrado: S/ '.number_format($parsed->amount, 2)
                 .($isExpense ? ' pagado a ' : ' recibido de ').$description.'.'
         );
+
+        // 6. COACHEAR (opcional, jamas debe romper una captura ya confirmada;
+        //    design.md §5.3). Un gasto sin categoria no puede acusar a nadie,
+        //    y un ingreso no tiene presupuesto que rebasar.
+        if ($isExpense && $transaction->category_id !== null) {
+            $this->coach($user, (int) $transaction->category_id, (float) $parsed->amount);
+        }
+    }
+
+    /**
+     * Guarded per design.md §5.3: the Transaction is already persisted and the
+     * ✅ confirmation already sent, so a coaching failure must never fail this
+     * job — retrying it would re-run the capture and duplicate the transaction,
+     * the same reasoning already documented on `reply()`. Caught, logged, and
+     * swallowed here, never rethrown.
+     *
+     * Resolved via the container rather than method-injected, matching this
+     * class's own `failed()` (`app(CaptureChannelRegistry::class)`) — the
+     * established pattern for a best-effort side call this class does not
+     * want to be forced through by `handle()`'s normal call signature.
+     */
+    private function coach(User $user, int $categoryId, float $amount): void
+    {
+        try {
+            app(FinancialCoachingService::class)->speak($user, CoachingScope::forCategory($categoryId, $amount));
+        } catch (Throwable $e) {
+            Log::error('⚠️ Coaching falló tras una captura ya registrada: '.$e->getMessage());
+        }
     }
 
     public function failed(Throwable $exception): void

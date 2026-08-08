@@ -27,7 +27,14 @@ class RegisterCapturedTransactionAction
         $descriptionRaw = $isExpense ? ($dto->destination ?? '') : ($dto->origin ?? '');
 
         if (empty(trim($descriptionRaw)) || strtolower($descriptionRaw) === 'usuario') {
-            $descriptionRaw = "Desconocido WhatsApp";
+            // Este texto quedo inexacto cuando se extrajo el puerto de captura: la
+            // accion ya no es de WhatsApp y hoy la usan los dos canales. Aun asi NO se
+            // cambia, y la razon esta medida: similarity('desconocido whatsapp',
+            // 'desconocido') da 0.571 contra el umbral 0.6 de DetailResolver, asi que
+            // renombrarlo PARTE el agrupamiento historico en dos Detail distintos y
+            // deja huerfana cualquier regla aprendida sobre el viejo. Corregirlo bien
+            // exige migrar los datos, y eso es un cambio propio, no una limpieza.
+            $descriptionRaw = 'Desconocido WhatsApp';
         }
 
         // A. Analizamos para obtener la entidad limpia
@@ -66,7 +73,7 @@ class RegisterCapturedTransactionAction
             'is_manual' => true,
         ]);
 
-        Log::info("✅ WhatsApp Action: Transacción registrada (S/ {$dto->amount} " . ($isExpense ? "a" : "de") . " {$descriptionRaw}) -> Cat ID: {$categoryId}");
+        Log::info("✅ WhatsApp Action: Transacción registrada (S/ {$dto->amount} ".($isExpense ? 'a' : 'de')." {$descriptionRaw}) -> Cat ID: {$categoryId}");
 
         return $transaction;
     }

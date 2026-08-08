@@ -97,7 +97,7 @@ class CategoryRuleController extends Controller
 
         $userId = Auth::id();
         $detailIdToSync = $request->input('detail_id');
-        $categorizationService->createExactRule($userId, $detailIdToSync, $category->id);
+        $categorizationService->setRule($userId, $detailIdToSync, $category->id);
         $detail = Detail::find($detailIdToSync);
 
         if ($detail) {

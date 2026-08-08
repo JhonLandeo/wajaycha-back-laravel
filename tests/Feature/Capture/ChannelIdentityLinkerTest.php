@@ -67,9 +67,14 @@ it('no envenena la transaccion cuando pierde la carrera contra el indice unico',
         ]);
     });
 
-    $result = $this->linker->linkWhatsApp($loser, '+51 999 888 777');
-
-    ChannelIdentity::flushEventListeners();
+    try {
+        $result = $this->linker->linkWhatsApp($loser, '+51 999 888 777');
+    } finally {
+        // En finally, igual que su hermano en ChannelLinkTokenTest: si la llamada
+        // propagara, el listener quedaria vivo e insertaria esta fila fantasma en
+        // cualquier test posterior que cree una ChannelIdentity.
+        ChannelIdentity::flushEventListeners();
+    }
 
     // Lo que se prueba es que el perdedor no vincula y que la transaccion sigue viva:
     // en PostgreSQL una violacion de constraint sin savepoint la aborta entera y esta

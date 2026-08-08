@@ -7,12 +7,12 @@
         | Categoría | Presupuesto | Gasto Real | Varianza | Estado |
         |:---|---:|---:|---:|:---|
         @foreach ($budgetDeviation as $item)
-        | {{ $item->category }} | S/ {{ number_format($item->budgeted, 2) }} | S/ {{ number_format($item->real, 2) }} | S/ {{ number_format($item->variance, 2) }} | {{ $item->status == 'Excedido' ? '🔴' : '🟢' }} |
+        | {{ $item->name }} | S/ {{ number_format($item->budgeted, 2) }} | S/ {{ number_format($item->spent, 2) }} | S/ {{ number_format($item->variance, 2) }} | {{ $item->status == 'Excedido' ? '🔴' : '🟢' }} |
         @endforeach
     </x-mail::table>
 
     <x-mail::panel>
-        **Resumen General:** Gasto Total: S/ {{ number_format($budgetDeviation->sum('real'), 2) }}
+        **Resumen General:** Gasto Total: S/ {{ number_format($budgetDeviation->sum('spent'), 2) }}
         Ahorro/Exceso: S/ {{ number_format($budgetDeviation->sum('variance'), 2) }}
     </x-mail::panel>
 

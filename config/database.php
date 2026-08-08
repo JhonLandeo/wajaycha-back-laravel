@@ -95,6 +95,11 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => 'prefer',
+            // Coaching design D3: pins the session TimeZone so PostgreSQL's
+            // EXTRACT(YEAR/MONTH FROM date_operation) buckets on the same calendar
+            // PHP uses (config('app.timezone')), instead of silently inheriting
+            // whatever timezone the server process happens to run under.
+            'timezone' => env('DB_TIMEZONE', 'America/Lima'),
         ],
 
         'sqlsrv' => [
