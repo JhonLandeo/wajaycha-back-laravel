@@ -24,6 +24,8 @@ declare(strict_types=1);
  * the project's own rule against adding a package for something already at hand.
  */
 
+use Symfony\Component\Finder\Finder;
+
 // ---------------------------------------------------------------- transporte
 
 /**
@@ -92,6 +94,42 @@ arch('the coaching deciders never read the database themselves')
         'Illuminate\Database\Eloquent\Model',
     ])
     ->ignoring('App\Services\Coaching\SpokenObservationLedger');
+
+/**
+ * Raw queries belong to repositories. `DB::transaction()` does not.
+ *
+ * These are different acts wearing one facade. A query is persistence — it knows a
+ * function name, an argument order, a column list. A transaction is a decision about
+ * where a consistency boundary falls, which is domain work and belongs wherever that
+ * boundary is chosen: `RegisterYapeImportAction` opens one on purpose, and moving it
+ * into a repository would hide the very thing it exists to declare.
+ *
+ * `arch()` cannot express this. It matches imports, and both acts arrive through the
+ * same `use Illuminate\Support\Facades\DB`. So the distinction is enforced by reading
+ * the source, which is what an architecture rule is allowed to do when the shape of
+ * the rule does not fit the helper.
+ *
+ * `App\Services` reaches this with no exceptions. `FinancialReportService` was the
+ * last holdout: it ran `get_monthly_category_budget_report` itself while
+ * `CategoryRepository` already owned two other calls to the same function.
+ */
+it('no service runs a raw query — transactions are allowed, persistence is not', function () {
+    // Resolved from this file rather than through `app_path()`: these tests live in
+    // tests/Unit, where no application is booted, and an architecture rule has no
+    // business needing one to read source.
+    $appPath = dirname(__DIR__, 3).'/app';
+    $offenders = [];
+
+    foreach (Finder::create()->files()->in($appPath.'/Services')->name('*.php') as $file) {
+        $source = (string) file_get_contents($file->getRealPath());
+
+        if (preg_match('/DB::(select|table|raw|statement|insert|update|delete)\b/', $source, $m)) {
+            $offenders[] = str_replace($appPath.'/', '', $file->getRealPath()).' → '.$m[0];
+        }
+    }
+
+    expect($offenders)->toBe([]);
+});
 
 // ---------------------------------------------------------------------- DTOs
 
@@ -166,10 +204,18 @@ arch('the newer namespaces declare strict types')
 | recorded here so the next person does not re-derive the same answer.
 |
 | "Only App\Repositories may use the DB facade."
-|     14 files outside App\Repositories use it — services, jobs, actions, an
-|     observer, a console command. An exception list of 14 is not a boundary, it
-|     is a surrender with extra steps. This becomes enforceable if that number
-|     comes down; it is not a rule today.
+|     Superseded, and the reason is worth keeping. The original measurement found
+|     14 files outside App\Repositories using it and the rule was dropped as
+|     unenforceable — but the count was wrong to begin with, because it counted
+|     `DB::transaction()` as persistence. It is not: it is a consistency boundary,
+|     and the layer that decides one is exactly where it belongs.
+|
+|     Measured again by act rather than by import, only six places still run a raw
+|     query outside a repository: UserObserver, StoreCategoryAction,
+|     UpdateCategoryAction, ProcessPdfImport, SmartMergeJob and
+|     BackfillSmartDetails. App\Services reached zero and is enforced above.
+|     Six is still too many to list as exceptions, but it is a register that is
+|     shrinking rather than a number that was never going to move.
 |
 | "Every DTO is readonly."
 |     10 of the DTOs are not. `DashboardScope` is `final readonly` and new ones

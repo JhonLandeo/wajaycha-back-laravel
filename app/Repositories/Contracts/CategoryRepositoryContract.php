@@ -53,4 +53,20 @@ interface CategoryRepositoryContract
      *                                    silent truncation.
      */
     public function expenseBudgetSnapshotsForMonth(int $userId, int $month, int $year): array;
+
+    /**
+     * Budget-versus-spend rows for a month, as the monthly summary needs them.
+     *
+     * The third caller of `get_monthly_category_budget_report`, and the last one that
+     * was still running the query from outside a repository. It returns figures only —
+     * the variance and the over/under verdict are decided by `FinancialReportService`,
+     * because a stored procedure can return a number but not what the number means.
+     *
+     * Kept separate from `expenseBudgetSnapshotsForMonth()` rather than merged with it:
+     * that one caps the row count for coaching and throws past the cap, which is a rule
+     * the monthly summary must not inherit.
+     *
+     * @return array<int, \stdClass>
+     */
+    public function budgetDeviationRowsForMonth(int $userId, int $month, int $year): array;
 }

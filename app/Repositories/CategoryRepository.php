@@ -83,6 +83,21 @@ final class CategoryRepository implements CategoryRepositoryContract
         return Category::query()->create($data);
     }
 
+    /**
+     * @return array<int, \stdClass>
+     */
+    public function budgetDeviationRowsForMonth(int $userId, int $month, int $year): array
+    {
+        // Moved verbatim from FinancialReportService, argument order included. The
+        // function takes (p_page, p_per_page, p_user_id, p_month, p_year, p_search).
+        /** @var array<int, \stdClass> */
+        return DB::select(
+            'SELECT id, name, monthly_budget AS budgeted, spent, available_budget, percentage_spent
+             FROM get_monthly_category_budget_report(?, ?, ?, ?, ?, ?)',
+            [1, 100, $userId, $month, $year, null]
+        );
+    }
+
     public function expenseBudgetSnapshotsForMonth(int $userId, int $month, int $year): array
     {
         $maxCategories = (int) config('coaching.max_categories');
