@@ -1,0 +1,94 @@
+schema: spec-driven
+change: telegram-capture-channel
+title: Telegram capture channel
+created: 2026-08-06
+artifact_store: hybrid
+owning_subdomain: Ingestion
+decided_by: ../../../../docs/decisions/0007-telegram-primary-conversational-channel.md
+
+phases:
+  explore:
+    status: complete
+    artifact: ../secure-whatsapp-webhook/exploration.md
+    note: |
+      Reused. The prior exploration covered the whole capture idea; findings F2 idempotency,
+      F3 batched deliveries, F4 identity normalisation and F6 Entity Resolution duplication
+      carry over unchanged. Only F1 (Meta HMAC) died with ADR-0006.
+  propose:
+    status: complete
+    artifact: proposal.md
+  spec:
+    status: complete
+    artifact: specs/ingestion/spec.md
+    depends_on: [propose]
+  design:
+    status: complete
+    artifact: design.md
+    depends_on: [propose]
+  tasks:
+    status: complete
+    artifact: tasks.md
+    depends_on: [spec, design]
+  apply:
+    status: pending
+    depends_on: [tasks]
+  verify:
+    status: pending
+    depends_on: [apply]
+  archive:
+    status: pending
+    depends_on: [verify]
+
+next_recommended: apply
+
+delivery_strategy: auto-chain
+chain_strategy: stacked-to-main
+review_workload_forecast: |
+  The proposal assumed 3 slices; estimating authored lines put two of them over the
+  400-line budget, so the chain is 5. Slice 5 is tight at ~380 and may split further
+  during implementation, separating webhook intake from the media path.
+slices:
+  - id: 1
+    title: Extract Entity Resolution
+    kind: refactor
+    estimated_lines: 180
+    note: ADR-0005 trigger. Preserve trigram 0.6; DELETE the unused THRESHOLD_TRIGRAM 0.4.
+  - id: 2
+    title: Extract the capture port
+    kind: refactor
+    estimated_lines: 190
+    note: Existing WhatsApp code becomes the first adapter; existing suite is the contract.
+  - id: 3
+    title: Channel identity
+    kind: schema + behaviour
+    estimated_lines: 290
+    note: Only destructive slice. Replaces users.whatsapp_phone. Carries F4. legacy_whatsapp_phone is the rollback path.
+  - id: 4
+    title: Account linking
+    kind: behaviour
+    estimated_lines: 250
+    note: Token stored as SHA-256 hash only. All refusals return one generic response.
+  - id: 5
+    title: Telegram adapter
+    kind: integration
+    estimated_lines: 380
+    note: Carries F1-equivalent (secret_token), F2 (update_id), F3 (iterate updates). Tightest slice.
+
+engram_topic_keys:
+  propose: sdd/telegram-capture-channel/propose
+
+quality_drivers: [QA-4, QA-3, QA-8, QA-7]
+
+out_of_scope:
+  - id: coaching
+    summary: Financial Coaching subdomain — what advice, when to interrupt, conversational state.
+    disposition: separate change, owner decided to split
+  - id: F5
+    summary: Factura and boleta recognition; ParsedReceiptDTO models a Yape-shaped movement only.
+    disposition: separate change, after this one
+  - id: F7
+    summary: KeywordRule has no write path, so cascade steps 3 and 4 are unreachable.
+    disposition: product decision for the owner
+
+open_questions:
+  - How does a user link their Telegram account? Proposal assumes a signed deep link from the SPA.

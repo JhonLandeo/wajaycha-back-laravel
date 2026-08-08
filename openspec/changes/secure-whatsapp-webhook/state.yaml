@@ -1,0 +1,60 @@
+schema: spec-driven
+change: secure-whatsapp-webhook
+title: Secure the WhatsApp webhook
+created: 2026-08-06
+artifact_store: hybrid
+owning_subdomain: Ingestion
+
+phases:
+  explore:
+    status: complete
+    artifact: exploration.md
+  propose:
+    status: complete
+    artifact: proposal.md
+  spec:
+    status: on_hold
+    depends_on: [propose]
+    hold_reason: |
+      ADR-0007 supersedes ADR-0006. Meta is not being pursued, and the bot is a financial
+      coach, so Telegram becomes the primary channel. Finding F1 (HMAC verification of
+      X-Hub-Signature-256) is Meta-specific and no longer applies. Findings F2 idempotency,
+      F3 batched deliveries and F4 identity normalisation are channel-shaped and carry over
+      to the Telegram change: Telegram's equivalents are secret_token on setWebhook and
+      update_id for deduplication.
+  design:
+    status: pending
+    depends_on: [propose]
+  tasks:
+    status: pending
+    depends_on: [spec, design]
+  apply:
+    status: pending
+    depends_on: [tasks]
+  verify:
+    status: pending
+    depends_on: [apply]
+  archive:
+    status: pending
+    depends_on: [verify]
+
+next_recommended: none
+status: on_hold
+superseding_decision: ../../../../docs/decisions/0007-telegram-primary-conversational-channel.md
+
+engram_topic_keys:
+  explore: sdd/secure-whatsapp-webhook/explore
+  propose: sdd/secure-whatsapp-webhook/propose
+
+quality_drivers: [QA-4, QA-3, QA-1]
+
+deferred:
+  - id: F5
+    summary: Factura and boleta recognition; ParsedReceiptDTO models a Yape-shaped movement only.
+    disposition: next change
+  - id: F6
+    summary: Entity Resolution duplicated across RegisterWhatsAppTransactionAction and TransactionYapeImport.
+    disposition: rides with F5 per ADR-0005
+  - id: F7
+    summary: KeywordRule has no write path, so cascade steps 3 and 4 are unreachable in production.
+    disposition: product decision for the owner
