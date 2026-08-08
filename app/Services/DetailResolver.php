@@ -51,10 +51,13 @@ class DetailResolver
             return $detail;
         }
 
-        if (empty($detail->entity_clean)) {
-            $detail->update(['entity_clean' => $cleanEntity]);
-        }
-
+        // Aqui vivia un backfill de entity_clean que era inalcanzable: la busqueda
+        // exige igualdad exacta o similitud de trigramas, y ninguna de las dos
+        // alcanza un NULL —similarity(NULL, ?) es NULL—, asi que un Detail sin
+        // entidad limpia nunca llegaba a este punto. La unica forma de entrar era
+        // que lo guardado y lo entrante fueran ambos cadena vacia, en cuyo caso el
+        // backfill escribia '' sobre ''. Se elimina en vez de conservarse como
+        // adorno; findExisting() sigue documentando por que un NULL no matchea.
         return $detail;
     }
 
