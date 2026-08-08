@@ -13,8 +13,7 @@ final class StoreCategoryAction
 {
     public function __construct(
         private readonly CategoryRepositoryContract $repository
-    ) {
-    }
+    ) {}
 
     public function execute(CategoryDataDTO $dto): Category
     {
@@ -30,12 +29,10 @@ final class StoreCategoryAction
             $category = $this->repository->create($data);
 
             if ($dto->pareto_classification_id) {
-                DB::table('category_pareto_assignments')->insert([
-                    'category_id' => $category->id,
-                    'pareto_classification_id' => $dto->pareto_classification_id,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+                $this->repository->assignParetoClassification(
+                    $category->id,
+                    $dto->pareto_classification_id
+                );
             }
 
             return $category;
