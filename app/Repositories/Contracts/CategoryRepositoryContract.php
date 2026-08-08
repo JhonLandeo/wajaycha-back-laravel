@@ -35,6 +35,26 @@ interface CategoryRepositoryContract
     public function create(array $data): Category;
 
     /**
+     * Put a category in a Pareto band, replacing whatever band it was in.
+     *
+     * `category_pareto_assignments` has no model, so it was written with raw
+     * `DB::table()` calls from two actions and an observer — three copies of the same
+     * column list, drifting independently. `ParetoRepository` joins this table to
+     * answer which categories fall in which band, which is the reading the product is
+     * built around, so a stale or missing row moves a category into the wrong band
+     * without raising anything.
+     *
+     * One category holds one band: the write is an upsert on `category_id`, not an
+     * insert, and calling it twice does not accumulate rows.
+     */
+    public function assignParetoClassification(int $categoryId, int $paretoClassificationId): void;
+
+    /**
+     * Take a category out of every Pareto band.
+     */
+    public function clearParetoClassification(int $categoryId): void;
+
+    /**
      * Leaf **expense** categories with spend this month, shaped for `PaceEvaluator`
      * (design.md D2, §5.1). Wraps `get_monthly_category_budget_report`, the same
      * function the SPA reads, so `spent` never disagrees with the report.

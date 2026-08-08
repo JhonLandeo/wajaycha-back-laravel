@@ -67,14 +67,17 @@ function killSwitchOverBudgetCategory(User $user): Category
 it('claims nothing, sends nothing, and never queries a category snapshot when coaching is disabled', function () {
     config(['coaching.enabled' => false]);
 
+    // The fixture is built before the mock is installed. Creating a User seeds its
+    // default workspace through CategoryRepositoryContract, and a mock with no
+    // expectations would reject that call — which says nothing about speak().
+    $user = killSwitchUser();
+    killSwitchOverBudgetCategory($user);
+
     $this->mock(CategoryRepositoryContract::class, function ($mock) {
         $mock->shouldNotReceive('expenseBudgetSnapshotsForMonth');
     });
 
     Http::fake();
-
-    $user = killSwitchUser();
-    killSwitchOverBudgetCategory($user);
 
     $service = app(FinancialCoachingService::class);
 

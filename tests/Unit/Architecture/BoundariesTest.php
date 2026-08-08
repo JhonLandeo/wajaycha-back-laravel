@@ -121,7 +121,13 @@ it('no service runs a raw query — transactions are allowed, persistence is not
     $offenders = [];
 
     foreach (Finder::create()->files()->in($appPath.'/Services')->name('*.php') as $file) {
+        // Comments are stripped first. A docblock explaining that a class no longer
+        // calls `DB::table()` is not a call, and a rule that cannot tell the difference
+        // punishes the documentation it should be encouraging — which is exactly what
+        // happened to `UserObserver` when this was measured naively.
         $source = (string) file_get_contents($file->getRealPath());
+        $source = (string) preg_replace('!/\*.*?\*/!s', '', $source);
+        $source = (string) preg_replace('!//.*$!m', '', $source);
 
         if (preg_match('/DB::(select|table|raw|statement|insert|update|delete)\b/', $source, $m)) {
             $offenders[] = str_replace($appPath.'/', '', $file->getRealPath()).' → '.$m[0];

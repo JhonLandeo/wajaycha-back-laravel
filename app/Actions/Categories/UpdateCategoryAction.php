@@ -13,8 +13,7 @@ final class UpdateCategoryAction
 {
     public function __construct(
         private readonly CategoryRepositoryContract $repository
-    ) {
-    }
+    ) {}
 
     public function execute(Category $category, CategoryDataDTO $dto): Category
     {
@@ -29,17 +28,12 @@ final class UpdateCategoryAction
             $this->repository->update($category, $data);
 
             if ($dto->pareto_classification_id) {
-                DB::table('category_pareto_assignments')->updateOrInsert(
-                    ['category_id' => $category->id],
-                    [
-                        'pareto_classification_id' => $dto->pareto_classification_id,
-                        'updated_at' => now(),
-                    ]
+                $this->repository->assignParetoClassification(
+                    $category->id,
+                    $dto->pareto_classification_id
                 );
             } else {
-                DB::table('category_pareto_assignments')
-                    ->where('category_id', $category->id)
-                    ->delete();
+                $this->repository->clearParetoClassification($category->id);
             }
 
             return $category->fresh();
