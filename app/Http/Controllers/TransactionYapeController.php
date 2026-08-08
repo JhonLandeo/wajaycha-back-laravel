@@ -7,7 +7,6 @@ namespace App\Http\Controllers;
 use App\Actions\Imports\RegisterYapeImportAction;
 use App\Actions\Imports\UploadedStatement;
 use App\Http\Requests\TransactionYape\ImportYapeRequest;
-use App\Jobs\SuggestYapeCategoriesJob;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 
@@ -31,15 +30,5 @@ class TransactionYapeController extends Controller
         );
 
         return response()->json(['status' => 'ok']);
-    }
-
-    public function findSuggestions(): JsonResponse
-    {
-        SuggestYapeCategoriesJob::dispatch(Auth::id());
-
-        return response()->json([
-            'status' => 'ok',
-            'message' => 'Estamos buscando sugerencias. ¡Actualiza en un minuto!',
-        ]);
     }
 }
