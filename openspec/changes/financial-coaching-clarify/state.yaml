@@ -1,0 +1,217 @@
+schema: spec-driven
+change: financial-coaching-clarify
+title: Clarifying question on uncertain categorisation
+created: 2026-08-06
+artifact_store: hybrid
+owning_subdomain: Financial Coaching
+also_touches: [Categorization, Ingestion]
+decided_by: ../../../../docs/decisions/0007-telegram-primary-conversational-channel.md
+branch: feat/telegram-capture-channel
+
+phases:
+  explore:
+    status: complete
+    artifact: exploration.md
+    note: |
+      Saved by the explore phase to Engram only (observation #77). Mirrored into the change
+      folder by the propose phase so hybrid mode is fully satisfied on both backends.
+  propose:
+    status: complete
+    artifact: proposal.md
+  spec:
+    status: pending
+    depends_on: [propose]
+  design:
+    status: pending
+    depends_on: [propose]
+    note: |
+      Owns the binding decision on the outbound-ask fork (see proposal "The open fork").
+      Proposal recommends option B — a separate Financial Coaching outbound port implemented
+      by the same per-channel adapter class — but does not bind it.
+  tasks:
+    status: pending
+    depends_on: [spec, design]
+  apply:
+    status: pending
+    depends_on: [tasks]
+  verify:
+    status: pending
+    depends_on: [apply]
+  archive:
+    status: pending
+    depends_on: [verify]
+
+next_recommended: [spec, design] # may run in parallel
+
+delivery_strategy: auto-chain
+chain_strategy: stacked-to-main
+delivery_note: |
+  Separate commits on one branch, not a branch per slice. Carried forward from the
+  telegram-capture-channel change on the owner's explicit feedback that many chained
+  branches are expensive to review and to maintain.
+
+review_workload_forecast: |
+  400-line budget risk: High. Estimated ~1,100 authored lines across 5 slices.
+  Decision needed before apply: No — auto-chain is already cached.
+  Chained PRs recommended: Yes, as stacked commits on one branch.
+  Slice 1 is independently valuable: it repairs category editing in the SPA on its own.
+
+slices:
+  - id: 1
+    title: Fix createExactRule() + cascade regression net
+    kind: bugfix + tests
+    estimated_lines: 150
+    note: |
+      firstOrCreate never updates, so no path in the repo can change an existing rule's
+      category. UpdateTransactionAction (is_frequent branch) and CategoryRuleController::syncRule
+      both inherit it. No unit tests exist on CategorizationService — the net lands here first.
+  - id: 2
+    title: Confidence-carrying outcome + ranked candidates
+    kind: behaviour
+    estimated_lines: 200
+    note: |
+      findCategory(): ?int keeps its exact signature and becomes a wrapper. Bulk-import
+      callers (ProcessPdfImport, TransactionYapeImport) change zero call sites and zero
+      behaviour — guarded by test. Candidates come from raising the existing pgvector
+      limit(1) and deduping by last_used_category_id.
+  - id: 3
+    title: Pending-question state and lifecycle
+    kind: schema + behaviour
+    estimated_lines: 220
+    note: |
+      Purely additive migration. Row carries user, channel identity, detail_id, ordered
+      options, trigger kind (writes vs confirms) and the sent message_id.
+  - id: 4
+    title: Outbound ask capability
+    kind: integration
+    estimated_lines: 250
+    note: |
+      Blocked on the design fork. Telegram inline_keyboard + answerCallbackQuery + edit
+      message. No WhatsApp implementation ships here.
+  - id: 5
+    title: callback_query routing + answer resolution + learning
+    kind: integration
+    estimated_lines: 280
+    note: |
+      ChannelUpdateDeduplicator needs NO change — it keys on the outer update_id, present
+      on every Telegram update type. Only dispatchUpdate() routing is missing.
+
+engram_topic_keys:
+  explore: sdd/financial-coaching-clarify/explore
+  propose: sdd/financial-coaching-clarify/proposal
+
+quality_drivers: [QA-8, QA-2, QA-1]
+quality_notes: |
+  QA-8 is why ADR-0007 exists and is what this change first exercises.
+  QA-2 is what it improves — no unconfirmed weak guess is persisted.
+  QA-1 is what it risks — every question is friction; the proposal caps interruption
+  explicitly (1 question per capture, 1 outstanding per merchant, a per-day cap, silent
+  expiry with no nagging).
+
+capabilities:
+  new:
+    - name: financial-coaching
+      summary: Uncertainty triggers, candidate ranking, pending-question lifecycle, interruption budget.
+    - name: categorization
+      summary: First spec for the cascade — ordering, weak-match boundary, rule write semantics (create AND update).
+  modified:
+    - name: ingestion
+      summary: Telegram adapter must route callback_query; a bot capture may complete with its category deferred.
+
+open_fork:
+  id: outbound-ask-port
+  summary: |
+    Asking with buttons is a capability CaptureChannel does not have (key/fetchMedia/reply,
+    text only). Telegram inline_keyboard and WhatsApp interactive payloads are structurally
+    different JSON, so a text convention cannot cover it.
+  options:
+    - id: A
+      summary: Extend CaptureChannel with a 4th ask() method. Matches ADR-0007's literal "one capture port, N adapters".
+    - id: B
+      summary: A separate Financial Coaching outbound port, implemented by the same per-channel adapter class.
+  recommendation: B
+  recommendation_reasoning: |
+    The context map already separates Coaching from Ingestion and says Coaching reaches
+    through the channel rather than owning capture; option A would undo that on the
+    subdomain's first commit. B has the smaller blast radius (capture and bulk-import paths
+    never see a new method) and QA-7 survives, since adding a channel still touches only
+    that channel's adapter.
+  binding_decision_owner: sdd-design
+  constraint: |
+    WhatsApp Cloud API caps quick replies at 3 buttons; cross-channel parity therefore means
+    2 candidates + "other".
+
+out_of_scope:
+  - id: bulk-imports
+    summary: TransactionYapeImport and ProcessPdfImport keep auto-accepting weak matches, unchanged.
+    disposition: explicit owner decision; guarded by test
+  - id: other-coaching
+    summary: Budget warnings, Pareto narration, scheduled nudges.
+    disposition: separate changes
+  - id: whatsapp-interactive
+    summary: No WhatsAppChannel interactive implementation ships here.
+    disposition: rides with the WhatsApp adapter change
+  - id: F7
+    summary: KeywordRule has no write path, so cascade steps 3 and 4 are unreachable.
+    disposition: product decision for the owner, still open
+  - id: embedding-source
+    summary: Embeddings are generated from raw description instead of entity_clean (technical-debt item 2).
+    disposition: recorded as a risk, NOT fixed here — it makes the weak-match distance noisier than designed
+  - id: transaction-category-relation
+    summary: Transaction::category() is a broken hasOneThrough(Category, Category) (technical-debt item 1).
+    disposition: recorded, NOT fixed here — load category names via category_id directly
+
+risks:
+  - The weak-match boundary rests on an embedding known to be built from noisier text than the cascade intends.
+  - No regression net exists on CategorizationService today; slice 1 must create it before slice 2 moves the cascade.
+  - Ranking is asymmetric — the hard-null trigger has no relevance signal, only per-user rule frequency.
+  - A silently undelivered ask orphans a pending question; neither channel's reply() retries.
+  - No per-user job serialisation exists for concurrent captures/answers.
+
+open_questions:
+  - id: q1
+    question: How many questions per user per day?
+    assumed: 3
+  - id: q2
+    question: How long does a pending question stay answerable?
+    assumed: 48 hours, then silent expiry
+  - id: q3
+    question: What counts as a weak match?
+    assumed: A second band below THRESHOLD_VECTOR 0.15 (e.g. 0.05-0.15 asks, under 0.05 auto-accepts). Two bands, not one, is the product call.
+  - id: q4
+    question: Does the unconfirmed weak guess also stay off the transaction, not only off the rule?
+    assumed: Yes, on QA-2's "prefer uncategorised over wrong". The owner only spoke about the rule.
+  - id: q5
+    question: Two candidate categories or three?
+    assumed: 2 + "other", because WhatsApp caps quick replies at 3.
+
+rollback: |
+  Slices 1-2 revert by reverting the commit; no persisted state depends on them.
+  Slice 3 is the only schema step and is purely additive — drop the table; no existing
+  column or row is modified. Slices 4-5 are additive. Without a deploy, setting the per-day
+  question cap to 0 disables asking and restores today's silent behaviour. Nothing here
+  touches the Gemini integration or existing queue payloads.
+
+shelved:
+  date: 2026-08-06
+  after_phase: propose
+  reason: |
+    The owner reviewed the proposal and rejected the premise, not the design. Automating
+    the categorisation question solves a pain that does not exist for this user: Yape's
+    own message field already lets them state the category or the reason at the moment of
+    payment, and manual entry lets them set it directly. The uncertainty the change was
+    built to resolve is already resolved upstream, by the person.
+    What the owner actually wants from Financial Coaching is awareness of spending, built
+    on the budgets and Pareto that already exist. That is a different change:
+    financial-coaching-pace.
+  keep_for: |
+    Two findings survive and must be carried forward rather than rediscovered.
+    1. CategorizationService::createExactRule() is firstOrCreate, so NO path in the
+       repository can change an existing rule's category. UpdateTransactionAction and
+       CategoryRuleController::syncRule() both inherit it. This is a live defect
+       independent of any coaching work.
+    2. Telegram delivers button taps as callback_query, which TelegramWebhookController
+       currently claims via the deduplicator and then silently drops. Any interactive
+       coaching needs that route, plus answerCallbackQuery and message editing.
+    The exploration also confirmed no conversational state exists anywhere, and that the
+    outbound "ask with buttons" capability is a genuine architectural fork.

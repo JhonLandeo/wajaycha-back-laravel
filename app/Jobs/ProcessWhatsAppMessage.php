@@ -31,15 +31,18 @@ class ProcessWhatsAppMessage implements ShouldQueue
 
     public function handle(
         \App\Services\AI\GeminiTextService $geminiService,
-        \App\Actions\WhatsApp\RegisterWhatsAppTransactionAction $registerAction,
-        \App\Services\WhatsAppNotificationService $whatsappService
+        \App\Services\Capture\CaptureChannelRegistry $channels,
+        \App\Services\Capture\ChannelIdentityResolver $identities,
+        \App\Actions\Capture\RegisterCapturedTransactionAction $registerAction
     ): void {
-        // 1. IDENTIFICAR AL USUARIO
-        $user = \App\Models\User::where('whatsapp_phone', $this->from)->first();
+        $channel = $channels->for('whatsapp');
+
+        // 1. IDENTIFICAR AL USUARIO POR SU IDENTIDAD DE CANAL
+        $user = $identities->resolve($channel->key(), $this->from);
 
         if (!$user) {
             Log::warning("❌ WhatsApp Text: Número no registrado ({$this->from}).");
-            $whatsappService->sendTextMessage($this->from, "❌ Tu número de WhatsApp no está vinculado a ninguna cuenta. Por favor, actualiza tu perfil en la app.");
+            $channel->reply($this->from, "❌ Tu número de WhatsApp no está vinculado a ninguna cuenta. Por favor, actualiza tu perfil en la app.");
             return;
         }
 
@@ -47,12 +50,12 @@ class ProcessWhatsAppMessage implements ShouldQueue
         $parsedReceipt = $geminiService->parseText($this->text);
 
         if (!$parsedReceipt) {
-            $whatsappService->sendTextMessage($this->from, "❌ Error de conexión al procesar el mensaje. Por favor, contacte con soporte si el problema persiste.");
+            $channel->reply($this->from, "❌ Error de conexión al procesar el mensaje. Por favor, contacte con soporte si el problema persiste.");
             return;
         }
 
         if (!$parsedReceipt->isValid) {
-            $whatsappService->sendTextMessage($this->from, "❌ El mensaje que enviaste no parece indicar un registro financiero claro o no especificaste el monto. Intenta de nuevo.");
+            $channel->reply($this->from, "❌ El mensaje que enviaste no parece indicar un registro financiero claro o no especificaste el monto. Intenta de nuevo.");
             return;
         }
 
@@ -62,7 +65,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
         // 4. NOTIFICAR ÉXITO
         $isExpense = $parsedReceipt->type === 'expense';
         $description = $isExpense ? $parsedReceipt->destination : $parsedReceipt->origin;
-        $whatsappService->sendTextMessage($this->from, "✅ Registro exitoso: S/ " . number_format($parsedReceipt->amount, 2) . ($isExpense ? " pagado a " : " recibido de ") . $description . ".");
+        $channel->reply($this->from, "✅ Registro exitoso: S/ " . number_format($parsedReceipt->amount, 2) . ($isExpense ? " pagado a " : " recibido de ") . $description . ".");
     }
 
     /**
@@ -73,8 +76,8 @@ class ProcessWhatsAppMessage implements ShouldQueue
         Log::error("❌ Job ProcessWhatsAppMessage falló inesperadamente: " . $exception->getMessage());
 
         try {
-            $whatsappService = app(\App\Services\WhatsAppNotificationService::class);
-            $whatsappService->sendTextMessage($this->from, "❌ Ocurrió un error inesperado al procesar tu mensaje de texto. Por favor, intenta de nuevo o contacta con soporte técnico.");
+            $channel = app(\App\Services\Capture\CaptureChannelRegistry::class)->for('whatsapp');
+            $channel->reply($this->from, "❌ Ocurrió un error inesperado al procesar tu mensaje de texto. Por favor, intenta de nuevo o contacta con soporte técnico.");
         } catch (\Exception $e) {
             Log::error("❌ No se pudo enviar el mensaje de fallo al usuario (en failed message job): " . $e->getMessage());
         }

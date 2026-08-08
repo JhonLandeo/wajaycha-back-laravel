@@ -31,37 +31,39 @@ class ProcessWhatsAppImage implements ShouldQueue
 
     public function handle(
         \App\Services\AI\GeminiVisionService $geminiService,
-        \App\Services\WhatsApp\MetaMediaService $metaService,
-        \App\Actions\WhatsApp\RegisterWhatsAppTransactionAction $registerAction,
-        \App\Services\WhatsAppNotificationService $whatsappService
+        \App\Services\Capture\CaptureChannelRegistry $channels,
+        \App\Services\Capture\ChannelIdentityResolver $identities,
+        \App\Actions\Capture\RegisterCapturedTransactionAction $registerAction
     ): void {
-        // 1. IDENTIFICAR AL USUARIO
-        $user = \App\Models\User::where('whatsapp_phone', $this->from)->first();
+        $channel = $channels->for('whatsapp');
+
+        // 1. IDENTIFICAR AL USUARIO POR SU IDENTIDAD DE CANAL
+        $user = $identities->resolve($channel->key(), $this->from);
 
         if (!$user) {
             Log::warning("❌ WhatsApp: Número no registrado ({$this->from}).");
-            $whatsappService->sendTextMessage($this->from, "❌ Tu número de WhatsApp no está vinculado a ninguna cuenta. Por favor, actualiza tu perfil en la app.");
+            $channel->reply($this->from, "❌ Tu número de WhatsApp no está vinculado a ninguna cuenta. Por favor, actualiza tu perfil en la app.");
             return;
         }
 
-        // 2. DESCARGAR IMAGEN DESDE META
-        $media = $metaService->downloadMedia($this->imageId);
+        // 2. DESCARGAR IMAGEN POR EL PUERTO DE CAPTURA
+        $media = $channel->fetchMedia($this->imageId);
 
         if (!$media) {
-            $whatsappService->sendTextMessage($this->from, "❌ Error al descargar el comprobante de Meta. Por favor, contacte con soporte si el problema persiste.");
+            $channel->reply($this->from, "❌ Error al descargar el comprobante de Meta. Por favor, contacte con soporte si el problema persiste.");
             return;
         }
 
         // 3. ANALIZAR IMAGEN CON GEMINI
-        $parsedReceipt = $geminiService->parseReceipt($media['bytes'], $media['mimeType']);
+        $parsedReceipt = $geminiService->parseReceipt($media->bytes, $media->mimeType);
 
         if (!$parsedReceipt) {
-            $whatsappService->sendTextMessage($this->from, "❌ Error de conexión con el motor de IA. Por favor, contacte con soporte si el problema persiste.");
+            $channel->reply($this->from, "❌ Error de conexión con el motor de IA. Por favor, contacte con soporte si el problema persiste.");
             return;
         }
 
         if (!$parsedReceipt->isValid) {
-            $whatsappService->sendTextMessage($this->from, "❌ La imagen enviada no parece ser un comprobante de pago válido.");
+            $channel->reply($this->from, "❌ La imagen enviada no parece ser un comprobante de pago válido.");
             return;
         }
 
@@ -70,7 +72,7 @@ class ProcessWhatsAppImage implements ShouldQueue
 
         // 5. NOTIFICAR ÉXITO
         $description = $parsedReceipt->type === 'expense' ? $parsedReceipt->destination : $parsedReceipt->origin;
-        $whatsappService->sendTextMessage($this->from, "✅ Comprobante registrado: S/ " . number_format($parsedReceipt->amount, 2) . " a {$description}.");
+        $channel->reply($this->from, "✅ Comprobante registrado: S/ " . number_format($parsedReceipt->amount, 2) . " a {$description}.");
     }
 
     /**
@@ -81,8 +83,8 @@ class ProcessWhatsAppImage implements ShouldQueue
         Log::error("❌ Job ProcessWhatsAppImage falló inesperadamente: " . $exception->getMessage());
 
         try {
-            $whatsappService = app(\App\Services\WhatsAppNotificationService::class);
-            $whatsappService->sendTextMessage($this->from, "❌ Ocurrió un error inesperado al procesar tu comprobante. Por favor, contacta con soporte técnico.");
+            $channel = app(\App\Services\Capture\CaptureChannelRegistry::class)->for('whatsapp');
+            $channel->reply($this->from, "❌ Ocurrió un error inesperado al procesar tu comprobante. Por favor, contacta con soporte técnico.");
         } catch (\Exception $e) {
             Log::error("❌ No se pudo enviar el mensaje de fallo al usuario (en failed): " . $e->getMessage());
         }

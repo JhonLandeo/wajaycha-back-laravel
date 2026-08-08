@@ -90,7 +90,7 @@ final class UpdateTransactionAction
                     ->whereNull('transactions.category_id')
                     ->update(['category_id' => $newCategoryId]);
 
-                $this->categorizationService->createExactRule(
+                $this->categorizationService->setRule(
                     $transaction->user_id,
                     $detail->id,
                     $newCategoryId

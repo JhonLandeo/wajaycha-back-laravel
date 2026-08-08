@@ -1,11 +1,12 @@
 <?php
 
-use App\Actions\WhatsApp\RegisterWhatsAppTransactionAction;
+use App\Actions\Capture\RegisterCapturedTransactionAction;
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
 use App\Models\Category;
 use App\Models\Detail;
 use App\Models\User;
 use App\Services\CategorizationService;
+use App\Services\DetailResolver;
 use App\Services\TransactionAnalyzer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -25,7 +26,7 @@ it('crea un nuevo detail si no existe coincidencia por trigrama', function () {
     $catServiceMock->shouldReceive('findCategory')
         ->andReturn($category->id);
 
-    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock);
+    $action = new RegisterCapturedTransactionAction($analyzerMock, $catServiceMock, app(DetailResolver::class));
 
     $dto = new ParsedReceiptDTO(
         isValid: true,
@@ -54,20 +55,24 @@ it('crea un nuevo detail si no existe coincidencia por trigrama', function () {
 it('asigna la categoría correcta usando CategorizationService', function () {
     $user = User::factory()->create();
 
-    Category::factory()->create(['id' => 999, 'user_id' => $user->id]);
+    // El id lo asigna la secuencia. Fijarlo a mano choca con las categorias que el
+    // UserObserver siembra: las secuencias de PostgreSQL no vuelven atras con el
+    // rollback de cada test, asi que tarde o temprano la secuencia alcanza el valor
+    // fijado y el test revienta segun cuantos tests hayan corrido antes.
+    $category = Category::factory()->create(['user_id' => $user->id]);
 
     $analyzerMock = Mockery::mock(TransactionAnalyzer::class);
     $analyzerMock->shouldReceive('analyze')->andReturn(['entity' => 'supermercado', 'type' => 'expense']);
 
     $catServiceMock = Mockery::mock(CategorizationService::class);
-    $catServiceMock->shouldReceive('findCategory')->andReturn(999);
+    $catServiceMock->shouldReceive('findCategory')->andReturn($category->id);
 
-    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock);
+    $action = new RegisterCapturedTransactionAction($analyzerMock, $catServiceMock, app(DetailResolver::class));
     $dto = new ParsedReceiptDTO(true, 50.00, 'Supermercado', null, now()->toIso8601String(), 'expense', null);
 
     $transaction = $action->execute($user, $dto);
 
-    expect($transaction->category_id)->toBe(999);
+    expect($transaction->category_id)->toBe($category->id);
 });
 
 it('persiste la transacción con los datos del DTO', function () {
@@ -83,7 +88,7 @@ it('persiste la transacción con los datos del DTO', function () {
     // IMPORTANTE: Devolvemos el ID de la categoría real creada
     $catServiceMock->shouldReceive('findCategory')->andReturn($category->id);
 
-    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock);
+    $action = new RegisterCapturedTransactionAction($analyzerMock, $catServiceMock, app(DetailResolver::class));
 
     // 3. Definimos la fecha de prueba
     $dateStr = now()->subDay()->format('Y-m-d H:i:s');
@@ -109,7 +114,7 @@ it('persiste la transacción con los datos del DTO', function () {
 
     /** * MANEJO DE LA FECHA:
      * Si en tu modelo Transaction NO tienes: protected $casts = ['date_operation' => 'datetime'],
-     * entonces $transaction->date_operation es un STRING. 
+     * entonces $transaction->date_operation es un STRING.
      * Lo parseamos a Carbon en el test para poder comparar con seguridad.
      */
     $fechaResultado = \Carbon\Carbon::parse($transaction->date_operation)->format('Y-m-d H:i:s');

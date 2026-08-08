@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Log;
 class CategorizationService
 {
     protected EmbeddingService $embeddingService;
-    const THRESHOLD_TRIGRAM = 0.4; // 0.0 a 1.0 (Más bajo = más permisivo con nombres cortados)
     const THRESHOLD_VECTOR = 0.15;
     public function __construct(EmbeddingService $embeddingService)
     {
@@ -66,7 +65,7 @@ class CategorizationService
 
         if ($categoryByEntity) {
             Log::info("✅ [CAT] Match por ENTIDAD: '$searchString' -> Cat ID: $categoryByEntity");
-            $this->createExactRule($userId, $detail->id, $categoryByEntity);
+            $this->rememberInferredRule($userId, $detail->id, $categoryByEntity);
             return $categoryByEntity;
         }
 
@@ -92,7 +91,7 @@ class CategorizationService
 
         if ($vectorMatch && $vectorMatch->distance < self::THRESHOLD_VECTOR) {
             Log::info("✅ [CAT] Match Vectorial encontrado. Distancia: {$vectorMatch->distance}");
-            $this->createExactRule($userId, $detail->id, $vectorMatch->last_used_category_id);
+            $this->rememberInferredRule($userId, $detail->id, $vectorMatch->last_used_category_id);
             return $vectorMatch->last_used_category_id;
         }
 
@@ -127,9 +126,36 @@ class CategorizationService
         return null;
     }
 
-    public function createExactRule(int $userId, int $detailId, int $categoryId): void
+    /**
+     * Records a rule the cascade INFERRED, and only if the merchant has none.
+     *
+     * This deliberately does not overwrite. The cascade infers from a keyword hit
+     * or a trigram-close vector match, and a guess must never displace a decision
+     * the user already made — otherwise a weak match silently rewrites their
+     * correction and the merchant starts falling in the wrong place again.
+     */
+    public function rememberInferredRule(int $userId, int $detailId, int $categoryId): void
     {
         CategorizationRule::firstOrCreate(
+            ['user_id' => $userId, 'detail_id' => $detailId],
+            ['category_id' => $categoryId]
+        );
+    }
+
+    /**
+     * Sets the rule for a merchant because the USER said so, overwriting whatever
+     * was there.
+     *
+     * This is the half that was missing. Both correction paths — editing a
+     * transaction's category and syncing a rule from the SPA — used to call the
+     * inferring method, whose `firstOrCreate` is a silent no-op once a rule
+     * exists. So a user could correct the same merchant forever and the system
+     * would keep re-applying its original guess, with nothing to show they had
+     * disagreed.
+     */
+    public function setRule(int $userId, int $detailId, int $categoryId): void
+    {
+        CategorizationRule::updateOrCreate(
             ['user_id' => $userId, 'detail_id' => $detailId],
             ['category_id' => $categoryId]
         );

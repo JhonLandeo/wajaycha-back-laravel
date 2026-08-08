@@ -30,6 +30,16 @@ class AppServiceProvider extends ServiceProvider
             \App\Repositories\Contracts\ParetoRepositoryContract::class,
             \App\Repositories\ParetoRepository::class
         );
+
+        // Capture channels are resolved by key, so adding an adapter is a registration
+        // here rather than an edit to every caller.
+        $this->app->singleton(
+            \App\Services\Capture\CaptureChannelRegistry::class,
+            fn ($app) => new \App\Services\Capture\CaptureChannelRegistry([
+                $app->make(\App\Services\Capture\WhatsAppChannel::class),
+                $app->make(\App\Services\Capture\TelegramChannel::class),
+            ])
+        );
     }
 
     /**
