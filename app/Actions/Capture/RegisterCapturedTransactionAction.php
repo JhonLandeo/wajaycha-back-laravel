@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Actions\WhatsApp;
+namespace App\Actions\Capture;
 
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
 use App\Models\Transaction;
@@ -13,7 +13,7 @@ use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
-class RegisterWhatsAppTransactionAction
+class RegisterCapturedTransactionAction
 {
     public function __construct(
         protected TransactionAnalyzer $analyzer,
