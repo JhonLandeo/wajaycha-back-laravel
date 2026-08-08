@@ -35,8 +35,11 @@ declare(strict_types=1);
  * hexagonal exists to prevent. `DashboardController` held five such calls until
  * `refactor/extract-dashboard-read-model` moved them behind a port.
  *
- * Four controllers are still there. They are listed rather than excused: the rule
- * blocks the fifth.
+ * Two controllers are still there, down from four. `TransactionYapeController` left
+ * the list when its use case moved to `RegisterYapeImportAction`; `PdfController` left
+ * it by being deleted — it returned 500 on every request and duplicated logic the
+ * `ProcessPdfImport` job already owned. The list is a debt register and it is meant to
+ * shrink.
  */
 arch('a controller does not reach for the database')
     ->expect('App\Http\Controllers')
@@ -44,8 +47,6 @@ arch('a controller does not reach for the database')
     ->ignoring([
         'App\Http\Controllers\DetailsController',
         'App\Http\Controllers\ImportController',
-        'App\Http\Controllers\PdfController',
-        'App\Http\Controllers\TransactionYapeController',
     ]);
 
 /**

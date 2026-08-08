@@ -7,7 +7,6 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DetailsController;
 use App\Http\Controllers\ImportController;
 use App\Http\Controllers\ParetoClassificationController;
-use App\Http\Controllers\PdfController;
 use App\Http\Controllers\TagsController;
 use App\Http\Controllers\TransactionsController;
 use App\Http\Controllers\TransactionYapeController;
@@ -53,7 +52,6 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
     Route::get('get-summary-by-category', [TransactionsController::class, 'getSummaryByCategory']);
 
-    Route::post('extract-pdf-data', [PdfController::class, 'extractData']);
     Route::post('export-transactions', [TransactionsController::class, 'exportTransaction']);
 
     Route::get('get-bank', [ImportController::class, 'getBank']);
