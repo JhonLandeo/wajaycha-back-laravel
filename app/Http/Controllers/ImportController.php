@@ -2,26 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ImportStatus;
 use App\Http\Requests\Import\UpdateImportRequest;
 use App\Http\Requests\PdfRequest;
 use App\Jobs\ProcessPdfImport;
-use App\Jobs\ProcessYapeImport;
 use App\Models\FinancialEntity;
 use App\Models\Import;
-use App\Enums\ImportStatus;
 use App\Models\PaymentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ImportController extends Controller
 {
-
     public function __construct() {}
 
     /**
@@ -57,17 +54,16 @@ class ImportController extends Controller
                 'name' => $item->name,
                 'financial_entity' => $item->financialEntity?->name,
                 'payment_service' => $item->paymentService?->name,
-                'url' => Storage::url('files/' . $item->name),
+                'url' => Storage::url('files/'.$item->name),
                 'created_at' => Carbon::parse($item->created_at)->format('Y-m-d H:i:s'),
                 'status' => $item->status->value,
                 'status_label' => $item->status->label(),
-                'extension' => $item->extension
+                'extension' => $item->extension,
             ];
         });
 
         return response()->json($data);
     }
-
 
     /**
      * Store a newly created resource in storage.
@@ -80,16 +76,16 @@ class ImportController extends Controller
             $financialCode = FinancialEntity::where('id', $request->financial)
                 ->value('code');
 
-            $folder = 'files/' . $financialCode;
+            $folder = 'files/'.$financialCode;
             $storedPath = $file->store($folder);
             $userId = Auth::id();
-            $year = (int)substr($originalName, 6, 4);
+            $year = (int) substr($originalName, 6, 4);
             $accountId = $request->financial;
 
-            $import = new Import();
+            $import = new Import;
             $import->name = $originalName;
             $import->extension = $file->getClientOriginalExtension();
-            $import->path =  $storedPath;
+            $import->path = $storedPath;
             $import->mime = $file->getMimeType();
             $import->size = $file->getSize();
             $import->user_id = $userId;
@@ -108,10 +104,11 @@ class ImportController extends Controller
 
             return response()->json([
                 'status' => 'ok',
-                'message' => 'Tu archivo ha sido recibido y está siendo procesado.'
+                'message' => 'Tu archivo ha sido recibido y está siendo procesado.',
             ]);
         } catch (\Throwable $th) {
-            Log::error("Error al despachar importación: " . $th->getMessage());
+            Log::error('Error al despachar importación: '.$th->getMessage());
+
             return response()->json(['status' => 'error', 'message' => 'No se pudo recibir el archivo.'], 500);
         }
     }
@@ -122,11 +119,12 @@ class ImportController extends Controller
     public function update(UpdateImportRequest $request, int $id): JsonResponse
     {
         $import = $this->findOwnedImport($id);
-        if (!$import) {
+        if (! $import) {
             return response()->json(['message' => 'Import no encontrado'], 404);
         }
 
         $data = $import->update($request->validated());
+
         return response()->json($data);
     }
 
@@ -136,11 +134,12 @@ class ImportController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $import = $this->findOwnedImport($id);
-        if (!$import) {
+        if (! $import) {
             return response()->json(['message' => 'Import no encontrado'], 404);
         }
 
         $data = $import->delete();
+
         return response()->json($data);
     }
 
@@ -160,16 +159,17 @@ class ImportController extends Controller
             ->first();
     }
 
-
     public function getBank(): JsonResponse
     {
         $data = FinancialEntity::get();
+
         return response()->json($data);
     }
 
     public function getService(): JsonResponse
     {
         $data = PaymentService::get();
+
         return response()->json($data);
     }
 
@@ -182,11 +182,11 @@ class ImportController extends Controller
     public function download(int $id): StreamedResponse|JsonResponse
     {
         $import = $this->findOwnedImport($id);
-        if (!$import) {
+        if (! $import) {
             return response()->json(['message' => 'Import no encontrado'], 404);
         }
 
-        if (!Storage::exists($import->path)) {
+        if (! Storage::exists($import->path)) {
             // The row survives its file: a cleanup, a failed upload or a disk migration
             // leaves the record pointing at nothing. Report it instead of throwing a 500.
             return response()->json(['message' => 'El archivo del import ya no está disponible'], 410);

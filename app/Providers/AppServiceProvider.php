@@ -34,6 +34,11 @@ class AppServiceProvider extends ServiceProvider
             \App\Repositories\DashboardRepository::class
         );
 
+        $this->app->bind(
+            \App\Repositories\Contracts\DetailRepositoryContract::class,
+            \App\Repositories\DetailRepository::class
+        );
+
         // Capture channels are resolved by key, so adding an adapter is a registration
         // here rather than an edit to every caller.
         $this->app->singleton(
