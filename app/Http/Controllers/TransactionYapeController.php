@@ -1,59 +1,45 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Actions\Imports\RegisterYapeImportAction;
+use App\Actions\Imports\UploadedStatement;
 use App\Http\Requests\TransactionYape\ImportYapeRequest;
-use App\Jobs\ProcessExcelImport;
 use App\Jobs\SuggestYapeCategoriesJob;
-use App\Models\Import;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
-
+/**
+ * Yape statement uploads. Orchestrates; decides nothing.
+ */
 class TransactionYapeController extends Controller
 {
-    const FINANCIAL_BCP_ID = 1;
-    const PAYMENT_SERVICE_YAPE_ID = 1;
+    public function __construct(
+        private readonly RegisterYapeImportAction $registerImport,
+    ) {}
+
     public function import(ImportYapeRequest $request): JsonResponse
     {
-        try {
-            $file = $request->file('file');
-            $userId = Auth::id();
-            $originalName = $file->getClientOriginalName();
-            $extension = $file->getClientOriginalExtension();
-            $size = $file->getSize();
-            $folder = 'files/yape';
-            $storedPath = $file->store($folder);
-            // `Storage::mimeType()` resolves a path on a disk. Handed the UploadedFile
-            // itself it resolved nothing, returned false, and Eloquent wrote "0".
-            $mime = $file->getMimeType();
+        /** @var \Illuminate\Http\UploadedFile $file */
+        $file = $request->file('file');
 
-            DB::beginTransaction();
+        $this->registerImport->execute(
+            UploadedStatement::store($file),
+            (int) Auth::id(),
+        );
 
-            $import = new Import();
-            $import->name = $originalName;
-            $import->extension = $extension;
-            $import->path = $storedPath;
-            $import->mime = $mime;
-            $import->size = $size;
-            $import->user_id = $userId;
-            $import->payment_service_id = self::PAYMENT_SERVICE_YAPE_ID;
-            $import->financial_entity_id = self::FINANCIAL_BCP_ID;
-            $import->save();
-            ProcessExcelImport::dispatch($import->id, $userId, $storedPath)->afterCommit();
-            DB::commit();
-            return response()->json(['status' => 'ok']);
-        } catch (\Throwable $th) {
-            throw $th;
-        }
+        return response()->json(['status' => 'ok']);
     }
 
     public function findSuggestions(): JsonResponse
     {
         SuggestYapeCategoriesJob::dispatch(Auth::id());
-        return response()->json(['status' => 'ok', 'message' => 'Estamos buscando sugerencias. ¡Actualiza en un minuto!']);
+
+        return response()->json([
+            'status' => 'ok',
+            'message' => 'Estamos buscando sugerencias. ¡Actualiza en un minuto!',
+        ]);
     }
 }
