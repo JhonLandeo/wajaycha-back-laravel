@@ -10,16 +10,8 @@ use App\Http\Controllers\ParetoClassificationController;
 use App\Http\Controllers\TagsController;
 use App\Http\Controllers\TransactionsController;
 use App\Http\Controllers\TransactionYapeController;
-use App\Http\Controllers\WhatsAppController;
-use App\Http\Controllers\WhatsAppFlowController;
 use App\Http\Middleware\JwtMiddleware;
 use Illuminate\Support\Facades\Route;
-
-Route::prefix('whatsapp')->group(function () {
-    Route::get('/webhook', [WhatsAppController::class, 'verify']);
-    Route::post('/webhook', [WhatsAppController::class, 'receive']);
-    Route::post('/flows', [WhatsAppFlowController::class, 'handle']);
-});
 
 Route::post('telegram/webhook', [\App\Http\Controllers\Capture\TelegramWebhookController::class, 'receive'])
     ->middleware(\App\Http\Middleware\VerifyTelegramSecretToken::class);

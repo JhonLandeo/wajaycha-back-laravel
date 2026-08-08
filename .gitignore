@@ -26,3 +26,9 @@ yarn-error.log
 
 # Volcado de una corrida de PHPStan; no es fuente.
 phpstan_output.txt
+
+# Claves privadas. `storage/app/private.pem` alimentaba el endpoint de WhatsApp Flows,
+# que se eliminó; el archivo sigue en disco y nunca estuvo rastreado. Se ignora
+# explícitamente para que siga sin estarlo.
+*.key
+storage/app/private.pem
