@@ -89,7 +89,11 @@ it('reutiliza el Detail existente en lugar de crear uno nuevo', function () {
         ->and(Detail::where('user_id', $user->id)->count())->toBe(1);
 });
 
-it('rellena la entidad limpia en blanco del Detail que reutiliza', function () {
+it('reutiliza el Detail cuando lo guardado y lo entrante son ambos vacios', function () {
+    // Sustituye a un test que decia "rellena la entidad limpia en blanco" y no
+    // probaba nada: pasaba la misma cadena vacia como valor guardado y entrante,
+    // asi que la asercion no distinguia si el backfill corria, se salteaba, o no
+    // existia. Lo que si es cierto y vale fijar es que no duplica el Detail.
     $user = User::factory()->create();
     $existing = Detail::factory()->create([
         'user_id' => $user->id,
@@ -99,7 +103,7 @@ it('rellena la entidad limpia en blanco del Detail que reutiliza', function () {
     $detail = $this->resolver->resolveOrCreate($user->id, 'Desconocido', '', 'POS_GENERICO');
 
     expect($detail->id)->toBe($existing->id)
-        ->and($existing->fresh()->entity_clean)->toBe('');
+        ->and(Detail::where('user_id', $user->id)->count())->toBe(1);
 });
 
 it('no reutiliza un Detail cuya entidad limpia es nula', function () {
