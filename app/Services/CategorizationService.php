@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Log;
 class CategorizationService
 {
     protected EmbeddingService $embeddingService;
-    const THRESHOLD_TRIGRAM = 0.4; // 0.0 a 1.0 (Más bajo = más permisivo con nombres cortados)
     const THRESHOLD_VECTOR = 0.15;
     public function __construct(EmbeddingService $embeddingService)
     {

@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Detail;
 use App\Models\User;
 use App\Services\CategorizationService;
+use App\Services\DetailResolver;
 use App\Services\TransactionAnalyzer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -25,7 +26,7 @@ it('crea un nuevo detail si no existe coincidencia por trigrama', function () {
     $catServiceMock->shouldReceive('findCategory')
         ->andReturn($category->id);
 
-    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock);
+    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock, app(DetailResolver::class));
 
     $dto = new ParsedReceiptDTO(
         isValid: true,
@@ -62,7 +63,7 @@ it('asigna la categoría correcta usando CategorizationService', function () {
     $catServiceMock = Mockery::mock(CategorizationService::class);
     $catServiceMock->shouldReceive('findCategory')->andReturn(999);
 
-    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock);
+    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock, app(DetailResolver::class));
     $dto = new ParsedReceiptDTO(true, 50.00, 'Supermercado', null, now()->toIso8601String(), 'expense', null);
 
     $transaction = $action->execute($user, $dto);
@@ -83,7 +84,7 @@ it('persiste la transacción con los datos del DTO', function () {
     // IMPORTANTE: Devolvemos el ID de la categoría real creada
     $catServiceMock->shouldReceive('findCategory')->andReturn($category->id);
 
-    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock);
+    $action = new RegisterWhatsAppTransactionAction($analyzerMock, $catServiceMock, app(DetailResolver::class));
 
     // 3. Definimos la fecha de prueba
     $dateStr = now()->subDay()->format('Y-m-d H:i:s');

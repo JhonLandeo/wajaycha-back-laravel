@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Actions\WhatsApp;
 
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
-use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\CategorizationService;
+use App\Services\DetailResolver;
 use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -17,7 +17,8 @@ class RegisterWhatsAppTransactionAction
 {
     public function __construct(
         protected TransactionAnalyzer $analyzer,
-        protected CategorizationService $categorizationService
+        protected CategorizationService $categorizationService,
+        protected DetailResolver $detailResolver
     ) {}
 
     public function execute(User $user, ParsedReceiptDTO $dto): Transaction
@@ -33,23 +34,13 @@ class RegisterWhatsAppTransactionAction
         $features = $this->analyzer->analyze($descriptionRaw);
         $cleanEntity = $features['entity'];
 
-        // B. Buscamos el detalle INTELIGENTEMENTE con Trigramas
-        $detail = $this->findExistingDetail($user->id, $cleanEntity);
-
-        // C. Si no existe, lo creamos
-        if (!$detail) {
-            $detail = Detail::create([
-                'user_id' => $user->id,
-                'description' => $descriptionRaw,
-                'operation_type' => $features['type'] ?? 'unknown',
-                'entity_clean' => $cleanEntity
-            ]);
-            Log::info("🆕 WhatsApp Action: Nuevo Detalle creado: {$descriptionRaw} (Clean: {$cleanEntity})");
-        } else {
-            if (empty($detail->entity_clean)) {
-                $detail->update(['entity_clean' => $cleanEntity]);
-            }
-        }
+        // B. Resolvemos el detalle contra Entity Resolution
+        $detail = $this->detailResolver->resolveOrCreate(
+            $user->id,
+            $descriptionRaw,
+            $cleanEntity,
+            $features['type'] ?? 'unknown'
+        );
 
         // D. Categorizamos usando el servicio
         $categoryId = $this->categorizationService->findCategory(
@@ -78,21 +69,5 @@ class RegisterWhatsAppTransactionAction
         Log::info("✅ WhatsApp Action: Transacción registrada (S/ {$dto->amount} " . ($isExpense ? "a" : "de") . " {$descriptionRaw}) -> Cat ID: {$categoryId}");
 
         return $transaction;
-    }
-
-    /**
-     * Busca un detalle existente usando Trigramas sobre la entidad limpia.
-     */
-    private function findExistingDetail(int $userId, string $cleanEntity): ?Detail
-    {
-        $threshold = 0.6;
-
-        return Detail::where('user_id', $userId)
-            ->where(function ($query) use ($cleanEntity, $threshold) {
-                $query->where('entity_clean', $cleanEntity)
-                    ->orWhereRaw('similarity(entity_clean, ?) > ?', [$cleanEntity, $threshold]);
-            })
-            ->orderByRaw('similarity(entity_clean, ?) DESC', [$cleanEntity])
-            ->first();
     }
 }
