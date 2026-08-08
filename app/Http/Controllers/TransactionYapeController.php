@@ -27,7 +27,9 @@ class TransactionYapeController extends Controller
             $size = $file->getSize();
             $folder = 'files/yape';
             $storedPath = $file->store($folder);
-            $mime = Storage::mimeType($file);
+            // `Storage::mimeType()` resolves a path on a disk. Handed the UploadedFile
+            // itself it resolved nothing, returned false, and Eloquent wrote "0".
+            $mime = $file->getMimeType();
 
             DB::beginTransaction();
 

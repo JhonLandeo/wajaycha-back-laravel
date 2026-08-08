@@ -79,6 +79,26 @@ it('marca el job para despacharse recien despues del commit', function () {
     );
 });
 
+/**
+ * `Storage::mimeType()` takes a path on the disk. It was being handed the
+ * `UploadedFile` itself, so it resolved nothing and returned `false`, which Eloquent
+ * wrote into a `string` column as `0`. Every Yape import ever recorded carries a
+ * meaningless mime.
+ *
+ * Asserted loosely on purpose: the point is that a real media type was recorded, not
+ * which one a fake xlsx happens to produce.
+ */
+it('guarda el mime real del archivo, no un false convertido', function () {
+    [$user, $headers] = yapeUploader();
+
+    $this->postJson('/api/import-yape', ['file' => yapeFile()], $headers)->assertOk();
+
+    $mime = Import::query()->where('user_id', $user->id)->sole()->mime;
+
+    expect($mime)->toBeString();
+    expect($mime)->toContain('/');
+});
+
 // ------------------------------------------------------------ behaviour cover
 
 it('registra el import y encola su procesamiento', function () {
