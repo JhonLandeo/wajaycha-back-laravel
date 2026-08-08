@@ -1,21 +1,29 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CategoryRule\SyncRuleRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
-use App\Models\CategorizationRule;
 use App\Models\Category;
 use App\Models\Detail;
 use App\Repositories\Contracts\CategoryRepositoryContract;
+use App\Repositories\Contracts\DetailRepositoryContract;
 use App\Services\CategorizationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
+/**
+ * The rules that decide how a movement gets categorised. Orchestrates; decides nothing.
+ */
 class CategoryRuleController extends Controller
 {
-    public function __construct(private readonly CategoryRepositoryContract $categories) {}
+    public function __construct(
+        private readonly CategoryRepositoryContract $categories,
+        private readonly DetailRepositoryContract $details,
+    ) {}
 
     /**
      * Resolve a Category owned by the caller.
@@ -35,17 +43,12 @@ class CategoryRuleController extends Controller
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
-        $per_page = $request->input('per_page', 10);
-        $page = $request->input('page', 1);
-        $userId = Auth::id();
-        $rules = Detail::query()
-            ->join('categorization_rules as cr', 'details.id', '=', 'cr.detail_id')
-            ->where('cr.category_id', $category->id)
-            ->where('cr.user_id', $userId)
-            ->select('details.id', 'details.description')
-            ->paginate($per_page, ['*'], 'page', $page);
-
-        return response()->json($rules);
+        return response()->json($this->details->paginateRulesForCategory(
+            (int) Auth::id(),
+            $category->id,
+            (int) $request->input('per_page', 10),
+            (int) $request->input('page', 1),
+        ));
     }
 
     public function getSuggestions(Request $request, int $categoryId): JsonResponse
@@ -55,47 +58,36 @@ class CategoryRuleController extends Controller
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
-        $userId = Auth::id();
-        $per_page = $request->input('per_page', 10);
-        $page = $request->input('page', 1);
-        $existingDetailIds = CategorizationRule::where('user_id', $userId)
-            ->where('category_id', $category->id)
-            ->pluck('detail_id');
-
-        $centroidVector = Detail::query()
-            ->where('user_id', $userId)
-            ->where('last_used_category_id', $category->id)
-            ->whereNotNull('embedding')
-            ->avg('embedding');
-
-        if (! $centroidVector) {
-            return response()->json(Detail::whereRaw('1=0')->paginate(25));
-        }
-
-        $suggestions = Detail::query()
-            ->where('user_id', $userId)
-            ->whereNull('last_used_category_id')
-            ->whereNotNull('embedding')
-            ->whereNotIn('id', $existingDetailIds)
-            ->orderByRaw('embedding <=> ?', [$centroidVector])
-            ->limit(100)
-            ->select('id', 'description')
-            ->paginate($per_page, ['*'], 'page', $page);
-
-        return response()->json($suggestions);
+        return response()->json($this->details->paginateSuggestionsForCategory(
+            (int) Auth::id(),
+            $category->id,
+            (int) $request->input('per_page', 10),
+            (int) $request->input('page', 1),
+        ));
     }
 
-    public function syncRule(SyncRuleRequest $request, int $categoryId, CategorizationService $categorizationService): JsonResponse
-    {
+    public function syncRule(
+        SyncRuleRequest $request,
+        int $categoryId,
+        CategorizationService $categorizationService
+    ): JsonResponse {
         $category = $this->ownedCategory($categoryId);
         if (! $category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
-        $userId = Auth::id();
-        $detailIdToSync = $request->input('detail_id');
-        $categorizationService->setRule($userId, $detailIdToSync, $category->id);
-        $detail = Detail::find($detailIdToSync);
+        $userId = (int) Auth::id();
+        $detailId = (int) $request->input('detail_id');
+
+        $categorizationService->setRule($userId, $detailId, $category->id);
+
+        // Scoped, unlike the `Detail::find()` this replaces. `SyncRuleRequest` already
+        // rejects another user's id, so this changes nothing today — but a lookup that
+        // depends on validation elsewhere to be safe is one edit away from not being.
+        $detail = Detail::query()
+            ->whereKey($detailId)
+            ->where('user_id', $userId)
+            ->first();
 
         if ($detail) {
             GenerateEmbeddingForDetail::dispatch($detail, $category->id);
