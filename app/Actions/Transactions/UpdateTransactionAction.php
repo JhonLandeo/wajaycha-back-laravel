@@ -20,19 +20,18 @@ final class UpdateTransactionAction
         private readonly TransactionRepositoryContract $repository,
         private readonly CategorizationService $categorizationService,
         private readonly ClassificationService $classifier
-    ) {
-    }
+    ) {}
 
     public function execute(TransactionDataDTO $dto): Transaction
     {
         $transaction = $this->repository->findById($dto->transaction_id ?? 0, $dto->user_id);
-        if (!$transaction) {
+        if (! $transaction) {
             throw new \RuntimeException('Transaction not found');
         }
 
         $updateData = [
-            'amount'           => $dto->amount,
-            'date_operation'   => $dto->date_operation,
+            'amount' => $dto->amount,
+            'date_operation' => $dto->date_operation,
             'type_transaction' => $dto->type_transaction,
         ];
 
@@ -44,11 +43,11 @@ final class UpdateTransactionAction
             $updateData['detail_id'] = $dto->detail_id;
         }
 
-        if (empty($dto->detail_id) && !empty($dto->detail_description)) {
+        if (empty($dto->detail_id) && ! empty($dto->detail_description)) {
             /** @var Detail $detail */
             $detail = Detail::query()->firstOrCreate([
                 'user_id' => $dto->user_id,
-                'description' => $dto->detail_description
+                'description' => $dto->detail_description,
             ]);
             $updateData['detail_id'] = $detail->id;
             GenerateEmbeddingForDetail::dispatch($detail, $dto->category_id);
@@ -75,7 +74,7 @@ final class UpdateTransactionAction
             $transaction->save();
 
             if ($dto->reason === 'with_reason' && $dto->tag_id) {
-                $transactionTag = new TransactionTag();
+                $transactionTag = new TransactionTag;
                 $transactionTag->transaction_id = $transaction->id;
                 $transactionTag->tag_id = $dto->tag_id;
                 $transactionTag->save();
@@ -105,9 +104,9 @@ final class UpdateTransactionAction
         if ($transaction) {
             $transaction->category_id = $newCategoryId;
             $transaction->save();
-            
+
             if ($dto->reason === 'with_reason' && $dto->tag_id) {
-                $transactionTag = new TransactionTag();
+                $transactionTag = new TransactionTag;
                 $transactionTag->transaction_id = $transaction->id;
                 $transactionTag->tag_id = $dto->tag_id;
                 $transactionTag->save();
@@ -127,7 +126,7 @@ final class UpdateTransactionAction
 
     private function updateMatchingOtherTransactions(Transaction $transaction, int $userId, ?int $newCategoryId): void
     {
-        // Now that everything is in the same table, we look for other transactions 
+        // Now that everything is in the same table, we look for other transactions
         // with the same amount/date but different source_type
         Transaction::query()
             ->where('amount', $transaction->amount)
