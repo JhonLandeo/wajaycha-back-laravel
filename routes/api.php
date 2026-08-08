@@ -52,8 +52,6 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
     Route::get('get-summary-by-category', [TransactionsController::class, 'getSummaryByCategory']);
 
-    Route::post('export-transactions', [TransactionsController::class, 'exportTransaction']);
-
     Route::get('get-bank', [ImportController::class, 'getBank']);
     Route::get('get-service', [ImportController::class, 'getService']);
     Route::get('/imports/{id}/download', [ImportController::class, 'download']);
