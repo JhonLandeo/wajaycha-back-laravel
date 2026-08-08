@@ -36,7 +36,7 @@ return [
     ],
     'openai' => [
         'api_key' => env('OPENAI_KEY'),
-        'api_url' => env('OPENAI_API_URL')
+        'api_url' => env('OPENAI_API_URL'),
     ],
     'aws' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
