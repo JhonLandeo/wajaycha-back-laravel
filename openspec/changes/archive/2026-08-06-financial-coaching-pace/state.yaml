@@ -37,16 +37,16 @@ phases:
     depends_on: [spec, design]
     artifact: tasks.md
   apply:
-    status: pending
+    status: complete
     depends_on: [tasks]
   verify:
-    status: pending
+    status: complete
     depends_on: [apply]
   archive:
-    status: pending
+    status: complete
     depends_on: [verify]
 
-next_recommended: [apply]
+next_recommended: none
 
 delivery_strategy: auto-chain
 chain_strategy: stacked-to-main
