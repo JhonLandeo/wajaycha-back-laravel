@@ -31,4 +31,14 @@ interface DetailRepositoryContract
      * @return array<int, object{id: int, name: string, created_at: string, category_name: ?string, total_count: int}>
      */
     public function listForUser(int $userId, int $perPage, int $page): array;
+
+    /**
+     * Overwrite the two columns Entity Resolution matches on.
+     *
+     * `operation_type` and `entity_clean` are what candidate search compares, so a
+     * backfill that writes them wrong corrupts matching quietly and across every row it
+     * touches. It is a bulk write with no user in sight, which is exactly why it belongs
+     * behind a named method rather than a `DB::table()` inside a loop in a command.
+     */
+    public function updateClassification(int $detailId, ?string $operationType, ?string $entityClean): void;
 }

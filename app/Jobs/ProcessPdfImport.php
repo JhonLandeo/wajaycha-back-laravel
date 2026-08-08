@@ -3,13 +3,13 @@
 namespace App\Jobs;
 
 use App\DTOs\TransactionDataDTO;
+use App\Enums\ImportStatus;
 use App\Models\Detail;
 use App\Models\Import;
-use App\Enums\ImportStatus;
 use App\Models\Transaction;
-use App\Models\TransactionTag;
 use App\Services\CategorizationService;
 use App\Services\TransactionAnalyzer;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -18,10 +18,9 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use setasign\Fpdi\Fpdi;
 use Smalot\PdfParser\Parser;
 use thiagoalessio\TesseractOCR\TesseractOCR;
-use setasign\Fpdi\Fpdi;
-use Carbon\Carbon;
 use Throwable;
 
 class ProcessPdfImport implements ShouldQueue
@@ -29,14 +28,23 @@ class ProcessPdfImport implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 600;
+
     public int $tries = 3;
+
     protected int $importId;
+
     protected int $userId;
+
     protected string $storedPath;
+
     protected int $accountId;
+
     protected int $year;
+
     protected string $password;
+
     protected CategorizationService $categorizationService;
+
     protected TransactionAnalyzer $transactionAnalyzer;
 
     public function __construct(int $importId, int $userId, string $storedPath, int $accountId, int $year, ?string $password)
@@ -72,11 +80,13 @@ class ProcessPdfImport implements ShouldQueue
 
             foreach ($lines as $line) {
                 if (preg_match('/(\d{2}[A-Z]{3})\s+(\d{2}[A-Z]{3})/', $line, $matches)) {
-                    $line_subtracted = explode(" ", substr($line, 0, -1));
+                    $line_subtracted = explode(' ', substr($line, 0, -1));
                     $description = '';
                     for ($i = 2; $i < count($line_subtracted); $i++) {
-                        if (trim($line_subtracted[$i]) === '') break;
-                        $description .= $line_subtracted[$i] . ' ';
+                        if (trim($line_subtracted[$i]) === '') {
+                            break;
+                        }
+                        $description .= $line_subtracted[$i].' ';
                     }
                     $description = trim($description);
                     $income = $expense = null;
@@ -84,17 +94,20 @@ class ProcessPdfImport implements ShouldQueue
                     foreach ($line_subtracted as $index => $item) {
                         $itemCleaned = $item;
                         if (strpos($itemCleaned, '.') !== false) {
-                            if ($index === count($line_subtracted) - 1) $income = $itemCleaned;
-                            else $expense = $itemCleaned;
+                            if ($index === count($line_subtracted) - 1) {
+                                $income = $itemCleaned;
+                            } else {
+                                $expense = $itemCleaned;
+                            }
                         }
                     }
-            
+
                     $income = $income ?? 0;
                     $expense = $expense ?? 0;
                     $day = substr($line_subtracted[1], 0, 2);
                     $month = substr($line_subtracted[1], 2);
                     $monthFormat = $month == 'SET' ? 'SEP' : $month;
-                    $dayMonth = $day . $monthFormat;
+                    $dayMonth = $day.$monthFormat;
                     $parsedTransactions[] = new TransactionDataDTO(
                         amount: $income == 0 ? floatval(str_replace(',', '', $expense)) : floatval(str_replace(',', '', $income)),
                         date_operation: Carbon::createFromLocaleFormat('dM', 'es', $dayMonth)->setYear($this->year)->format('Y-m-d'),
@@ -104,23 +117,22 @@ class ProcessPdfImport implements ShouldQueue
                 }
             }
 
-
             $this->processParsedTransactions($parsedTransactions);
 
             Import::where('id', $this->importId)->update(['status' => ImportStatus::COMPLETED]);
             DB::commit();
         } catch (Throwable $th) {
-            Log::error("Error en Job ProcessPdfImport (ID: {$this->importId}): " . $th->getMessage());
+            Log::error("Error en Job ProcessPdfImport (ID: {$this->importId}): ".$th->getMessage());
             DB::rollBack();
             Import::where('id', $this->importId)->update([
                 'status' => ImportStatus::FAILED,
-                'error_message' => $th->getMessage()
+                'error_message' => $th->getMessage(),
             ]);
         }
     }
 
     /**
-     * @param list<TransactionDataDTO> $transactionsData
+     * @param  list<TransactionDataDTO>  $transactionsData
      */
     private function processParsedTransactions(array $transactionsData): void
     {
@@ -131,12 +143,12 @@ class ProcessPdfImport implements ShouldQueue
                 ->whereRaw('LOWER(description) = ?', $features['sanitized_description'])
                 ->first();
 
-            if (!$detail) {
+            if (! $detail) {
                 $detail = Detail::create([
                     'user_id' => $this->userId,
                     'description' => $txData->description,
                     'operation_type' => $features['type'],
-                    'entity_clean' => $features['entity']
+                    'entity_clean' => $features['entity'],
                 ]);
             }
 
@@ -158,7 +170,7 @@ class ProcessPdfImport implements ShouldQueue
                 $finalCategoryId = $transactionYape->category_id;
             }
 
-            if (!$finalCategoryId) {
+            if (! $finalCategoryId) {
                 $finalCategoryId = $this->categorizationService->findCategory($this->userId, $detail);
             }
 
@@ -180,22 +192,20 @@ class ProcessPdfImport implements ShouldQueue
 
             // 3. Actualizar las etiquetas si es necesario
             if ($finalYapeId) {
-                // Como ahora todo está en transaction_tag.transaction_id, 
+                // Como ahora todo está en transaction_tag.transaction_id,
                 // movemos los tags del Yape a la transacción manual si aplica
-                DB::table('transaction_tag')
-                    ->where('transaction_id', $finalYapeId)
-                    ->update(['transaction_id' => $transaction->id]);
-                
+                app(\App\Repositories\Contracts\TransactionRepositoryContract::class)
+                    ->reassignTags($finalYapeId, $transaction->id);
+
                 // Opcionalmente, podemos marcar el Yape como matched para que no aparezca en reportes
                 // $transactionYape->update(['source_type' => 'yape_matched']);
             }
         }
     }
 
-
     private function extractTextFromPdf(string $filePath): string
     {
-        $parser = new Parser();
+        $parser = new Parser;
         try {
             return $parser->parseFile($filePath)->getText();
         } catch (\Exception $e) {
@@ -205,9 +215,10 @@ class ProcessPdfImport implements ShouldQueue
 
     private function isEncrypted(string $filePath): bool
     {
-        $pdf = new Fpdi();
+        $pdf = new Fpdi;
         try {
             $pdf->setSourceFile($filePath);
+
             return false;
         } catch (\setasign\Fpdi\PdfParser\PdfParserException $e) {
             return true;
@@ -216,7 +227,7 @@ class ProcessPdfImport implements ShouldQueue
 
     private function decryptPdf(string $filePath, string $password): string
     {
-        $decryptedPath = storage_path('app/private/' . uniqid('decrypted_') . '.pdf');
+        $decryptedPath = storage_path('app/private/'.uniqid('decrypted_').'.pdf');
 
         $command = sprintf(
             'qpdf --decrypt --password=%s %s %s',
@@ -229,6 +240,7 @@ class ProcessPdfImport implements ShouldQueue
         if ($returnVar !== 0) {
             throw new \Exception('No se pudo desencriptar el PDF. ¿Contraseña incorrecta?');
         }
+
         return $decryptedPath;
     }
 }

@@ -60,4 +60,14 @@ interface TransactionRepositoryContract
      * @return object{detail_name: string, amount: float, date_operation: string}|null
      */
     public function largestExpenseForCategoryMonth(int $userId, int $categoryId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): ?object;
+
+    /**
+     * Move every tag attached to one transaction onto another.
+     *
+     * Used when a PDF statement line is matched to a Yape movement already in the
+     * ledger: the Yape row keeps existing, but the tags the user put on it belong to the
+     * transaction that survives. Losing them silently would strip a user's own labelling
+     * off their history with nothing to show what happened.
+     */
+    public function reassignTags(int $fromTransactionId, int $toTransactionId): void;
 }
