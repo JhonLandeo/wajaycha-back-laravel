@@ -1,0 +1,138 @@
+# openspec/config.yaml
+schema: spec-driven
+
+project: wajaycha
+artifact_store: hybrid # openspec files + Engram observations
+artifact_language: en # all SDD artifacts are written in English
+
+context: |
+  Laravel 11 API (PHP ^8.2), sole owner of the Wajaycha financial domain.
+  Persistence: PostgreSQL + pgvector + pg_trgm. Queues: Horizon + Redis (predis).
+  Auth: tymon/jwt-auth (api guard driver: jwt). AI: Gemini Text/Vision + gemini-embedding-001.
+  Layout is logical, not physical: app/{Actions,Services,Repositories,Jobs,Imports,DTOs,Http}.
+  Architectural rule: one owning Service per subdomain; Actions/Imports/Jobs/Controllers orchestrate only.
+  Domain, subdomain map, ADRs and technical debt live in the parent workspace under ../docs/ — reference, never duplicate.
+  Testing: Pest on a real PostgreSQL DB (wajaycha-1). Static analysis: Larastan level 6.
+
+# Shared workspace context — READ these, do not copy their content into SDD artifacts.
+context_sources:
+  workspace_entry: ../CLAUDE.md
+  docs_index: ../docs/README.md
+  ubiquitous_language: ../docs/domain/ubiquitous-language.md
+  context_map: ../docs/domain/context-map.md
+  c4_system_context: ../docs/architecture/c4-1-system-context.md
+  c4_containers: ../docs/architecture/c4-2-containers.md
+  technical_debt: ../docs/architecture/technical-debt.md
+  quality_attributes: ../docs/quality/quality-attributes.md
+  decisions: # all accepted
+    - ../docs/decisions/0001-discard-nest-microservice.md
+    - ../docs/decisions/0002-whatsapp-ingestion-blocked.md
+    - ../docs/decisions/0003-supersede-refactoring-plans.md
+    - ../docs/decisions/0004-telegram-interim-capture-channel.md
+    - ../docs/decisions/0005-opportunistic-hexagonal-refactor.md
+    - ../docs/decisions/0006-whatsapp-cloud-api-dedicated-number.md
+  repo_rules:
+    - .agents/rules/01-laravel-core.md
+    - .agents/rules/02-database-dba.md
+
+# Ranked ADD drivers from ../docs/quality/quality-attributes.md.
+# Highest-priority driver wins any tradeoff conflict.
+quality_attribute_priority:
+  - QA-4 safety
+  - QA-3 integrity
+  - QA-2 accuracy
+  - QA-1 friction
+  - QA-7 modifiability
+  - QA-6 cost
+  - QA-5 latency
+
+# Subdomains from ../docs/domain/context-map.md. CORE subdomains get the most design rigor.
+subdomains:
+  - name: Ingestion
+    kind: supporting
+  - name: Entity Resolution
+    kind: core
+  - name: Categorization
+    kind: core
+  - name: Financial Analysis
+    kind: core
+  - name: Notification
+    kind: supporting
+  - name: Access
+    kind: generic
+
+strict_tdd: true # marker: .agents/skills/generador_tdd.md + Pest runner present
+
+testing:
+  runner: pest
+  framework: Pest 3 (pest-plugin-laravel) on PHPUnit 11
+  test_command: php artisan test
+  unit_command: php artisan test --testsuite=Unit
+  feature_command: php artisan test --testsuite=Feature
+  filter_command: php artisan test --filter="{pattern}"
+  parallel_command: php artisan test --parallel # paratest is installed
+  database: postgresql # NOT sqlite — pgvector and pg_trgm are required
+  test_database: wajaycha-1
+  layers:
+    unit: true # tests/Unit — currently only ExampleTest.php, effectively unused
+    integration: true # tests/Feature via Tests\TestCase + RefreshDatabase, real PostgreSQL
+    e2e: false
+  coverage:
+    available: false # no xdebug and no pcov installed
+    command: ""
+  quality:
+    linter: ./vendor/bin/pint --test
+    formatter: ./vendor/bin/pint
+    static_analysis: ./vendor/bin/phpstan analyse # Larastan level 6, paths: app/
+    type_checker: ./vendor/bin/phpstan analyse
+
+rules:
+  proposal:
+    - Write in English.
+    - State which subdomain owns the change; a change MUST NOT span two owning services without justification.
+    - Reference ../docs/ sources by path instead of restating domain definitions.
+    - Include a rollback plan for anything touching migrations, queues, or the Gemini integration.
+    - Check ../docs/architecture/technical-debt.md before claiming a defect exists. Do NOT trust PLAN_REFACTORIZACION.md (stale 2026-04-19 audit, superseded by ADR-0003).
+  specs:
+    - Use Given/When/Then for scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - Use the ubiquitous language exactly. `Detail` is the normalized counterparty/merchant entity, NOT a line item; one Detail has many Transactions.
+    - Trace each requirement to at least one ranked quality attribute (QA-1..QA-7).
+  design:
+    - Name the single owning Service for the subdomain. Actions, Imports, Jobs and Controllers orchestrate; they do not decide.
+    - Keep modules logical. No physical folder restructuring.
+    - ADR-0005 — opportunistic refactor only: refactor a module only when it is already being touched for another reason. No standalone refactoring changes.
+    - Include a sequence diagram for any multi-hop flow (import -> job -> service -> AI -> persistence).
+    - Document new PostgreSQL objects (indexes, extensions, SQL functions) per .agents/rules/02-database-dba.md.
+  tasks:
+    - Group by phase, use hierarchical numbering.
+    - Every behavioral task pairs an RED test task with the implementation task (strict TDD).
+    - Keep tasks completable in one session.
+    - Forecast the 400-line review budget explicitly.
+  apply:
+    guidelines:
+      - Follow .agents/rules/01-laravel-core.md and .agents/rules/02-database-dba.md.
+      - Follow existing patterns in app/Actions, app/Services, app/Repositories.
+      - Code, comments and artifacts in English; user-facing Spanish copy stays Spanish.
+      - Never read or reference ../wajaycha-nest/ (abandoned, ADR-0001).
+    tdd: true
+    test_command: php artisan test
+  verify:
+    test_command: php artisan test
+    build_command: ./vendor/bin/phpstan analyse
+    lint_command: ./vendor/bin/pint --test
+    coverage_threshold: 0 # no coverage driver installed
+    notes: Tests require a running PostgreSQL with the wajaycha-1 database, pgvector and pg_trgm.
+  archive:
+    - Warn before merging destructive deltas.
+    - Merged specs land in openspec/specs/{subdomain}/spec.md using context-map subdomain names.
+
+forbidden_sources:
+  - path: ../wajaycha-nest/
+    reason: Abandoned microservice. ADR-0001. Never read, never reference.
+  - path: PLAN_REFACTORIZACION.md
+    reason: Stale 2026-04-19 audit, several findings already fixed. ADR-0003. Superseded by ../docs/architecture/technical-debt.md.
+
+next_planned_change:
+  name: whatsapp-cloud-api-capture-channel
+  source: ../docs/decisions/0006-whatsapp-cloud-api-dedicated-number.md
