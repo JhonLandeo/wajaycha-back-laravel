@@ -35,19 +35,27 @@ declare(strict_types=1);
  * hexagonal exists to prevent. `DashboardController` held five such calls until
  * `refactor/extract-dashboard-read-model` moved them behind a port.
  *
- * Two controllers are still there, down from four. `TransactionYapeController` left
- * the list when its use case moved to `RegisterYapeImportAction`; `PdfController` left
- * it by being deleted — it returned 500 on every request and duplicated logic the
- * `ProcessPdfImport` job already owned. The list is a debt register and it is meant to
- * shrink.
+ * The exception list is gone. It held four controllers when this rule was written and
+ * each left by a different route, which is worth recording because the routes are not
+ * interchangeable:
+ *
+ * - `DashboardController` — five raw queries moved behind `DashboardRepositoryContract`.
+ * - `TransactionYapeController` — its use case moved to `RegisterYapeImportAction`,
+ *   which owns the transaction the controller had been opening.
+ * - `PdfController` — deleted. It returned 500 on every request and duplicated logic
+ *   the `ProcessPdfImport` job already owned.
+ * - `ImportController` — it never called `DB::` at all. It imported the facade and
+ *   never used it, so a single dead `use` statement had been holding a whole class on
+ *   a debt register.
+ * - `DetailsController` — `get_details` moved behind `DetailRepositoryContract`.
+ *
+ * The rule is now unconditional: no controller in this application may reach for the
+ * database. That is a stronger statement than the same rule with a list beside it,
+ * and it is only sayable because the list emptied.
  */
 arch('a controller does not reach for the database')
     ->expect('App\Http\Controllers')
-    ->not->toUse('Illuminate\Support\Facades\DB')
-    ->ignoring([
-        'App\Http\Controllers\DetailsController',
-        'App\Http\Controllers\ImportController',
-    ]);
+    ->not->toUse('Illuminate\Support\Facades\DB');
 
 /**
  * A service that types a `Request` cannot be called from a queue worker, a console

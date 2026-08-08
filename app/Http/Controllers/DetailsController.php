@@ -1,46 +1,48 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Detail\StoreDetailRequest;
 use App\Http\Requests\Detail\UpdateDetailRequest;
 use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
-use App\Models\Transaction;
-
-use Carbon\Carbon;
+use App\Repositories\Contracts\DetailRepositoryContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Js;
 
 class DetailsController extends Controller
 {
+    public function __construct(
+        private readonly DetailRepositoryContract $details,
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 10);
-        $page = $request->input('page', 1);
-        $userId = Auth::id();
-        $statement = 'SELECT * FROM get_details(?, ?, ?)';
-        $params = [$perPage, $page, $userId];
-        $data = DB::select($statement, $params);
-        if (count($data) > 0) {
-            $total = $data[0]->total_count;
-        }
-        $paginate = new LengthAwarePaginator($data, $total ?? 0, $perPage, $page);
+        $perPage = (int) $request->input('per_page', 10);
+        $page = (int) $request->input('page', 1);
 
-        return response()->json($paginate);
+        $rows = $this->details->listForUser((int) Auth::id(), $perPage, $page);
+
+        // Every row repeats the same total; an empty page reports zero.
+        $total = $rows === [] ? 0 : (int) $rows[0]->total_count;
+
+        return response()->json(
+            new LengthAwarePaginator($rows, $total, $perPage, $page)
+        );
     }
 
     public function store(StoreDetailRequest $request): JsonResponse
     {
         $data = $request->validated();
         $data['user_id'] = Auth::id();
+
         $detail = Detail::create($data);
         GenerateEmbeddingForDetail::dispatch($detail, $request->last_used_category_id);
+
         return response()->json($detail, 201);
     }
 
@@ -53,11 +55,12 @@ class DetailsController extends Controller
             ->where('user_id', (int) Auth::id())
             ->first();
 
-        if (!$detail) {
+        if (! $detail) {
             return response()->json(['message' => 'Detalle no encontrado'], 404);
         }
 
         $data = $detail->update($request->validated());
+
         return response()->json($data);
     }
 }
