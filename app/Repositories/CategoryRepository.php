@@ -83,6 +83,27 @@ final class CategoryRepository implements CategoryRepositoryContract
         return Category::query()->create($data);
     }
 
+    public function assignParetoClassification(int $categoryId, int $paretoClassificationId): void
+    {
+        // An upsert, not an insert: a category holds one band, and the create path used
+        // to insert blindly while the update path upserted. Same table, two behaviours.
+        DB::table('category_pareto_assignments')->updateOrInsert(
+            ['category_id' => $categoryId],
+            [
+                'pareto_classification_id' => $paretoClassificationId,
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+    }
+
+    public function clearParetoClassification(int $categoryId): void
+    {
+        DB::table('category_pareto_assignments')
+            ->where('category_id', $categoryId)
+            ->delete();
+    }
+
     /**
      * @return array<int, \stdClass>
      */

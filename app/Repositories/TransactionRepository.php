@@ -174,4 +174,11 @@ final class TransactionRepository implements TransactionRepositoryContract
             ->limit(1)
             ->first();
     }
+
+    public function reassignTags(int $fromTransactionId, int $toTransactionId): void
+    {
+        DB::table('transaction_tag')
+            ->where('transaction_id', $fromTransactionId)
+            ->update(['transaction_id' => $toTransactionId]);
+    }
 }

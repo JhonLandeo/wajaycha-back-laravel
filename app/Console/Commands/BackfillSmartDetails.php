@@ -2,14 +2,20 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use App\Models\Detail;
+use Illuminate\Console\Command;
+
 class BackfillSmartDetails extends Command
 {
     protected $signature = 'details:backfill-smart';
 
     protected $description = 'Clasifica transacciones, limpia nombres y repara Yapes enmascarados';
+
+    public function __construct(
+        private readonly \App\Repositories\Contracts\DetailRepositoryContract $details,
+    ) {
+        parent::__construct();
+    }
 
     public function handle(): void
     {
@@ -27,12 +33,11 @@ class BackfillSmartDetails extends Command
 
                 $features = $this->analyze($detail->description);
 
-                DB::table('details')
-                    ->where('id', $detail->id)
-                    ->update([
-                        'operation_type' => $features['type'],
-                        'entity_clean'   => $features['entity']
-                    ]);
+                $this->details->updateClassification(
+                    $detail->id,
+                    $features['type'],
+                    $features['entity']
+                );
 
                 $bar->advance();
             }
@@ -45,7 +50,7 @@ class BackfillSmartDetails extends Command
 
     /**
      * Analiza una descripción y extrae sus características limpias.
-     * @param string $text
+     *
      * @return array<string, string|null> ['type' => string, 'entity' => string|null]
      */
     private function analyze(string $text): array
@@ -62,7 +67,7 @@ class BackfillSmartDetails extends Command
             $type = 'RETIRO';
         } elseif (preg_match('/^(deposito|abono|transf\.*? a favor)/i', $textLower)) {
             // Cuidado: ABON PLIN debe ser PLIN, no DEPOSITO. Verificamos eso abajo.
-            if (!str_contains($textLower, 'plin')) {
+            if (! str_contains($textLower, 'plin')) {
                 $type = 'DEPOSITO';
             }
         } elseif (preg_match('/^(mant\.|comis\.|itf|estado de cta|seg\.|membresia)/i', $textLower)) {
@@ -137,14 +142,14 @@ class BackfillSmartDetails extends Command
             'google *',
             'facebk *',
             'yq-',
-            'yape'
+            'yape',
         ];
 
         // Borrado manual de frases específicas
         foreach ($garbage as $trash) {
             // Usamos str_replace o preg_replace simple para velocidad
             // Agregamos ^ o espacios para no borrar palabras a la mitad
-            $clean = preg_replace('/(^|\s|[\*\-\.])' . preg_quote($trash, '/') . '/i', ' ', $clean);
+            $clean = preg_replace('/(^|\s|[\*\-\.])'.preg_quote($trash, '/').'/i', ' ', $clean);
         }
 
         // Eliminar Fechas (ENE24, SET25)
