@@ -55,7 +55,7 @@ final class CategoryController extends Controller
 
     public function show(int $id): JsonResponse
     {
-        $category = $this->repository->findById($id);
+        $category = $this->repository->findById($id, (int) Auth::id());
         if (!$category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
@@ -77,7 +77,7 @@ final class CategoryController extends Controller
      */
     public function update(UpdateCategoryRequest $request, int $id): JsonResponse
     {
-        $category = $this->repository->findById($id);
+        $category = $this->repository->findById($id, (int) Auth::id());
         if (!$category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
@@ -93,7 +93,7 @@ final class CategoryController extends Controller
      */
     public function destroy(int $id): JsonResponse
     {
-        $category = $this->repository->findById($id);
+        $category = $this->repository->findById($id, (int) Auth::id());
         if (!$category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
@@ -113,7 +113,7 @@ final class CategoryController extends Controller
      */
     public function patchPareto(int $id, Request $request): JsonResponse
     {
-        $category = $this->repository->findById($id);
+        $category = $this->repository->findById($id, (int) Auth::id());
         if (!$category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
