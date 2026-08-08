@@ -26,4 +26,14 @@ class DetailRepository implements DetailRepositoryContract
             $userId,
         ]);
     }
+
+    public function updateClassification(int $detailId, ?string $operationType, ?string $entityClean): void
+    {
+        DB::table('details')
+            ->where('id', $detailId)
+            ->update([
+                'operation_type' => $operationType,
+                'entity_clean' => $entityClean,
+            ]);
+    }
 }
