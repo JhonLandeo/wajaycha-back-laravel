@@ -7,7 +7,6 @@ use App\Services\CategorizationService;
 use App\Services\DetailResolver;
 use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Imports\HeadingRowFormatter;
@@ -17,8 +16,11 @@ HeadingRowFormatter::default('none');
 class TransactionYapeImport implements ToModel, WithHeadingRow
 {
     protected int $userId;
+
     protected TransactionAnalyzer $transactionAnalyzer;
+
     protected CategorizationService $categorizationService;
+
     protected DetailResolver $detailResolver;
 
     public function __construct(int $userId)
@@ -35,7 +37,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param  array<string, mixed>  $row
      */
     public function model(array $row)
     {
@@ -114,5 +116,4 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             'is_manual' => false,
         ]);
     }
-
 }

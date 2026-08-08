@@ -3,18 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CategoryRule\SyncRuleRequest;
-use App\Models\Category;
-use App\Repositories\Contracts\CategoryRepositoryContract;
-use App\Models\Detail;
-use App\Models\CategorizationRule;
-use App\Services\CategorizationService;
 use App\Jobs\GenerateEmbeddingForDetail;
-use Illuminate\Http\Client\Response;
+use App\Models\CategorizationRule;
+use App\Models\Category;
+use App\Models\Detail;
+use App\Repositories\Contracts\CategoryRepositoryContract;
+use App\Services\CategorizationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class CategoryRuleController extends Controller
 {
@@ -34,7 +31,7 @@ class CategoryRuleController extends Controller
     public function getRules(Request $request, int $categoryId): JsonResponse
     {
         $category = $this->ownedCategory($categoryId);
-        if (!$category) {
+        if (! $category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
@@ -54,7 +51,7 @@ class CategoryRuleController extends Controller
     public function getSuggestions(Request $request, int $categoryId): JsonResponse
     {
         $category = $this->ownedCategory($categoryId);
-        if (!$category) {
+        if (! $category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
@@ -71,7 +68,7 @@ class CategoryRuleController extends Controller
             ->whereNotNull('embedding')
             ->avg('embedding');
 
-        if (!$centroidVector) {
+        if (! $centroidVector) {
             return response()->json(Detail::whereRaw('1=0')->paginate(25));
         }
 
@@ -91,7 +88,7 @@ class CategoryRuleController extends Controller
     public function syncRule(SyncRuleRequest $request, int $categoryId, CategorizationService $categorizationService): JsonResponse
     {
         $category = $this->ownedCategory($categoryId);
-        if (!$category) {
+        if (! $category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
