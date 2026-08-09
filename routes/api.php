@@ -16,8 +16,16 @@ use Illuminate\Support\Facades\Route;
 Route::post('telegram/webhook', [\App\Http\Controllers\Capture\TelegramWebhookController::class, 'receive'])
     ->middleware(\App\Http\Middleware\VerifyTelegramSecretToken::class);
 
-Route::post('register', [JWTAuthController::class, 'register']);
-Route::post('login', [JWTAuthController::class, 'login']);
+// Estas dos son las unicas rutas sin autenticar que crean o entregan credenciales,
+// y el grupo `api` de Laravel 11 no trae throttle salvo que `bootstrap/app.php`
+// llame a `throttleApi()`, cosa que no hace. Sin esto no hay ningun limite.
+//
+// El limite por IP es la mitad que le falta al contador por cuenta de LoginRequest:
+// ese contador incluye el email en su clave, asi que probar una sola contrasena
+// contra cien direcciones distintas nunca lo activa. Las dos capas atacan cosas
+// diferentes y ninguna reemplaza a la otra.
+Route::post('register', [JWTAuthController::class, 'register'])->middleware('throttle:5,1');
+Route::post('login', [JWTAuthController::class, 'login'])->middleware('throttle:10,1');
 
 Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('logout', [JWTAuthController::class, 'logout']);
