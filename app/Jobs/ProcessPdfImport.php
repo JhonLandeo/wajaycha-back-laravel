@@ -9,6 +9,7 @@ use App\Models\Import;
 use App\Models\Transaction;
 use App\Services\CategorizationService;
 use App\Services\Imports\StatementLineParser;
+use App\Services\Imports\StatementTextExtractor;
 use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
@@ -19,9 +20,6 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use setasign\Fpdi\Fpdi;
-use Smalot\PdfParser\Parser;
-use thiagoalessio\TesseractOCR\TesseractOCR;
 use Throwable;
 
 class ProcessPdfImport implements ShouldQueue
@@ -31,6 +29,16 @@ class ProcessPdfImport implements ShouldQueue
     public int $timeout = 600;
 
     public int $tries = 3;
+
+    /**
+     * How many times the persistence transaction is replayed on a deadlock.
+     *
+     * This is the only retry in the job that can fire after the expensive part
+     * is done. A deadlock is transient by definition and the text is already in
+     * memory by then, so replaying costs one more round of inserts — not
+     * another qpdf, another Fpdi and another Tesseract run.
+     */
+    private const PERSISTENCE_ATTEMPTS = 3;
 
     protected int $importId;
 
@@ -65,10 +73,6 @@ class ProcessPdfImport implements ShouldQueue
     // sea opcional —no todo extracto viene encriptado— eso es un 500.
     protected ?string $password;
 
-    protected CategorizationService $categorizationService;
-
-    protected TransactionAnalyzer $transactionAnalyzer;
-
     public function __construct(int $importId, int $userId, string $storedPath, int $accountId, int $year, int $month, ?string $password)
     {
         $this->importId = $importId;
@@ -78,60 +82,78 @@ class ProcessPdfImport implements ShouldQueue
         $this->year = $year;
         $this->month = $month;
         $this->password = $password;
-        $this->categorizationService = app(CategorizationService::class);
-        $this->transactionAnalyzer = app(TransactionAnalyzer::class);
     }
 
-    public function handle(): void
-    {
+    /**
+     * Reads the statement, then writes what it found.
+     *
+     * The order of those two clauses is the whole point of this method. It used
+     * to open a transaction as its first statement and commit as its last, so
+     * the qpdf shell-out, the Fpdi probe, the PDF text extraction and a possible
+     * Tesseract run all happened with a PostgreSQL transaction held open. On a
+     * scanned statement that is minutes of `idle in transaction`: a pooled
+     * connection pinned for the duration and autovacuum unable to reclaim any
+     * row version newer than the snapshot, for a stretch bounded only by
+     * `$timeout = 600`.
+     *
+     * Nothing in that stretch touches the database. The transaction now starts
+     * after the last slow call and covers exactly what it was always for — the
+     * inserts and the status flip landing together or not at all.
+     *
+     * The collaborators arrive through `handle()` rather than the constructor,
+     * and not for style: a queued job serializes its own properties, so holding
+     * services there wrote the whole object graph into every queue payload.
+     * `$month`'s docblock above is the record of what unserialize semantics
+     * already cost this class once.
+     */
+    public function handle(
+        StatementTextExtractor $extractor,
+        StatementLineParser $parser,
+        TransactionAnalyzer $analyzer,
+        CategorizationService $categorizer,
+    ): void {
         Import::where('id', $this->importId)->update(['status' => ImportStatus::PROCESSING]);
-        $filePath = Storage::path($this->storedPath);
-
-        // `decryptPdf()` escribe una copia SIN CONTRASEÑA del extracto en
-        // storage/app/private/. Antes no se borraba nunca: ni al terminar bien ni
-        // en el catch, así que cada import encriptado dejaba el estado de cuenta
-        // en texto plano acumulándose en disco. Se limpia en el finally.
-        $decryptedPath = null;
 
         try {
-            DB::beginTransaction();
-            if ($this->isEncrypted($filePath)) {
-                $filePath = $decryptedPath = $this->decryptPdf($filePath, (string) $this->password);
-            }
+            // ---- Lento, de I/O, y fuera de toda transacción ----
+            $text = $extractor->extract(Storage::path($this->storedPath), $this->password);
+            $rows = $parser->parse($text, $this->year, $this->month);
 
-            $text = $this->extractTextFromPdf($filePath);
-            if (empty($text)) {
-                $text = (new TesseractOCR($filePath))->run();
-            }
+            // ---- Recién acá se abre la transacción ----
+            DB::transaction(function () use ($rows, $analyzer, $categorizer): void {
+                $this->processParsedTransactions($rows, $analyzer, $categorizer);
 
-            $this->processParsedTransactions(
-                app(StatementLineParser::class)->parse($text, $this->year, $this->month)
-            );
-
-            Import::where('id', $this->importId)->update(['status' => ImportStatus::COMPLETED]);
-            DB::commit();
+                Import::where('id', $this->importId)->update(['status' => ImportStatus::COMPLETED]);
+            }, self::PERSISTENCE_ATTEMPTS);
         } catch (Throwable $th) {
+            // El catch se queda con el fallo a propósito: un import fallido es un
+            // estado que el usuario tiene que poder ver, no un job que desaparece
+            // en failed_jobs. La consecuencia es que `$tries` de arriba sólo
+            // cubre lo que pase ANTES de este try —el update a PROCESSING—, y no
+            // reintenta nada de lo de adentro. Distinguir un fallo transitorio de
+            // uno definitivo acá es un cambio propio: reintentar un PDF ilegible
+            // tres veces son tres corridas de OCR para llegar al mismo FAILED.
             Log::error("Error en Job ProcessPdfImport (ID: {$this->importId}): ".$th->getMessage());
-            DB::rollBack();
+
             Import::where('id', $this->importId)->update([
                 'status' => ImportStatus::FAILED,
                 'error_message' => $th->getMessage(),
             ]);
-        } finally {
-            if ($decryptedPath !== null && is_file($decryptedPath)) {
-                @unlink($decryptedPath);
-            }
         }
     }
 
     /**
      * @param  list<TransactionDataDTO>  $transactionsData
      */
-    private function processParsedTransactions(array $transactionsData): void
-    {
+    private function processParsedTransactions(
+        array $transactionsData,
+        TransactionAnalyzer $analyzer,
+        CategorizationService $categorizer,
+    ): void {
         $yapeIdsFounds = [];
+
         foreach ($transactionsData as $txData) {
-            $features = $this->transactionAnalyzer->analyze($txData->description);
+            $features = $analyzer->analyze($txData->description);
             $detail = Detail::where('user_id', $this->userId)
                 ->whereRaw('LOWER(description) = ?', $features['sanitized_description'])
                 ->first();
@@ -164,7 +186,7 @@ class ProcessPdfImport implements ShouldQueue
             }
 
             if (! $finalCategoryId) {
-                $finalCategoryId = $this->categorizationService->findCategory($this->userId, $detail);
+                $finalCategoryId = $categorizer->findCategory($this->userId, $detail);
             }
 
             $transaction = Transaction::firstOrCreate(
@@ -194,46 +216,5 @@ class ProcessPdfImport implements ShouldQueue
                 // $transactionYape->update(['source_type' => 'yape_matched']);
             }
         }
-    }
-
-    private function extractTextFromPdf(string $filePath): string
-    {
-        $parser = new Parser;
-        try {
-            return $parser->parseFile($filePath)->getText();
-        } catch (\Exception $e) {
-            return '';
-        }
-    }
-
-    private function isEncrypted(string $filePath): bool
-    {
-        $pdf = new Fpdi;
-        try {
-            $pdf->setSourceFile($filePath);
-
-            return false;
-        } catch (\setasign\Fpdi\PdfParser\PdfParserException $e) {
-            return true;
-        }
-    }
-
-    private function decryptPdf(string $filePath, string $password): string
-    {
-        $decryptedPath = storage_path('app/private/'.uniqid('decrypted_').'.pdf');
-
-        $command = sprintf(
-            'qpdf --decrypt --password=%s %s %s',
-            escapeshellarg($password),
-            escapeshellarg($filePath),
-            escapeshellarg($decryptedPath)
-        );
-        exec($command, $output, $returnVar);
-
-        if ($returnVar !== 0) {
-            throw new \Exception('No se pudo desencriptar el PDF. ¿Contraseña incorrecta?');
-        }
-
-        return $decryptedPath;
     }
 }
