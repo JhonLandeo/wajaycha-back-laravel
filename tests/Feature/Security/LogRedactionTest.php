@@ -84,7 +84,45 @@ it('nunca deja el valor original adentro del seudonimo', function () {
     expect(Redact::id($telefono))
         ->not->toContain('999888777')
         ->not->toContain($telefono)
-        ->toStartWith('#');
+        ->toStartWith('<id: ')
+        ->toEndWith('>');
+});
+
+it('marca con la misma forma el valor presente y el ausente', function () {
+    // Antes el presente salia como '#a1b2c3d4e5' y el ausente como '<sin id>',
+    // asi que una misma linea de log traia dos convenciones distintas. Se
+    // unifican en la del helper de texto, que ya envolvia todo entre angulos.
+    expect(Redact::id('51999888777'))->toStartWith('<')->toEndWith('>')
+        ->and(Redact::id(null))->toBe('<sin id>')
+        ->and(Redact::text('x'))->toStartWith('<')->toEndWith('>');
+});
+
+it('avisa en la linea cuando no hay clave, en vez de fingir un seudonimo', function () {
+    config()->set('app.key', '');
+
+    // hash_hmac con clave vacia no lanza: devuelve un digest perfectamente
+    // valido. Sin este guard el log seguiria pareciendo seudonimizado sin
+    // estarlo. Pero lanzar tampoco servia: la revision acotada corroboro que se
+    // llevaba puesto el registro de usuarios, donde el User ya quedo creado.
+    expect(Redact::id('51999888777'))->toBe('<id: sin clave>');
+});
+
+it('no rompe una ruta escrita para tragar cuando falta la clave', function () {
+    config()->set('app.key', '');
+
+    // El registro crea el User y despues vincula; si vincular lanzara, quedaria
+    // una fila huerfana y un 500 sin token. Este es el caso que el throw rompia.
+    $response = $this->postJson('/api/register', [
+        'name' => 'Ada',
+        'last_name' => 'Lovelace',
+        'email' => 'ada-sin-clave@example.test',
+        'whatsapp_phone' => '123',
+        'password' => 'secret-password',
+        'password_confirmation' => 'secret-password',
+    ]);
+
+    $response->assertOk();
+    expect(User::where('email', 'ada-sin-clave@example.test')->exists())->toBeTrue();
 });
 
 it('da siempre el mismo seudonimo para el mismo valor', function () {

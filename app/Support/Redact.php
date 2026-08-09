@@ -44,6 +44,8 @@ final class Redact
      *
      * To find a user's lines, hash their identifier with the same key rather
      * than grepping for the raw value: `Redact::id('+51999888777')`.
+     *
+     * Reports the absence of a key rather than degrading silently — see below.
      */
     public static function id(?string $value): string
     {
@@ -53,7 +55,19 @@ final class Redact
             return '<sin id>';
         }
 
-        return '#'.substr(hash_hmac('sha256', $value, self::key()), 0, self::DIGEST_LENGTH);
+        $key = self::key();
+
+        if ($key === null) {
+            // Se dice en la linea, no se lanza. Sin clave el digest no es un
+            // seudonimo sino un hash enumerable, y este marcador no se puede
+            // confundir con uno — que era todo el punto de no degradar en
+            // silencio. Lanzar, en cambio, rompe rutas escritas para tragar: la
+            // revision acotada corroboro que se llevaba puesto el registro de
+            // usuarios, donde el User ya quedo creado antes de la llamada.
+            return '<id: sin clave>';
+        }
+
+        return '<id: '.substr(hash_hmac('sha256', $value, $key), 0, self::DIGEST_LENGTH).'>';
     }
 
     /**
@@ -75,8 +89,11 @@ final class Redact
         return $length === 0 ? '<vacío>' : "<texto: {$length} caracteres>";
     }
 
-    private static function key(): string
+    /** Null when `app.key` is absent, which the caller reports rather than hides. */
+    private static function key(): ?string
     {
-        return (string) config('app.key');
+        $key = (string) config('app.key');
+
+        return trim($key) === '' ? null : $key;
     }
 }
