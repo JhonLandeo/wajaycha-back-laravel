@@ -34,6 +34,26 @@ class ProcessTelegramCapture implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /**
+     * Long enough to survive its own outbound budget.
+     *
+     * Without this the job inherited Horizon's 60-second supervisor default
+     * (`config/horizon.php`), which no one had ever compared against what this
+     * job actually does. The photo path makes four outbound calls — `getFile`,
+     * the download, Gemini, then the reply — and the coach can add a fifth.
+     * Summed from `config/http.php` through
+     * {@see \App\Support\OutboundHttp::worstCaseSecondsFor()} that is roughly
+     * 145 seconds of worst case, against 60 available and a supervisor set to
+     * `tries: 1`, so a job killed mid-retry is never replayed and the sender
+     * receives nothing — worse than the failure the retries were added to
+     * survive.
+     *
+     * The number is not tuned by feel: `OutboundHttpBudgetTest` derives the sum
+     * from config and fails if it ever exceeds this value, so raising a timeout
+     * or a retry in `config/http.php` cannot silently outgrow the job again.
+     */
+    public int $timeout = 180;
+
     private const LINK_PREFIX = '/start ';
 
     /**

@@ -53,6 +53,36 @@ final class OutboundHttp
     }
 
     /**
+     * The longest a single call through this profile can take before it gives
+     * up, in seconds: every attempt timing out, plus the backoff between them.
+     *
+     * This exists because a queued job does not own the budget of one call, it
+     * owns the budget of all the calls it makes, and nothing was checking that
+     * sum against the worker that has to survive it. The photo capture path
+     * makes four outbound calls; the bounded review found that the Gemini
+     * profile alone had grown to 135 seconds against a 60-second worker
+     * timeout, with the supervisor set to `tries: 1` so a killed job is never
+     * replayed and the sender gets nothing at all.
+     *
+     * Rounded up, so a budget is never reported as smaller than it is.
+     */
+    public static function worstCaseSecondsFor(string $profile): int
+    {
+        $config = self::configFor($profile);
+        $attempts = $config['retries'] + 1;
+
+        $backoffMs = 0;
+        for ($attempt = 1; $attempt <= $config['retries']; $attempt++) {
+            $backoffMs += min(
+                (int) ($config['retry_base_delay_ms'] * 2 ** ($attempt - 1)),
+                $config['retry_max_delay_ms'],
+            );
+        }
+
+        return (int) ceil($config['timeout'] * $attempts + $backoffMs / 1000);
+    }
+
+    /**
      * Whether the failure is worth a second attempt.
      *
      * The distinction is not cosmetic. A 400 means the request was wrong and it

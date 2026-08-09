@@ -66,6 +66,15 @@ return [
     | hablan con la misma API y tienen presupuestos distintos porque uno lee y
     | el otro escribe.
     |
+    | ADVERTENCIA AL TOCAR ESTOS NUMEROS. Un job encolado no tiene el presupuesto
+    | de una llamada, tiene el de TODAS las que hace. La ruta de captura con foto
+    | son cuatro: getFile, la descarga, Gemini y la respuesta, mas otra respuesta
+    | si ademas habla el coach. `OutboundHttp::worstCaseSecondsFor()` calcula el
+    | peor caso de un perfil y `ProcessTelegramCapture::$timeout` esta puesto en
+    | funcion de esa suma; `OutboundHttpBudgetTest` afirma la relacion. Subir un
+    | timeout o un reintento aca sin revisar el job hace fallar la suite, que es
+    | exactamente lo que NO pasaba cuando este archivo se escribio.
+    |
     */
 
     'profiles' => [
@@ -73,16 +82,31 @@ return [
         /**
          * Inferencia con una imagen en base64 adentro del cuerpo. Es la llamada
          * mas lenta del sistema y la que mas caro sale abandonar antes de
-         * tiempo: cortarla a los 15 segundos tira a la basura tokens que ya se
-         * facturaron.
+         * tiempo: cortarla temprano tira a la basura tokens que ya se facturaron.
+         *
+         * Bajo de 45 s con 2 reintentos a 30 s con 1. La revision acotada midio
+         * que 45 x 3 son 135 s de presupuesto para UNA llamada, cuando el worker
+         * entero vive 60 s. Reintentar dos veces una inferencia de medio minuto
+         * no es resiliencia: es ocupar un worker hasta que lo maten. El segundo
+         * intento captura casi todo el beneficio de un fallo transitorio.
          */
         'gemini' => [
-            'timeout' => 45,
+            'timeout' => 25,
             'connect_timeout' => 10,
+            'retries' => 1,
         ],
 
-        /** Lecturas de Telegram: getFile y la descarga del archivo. Idempotentes. */
-        'telegram' => [],
+        /**
+         * Lecturas de Telegram: getFile y la descarga del archivo. Idempotentes.
+         *
+         * 10 s alcanza de sobra para una llamada de archivo, y la ruta de captura
+         * con foto hace DOS de estas antes de siquiera llamar a Gemini. Conserva
+         * los 2 reintentos del default: son idempotentes, que es justamente la
+         * diferencia con `telegram_send`.
+         */
+        'telegram' => [
+            'timeout' => 10,
+        ],
 
         /**
          * sendMessage, que NO es idempotente y no acepta clave de idempotencia.
@@ -98,6 +122,7 @@ return [
          * Un reintento en vez de dos acota la ventana.
          */
         'telegram_send' => [
+            'timeout' => 10,
             'retries' => 1,
         ],
 

@@ -22,12 +22,35 @@ use Illuminate\Support\Sleep;
  * catching. Getting that wrong would have turned each of those branches into an
  * uncaught exception — a change nothing else in the suite would have caught.
  */
+/**
+ * A profile that exists only for these cases.
+ *
+ * The mechanism tests below used to drive the real `telegram` profile, so
+ * tuning a production budget broke three of them for reasons that had nothing
+ * to do with the mechanism. What a retry does and how much of it a given
+ * dependency is allowed are two different questions, and only the second one
+ * belongs in `config/http.php`. The real budgets are asserted where they
+ * belong, in `OutboundHttpBudgetTest`.
+ */
+function retryMechanismProfile(int $retries = 2): string
+{
+    config()->set('http.profiles.mecanismo-de-prueba', [
+        'timeout' => 5,
+        'connect_timeout' => 2,
+        'retries' => $retries,
+        'retry_base_delay_ms' => 0,
+        'retry_max_delay_ms' => 5000,
+    ]);
+
+    return 'mecanismo-de-prueba';
+}
+
 it('reintenta un 500 hasta agotar el presupuesto del perfil', function () {
     Http::fake(['*' => Http::response('boom', 500)]);
 
-    OutboundHttp::to('telegram')->get('https://ejemplo.test/recurso');
+    OutboundHttp::to(retryMechanismProfile(2))->get('https://ejemplo.test/recurso');
 
-    // 2 reintentos sobre el primer intento, segun config('http.defaults.retries').
+    // Dos reintentos sobre el primer intento.
     Http::assertSentCount(3);
 });
 
@@ -55,7 +78,7 @@ it('no reintenta un 4xx que no sea 429', function () {
 it('reintenta un 429 porque es transitorio por definicion', function () {
     Http::fake(['*' => Http::response('slow down', 429)]);
 
-    OutboundHttp::to('telegram')->get('https://ejemplo.test/recurso');
+    OutboundHttp::to(retryMechanismProfile(2))->get('https://ejemplo.test/recurso');
 
     Http::assertSentCount(3);
 });
@@ -69,7 +92,7 @@ it('reintenta cuando ni siquiera se pudo conectar', function () {
         throw new ConnectionException('Connection timed out');
     });
 
-    expect(fn () => OutboundHttp::to('telegram')->get('https://ejemplo.test/recurso'))
+    expect(fn () => OutboundHttp::to(retryMechanismProfile(2))->get('https://ejemplo.test/recurso'))
         ->toThrow(ConnectionException::class);
 
     // Una caida de conexion sigue propagando cuando se agotan los intentos —
