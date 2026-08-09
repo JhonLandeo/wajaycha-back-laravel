@@ -96,9 +96,23 @@ class ProcessPdfImport implements ShouldQueue
      * row version newer than the snapshot, for a stretch bounded only by
      * `$timeout = 600`.
      *
-     * Nothing in that stretch touches the database. The transaction now starts
-     * after the last slow call and covers exactly what it was always for — the
-     * inserts and the status flip landing together or not at all.
+     * Nothing in that stretch touches the database, so the transaction now
+     * starts after the last of those calls rather than before the first.
+     *
+     * It is NOT yet pure persistence, and the earlier wording here claimed it
+     * was. Two review lenses caught that independently, and they were right:
+     * `processParsedTransactions()` calls `CategorizationService::findCategory()`
+     * for every line without a matching rule, and that reaches
+     * `EmbeddingService::generate()` — a synchronous Gemini request, inside the
+     * open transaction, once per uncategorised merchant. A 73-line statement of
+     * new merchants is that many network round trips against a held connection.
+     *
+     * That call was inside the transaction before this refactor too, so it is
+     * not a regression; what was new was a comment saying it had been dealt
+     * with. Removing it means either resolving categories before the
+     * transaction opens or moving embedding generation onto the queue, both of
+     * which are their own change. Recorded in
+     * `docs/architecture/technical-debt.md` rather than left implied.
      *
      * The collaborators arrive through `handle()` rather than the constructor,
      * and not for style: a queued job serializes its own properties, so holding

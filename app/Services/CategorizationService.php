@@ -24,10 +24,15 @@ class CategorizationService
     // AÑADIMOS $message como parámetro opcional
     public function findCategory(int $userId, Detail $detail, ?string $message = null): ?int
     {
-        // Aca habia un `Log::info('Mensaje para categorización: '.$message)` que
-        // escribia entero lo que el usuario habia contado sobre su gasto. Se
+        // Aca habia un
+        //   Log::info('Mensaje para categorización: '.($message ?? 'Ninguno'));
+        // que escribia entero lo que el usuario habia contado sobre su gasto. Se
         // elimina en vez de redactarse: las lineas de resultado de mas abajo ya
         // dicen que paso, asi que esta no aportaba nada que no se sepa despues.
+        //
+        // La linea se cita completa a proposito, con su fallback: la version
+        // anterior de este comentario la citaba sin el, y buscarla asi en la
+        // historia no encuentra nada.
 
         // 1. Prioridad Absoluta: Regla Exacta Histórica (Por ID de Detalle)
         $exactRule = CategorizationRule::where('user_id', $userId)
