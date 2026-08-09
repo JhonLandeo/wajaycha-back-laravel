@@ -36,7 +36,11 @@ class DetailResolver
     ): Detail {
         $detail = $this->findExisting($userId, $cleanEntity);
 
-        Log::info("🔍 Buscando Detalle para Entidad Limpia: {$cleanEntity}. ".($detail ? "Encontrado ID: {$detail->id}" : 'No encontrado.'));
+        // `$cleanEntity` y `$descriptionRaw` son el nombre del comercio donde
+        // gastó el usuario. Este es el subdominio de Entity Resolution: escribir
+        // el nombre en el log lo publica en texto plano en cada resolución.
+        Log::info("🔍 Entity Resolution para el usuario {$userId}: "
+            .($detail ? "resuelto al detail {$detail->id}." : 'sin coincidencia.'));
 
         if (! $detail) {
             $detail = Detail::create([
@@ -46,7 +50,7 @@ class DetailResolver
                 'entity_clean' => $cleanEntity,
             ]);
 
-            Log::info("🆕 Nuevo Detalle creado: {$descriptionRaw} (Clean: {$cleanEntity})");
+            Log::info("🆕 Detail {$detail->id} creado para el usuario {$userId}.");
 
             return $detail;
         }

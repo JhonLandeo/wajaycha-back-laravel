@@ -6,6 +6,7 @@ namespace App\Services\Capture;
 
 use App\Models\ChannelIdentity;
 use App\Models\User;
+use App\Support\Redact;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -35,7 +36,12 @@ class ChannelIdentityLinker
         $externalId = $this->normaliser->normalise($phone);
 
         if ($externalId === null) {
-            Log::warning("⚠️ ChannelIdentity: el telefono [{$phone}] del usuario {$user->id} no se pudo normalizar; la cuenta queda sin vincular.");
+            // El numero se reemplaza por su seudonimo estable: alcanza para
+            // correlacionar las lineas de un mismo usuario sin publicar como
+            // contactarlo. El largo se conserva porque es lo unico de la forma
+            // original que sirve para diagnosticar por que no normalizo.
+            Log::warning('⚠️ ChannelIdentity: el telefono '.Redact::id($phone).' ('.Redact::text($phone)
+                .") del usuario {$user->id} no se pudo normalizar; la cuenta queda sin vincular.");
 
             return null;
         }
@@ -48,7 +54,7 @@ class ChannelIdentityLinker
         if ($existing !== null) {
             // Una cuenta de canal pertenece a un solo usuario. Reasignarla dejaria las
             // transacciones del dueño anterior colgando de un remitente ajeno.
-            Log::warning("⚠️ ChannelIdentity: [{$externalId}] ya pertenece al usuario {$existing->user_id}; no se vincula al usuario {$user->id}.");
+            Log::warning('⚠️ ChannelIdentity: '.Redact::id($externalId)." ya pertenece al usuario {$existing->user_id}; no se vincula al usuario {$user->id}.");
 
             return null;
         }
@@ -70,7 +76,7 @@ class ChannelIdentityLinker
             // concurrentes con el mismo numero pueden pasar ambos el SELECT. El indice
             // unico es el arbitro real. El perdedor no vincula, pero su registro no
             // puede fallar por eso.
-            Log::warning("⚠️ ChannelIdentity: [{$externalId}] fue reclamado concurrentemente; el usuario {$user->id} queda sin vincular.");
+            Log::warning('⚠️ ChannelIdentity: '.Redact::id($externalId)." fue reclamado concurrentemente; el usuario {$user->id} queda sin vincular.");
 
             return null;
         }

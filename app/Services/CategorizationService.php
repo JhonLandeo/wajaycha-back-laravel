@@ -6,6 +6,7 @@ use App\Models\CategorizationRule;
 use App\Models\Category;
 use App\Models\Detail;
 use App\Models\KeywordRule;
+use App\Support\Redact;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -23,7 +24,11 @@ class CategorizationService
     // AÑADIMOS $message como parámetro opcional
     public function findCategory(int $userId, Detail $detail, ?string $message = null): ?int
     {
-        Log::info('Mensaje para categorización: '.($message ?? 'Ninguno'));
+        // Aca habia un `Log::info('Mensaje para categorización: '.$message)` que
+        // escribia entero lo que el usuario habia contado sobre su gasto. Se
+        // elimina en vez de redactarse: las lineas de resultado de mas abajo ya
+        // dicen que paso, asi que esta no aportaba nada que no se sepa despues.
+
         // 1. Prioridad Absoluta: Regla Exacta Histórica (Por ID de Detalle)
         $exactRule = CategorizationRule::where('user_id', $userId)
             ->where('detail_id', $detail->id)
@@ -43,7 +48,8 @@ class CategorizationService
                 ->whereNotNull('parent_id')
                 ->value('id');
 
-            Log::info("Buscando categoría por mensaje: '$message' -> Cat ID: ".($categoryIdByMessage ?? 'No encontrado'));
+            Log::info('[CAT] Búsqueda por nombre de categoría '.Redact::text($message)
+                .' -> Cat ID: '.($categoryIdByMessage ?? 'no encontrado'));
 
             if ($categoryIdByMessage) {
                 return $categoryIdByMessage;
@@ -55,7 +61,7 @@ class CategorizationService
         if (! empty($message)) {
             $categoryByMessage = $this->analyzeTextForKeywords($message, $keywordRules);
             if ($categoryByMessage) {
-                Log::info("✅ [CAT] Match por MENSAJE: '$message' -> Cat ID: $categoryByMessage");
+                Log::info("✅ [CAT] Match por MENSAJE para el detail {$detail->id} -> Cat ID: {$categoryByMessage}");
 
                 return $categoryByMessage;
             }
@@ -67,7 +73,9 @@ class CategorizationService
         $categoryByEntity = $this->analyzeTextForKeywords($searchString, $keywordRules);
 
         if ($categoryByEntity) {
-            Log::info("✅ [CAT] Match por ENTIDAD: '$searchString' -> Cat ID: $categoryByEntity");
+            // `$searchString` es el nombre del comercio. Se reporta el detail que
+            // lo representa, que es lo que sirve para seguir el rastro.
+            Log::info("✅ [CAT] Match por ENTIDAD del detail {$detail->id} -> Cat ID: {$categoryByEntity}");
             $this->rememberInferredRule($userId, $detail->id, $categoryByEntity);
 
             return $categoryByEntity;

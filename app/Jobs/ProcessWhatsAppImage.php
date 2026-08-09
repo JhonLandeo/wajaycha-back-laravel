@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Support\Redact;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -37,7 +38,7 @@ class ProcessWhatsAppImage implements ShouldQueue
         $user = $identities->resolve($channel->key(), $this->from);
 
         if (! $user) {
-            Log::warning("❌ WhatsApp: Número no registrado ({$this->from}).");
+            Log::warning('❌ WhatsApp: Número no registrado ('.Redact::id($this->from).').');
             $channel->reply($this->from, '❌ Tu número de WhatsApp no está vinculado a ninguna cuenta. Por favor, actualiza tu perfil en la app.');
 
             return;

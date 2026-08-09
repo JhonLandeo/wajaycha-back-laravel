@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessTelegramCapture;
 use App\Services\Capture\ChannelUpdateDeduplicator;
 use App\Services\Capture\TelegramChannel;
+use App\Support\Redact;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -111,7 +112,7 @@ class TelegramWebhookController extends Controller
             $fileId = $telegram->largestPhotoUnder($message['photo']);
 
             if ($fileId === null) {
-                Log::warning("ℹ️ Telegram: ninguna variante utilizable del chat {$chatId}, se ignora.");
+                Log::warning('ℹ️ Telegram: ninguna variante utilizable del chat '.Redact::id($chatId).', se ignora.');
 
                 return;
             }
@@ -127,6 +128,6 @@ class TelegramWebhookController extends Controller
             return;
         }
 
-        Log::info("ℹ️ Telegram: tipo de mensaje no soportado del chat {$chatId}, se ignora.");
+        Log::info('ℹ️ Telegram: tipo de mensaje no soportado del chat '.Redact::id($chatId).', se ignora.');
     }
 }

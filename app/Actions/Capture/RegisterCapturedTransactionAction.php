@@ -73,7 +73,12 @@ class RegisterCapturedTransactionAction
             'is_manual' => true,
         ]);
 
-        Log::info("✅ WhatsApp Action: Transacción registrada (S/ {$dto->amount} ".($isExpense ? 'a' : 'de')." {$descriptionRaw}) -> Cat ID: {$categoryId}");
+        // Esta linea escribia el monto y el nombre del comercio. Entre las dos
+        // cosas reconstruian el movimiento entero en texto plano, y con
+        // `breadcrumbs.logs` prendido en Sentry se iban del servidor. Los ids
+        // responden las mismas preguntas operativas sin decir en que gasto nadie.
+        Log::info("✅ Captura registrada: transacción {$transaction->id} del usuario {$user->id}"
+            ." -> detail {$detail->id}, categoría ".($categoryId ?? 'sin asignar').'.');
 
         return $transaction;
     }

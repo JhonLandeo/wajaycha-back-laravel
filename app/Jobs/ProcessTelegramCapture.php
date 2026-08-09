@@ -14,6 +14,7 @@ use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
 use App\Services\Capture\ChannelLinkTokenRedeemer;
 use App\Services\Coaching\FinancialCoachingService;
+use App\Support\Redact;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -66,7 +67,11 @@ class ProcessTelegramCapture implements ShouldQueue
         $user = $identities->resolve($channel->key(), $this->chatId);
 
         if (! $user) {
-            Log::warning("❌ Telegram: chat {$this->chatId} sin vincular.");
+            // Un chat id de Telegram es un identificador de persona: sirve para
+            // escribirle. Se registra su seudonimo, que alcanza para contar
+            // cuantos remitentes sin vincular hay y para seguir a uno entre
+            // varias lineas.
+            Log::warning('❌ Telegram: chat '.Redact::id($this->chatId).' sin vincular.');
             $channel->reply($this->chatId, '❌ Tu cuenta de Telegram no está vinculada. Abre la app y genera tu enlace de vinculación.');
 
             return;
