@@ -5,19 +5,20 @@ declare(strict_types=1);
 namespace App\Services\AI;
 
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
+use App\Support\OutboundHttp;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class GeminiTextService
 {
     protected string $apiKey;
+
     protected string $baseUrl;
 
     public function __construct()
     {
         $this->apiKey = config('services.gemini.api_key');
-        $this->baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+        $this->baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
     }
 
     public function parseText(string $text): ?ParsedReceiptDTO
@@ -41,26 +42,27 @@ class GeminiTextService
             }
         ';
 
-        $finalPrompt = $systemPrompt . "\n\nFecha actual de referencia: " . Carbon::now()->toDateTimeString() . "\n\nMensaje enviado por el usuario: \"" . $text . "\"";
+        $finalPrompt = $systemPrompt."\n\nFecha actual de referencia: ".Carbon::now()->toDateTimeString()."\n\nMensaje enviado por el usuario: \"".$text.'"';
 
-        $response = Http::post($url, [
+        $response = OutboundHttp::to('gemini')->post($url, [
             'contents' => [
-                ['parts' => [['text' => $finalPrompt]]]
+                ['parts' => [['text' => $finalPrompt]]],
             ],
             'generationConfig' => [
-                'responseMimeType' => 'application/json'
-            ]
+                'responseMimeType' => 'application/json',
+            ],
         ]);
 
-        if (!$response->successful()) {
-            Log::error("❌ Gemini Error: " . $response->body());
+        if (! $response->successful()) {
+            Log::error('❌ Gemini Error: '.$response->body());
+
             return null;
         }
 
         $data = $response->json();
         $jsonString = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
 
-        if (!$jsonString) {
+        if (! $jsonString) {
             return null;
         }
 

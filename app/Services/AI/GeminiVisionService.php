@@ -5,18 +5,19 @@ declare(strict_types=1);
 namespace App\Services\AI;
 
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 use Illuminate\Support\Facades\Log;
 
 class GeminiVisionService
 {
     protected string $apiKey;
+
     protected string $baseUrl;
 
     public function __construct()
     {
         $this->apiKey = config('services.gemini.api_key');
-        $this->baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+        $this->baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
     }
 
     public function parseReceipt(string $imageBytes, string $mimeType): ?ParsedReceiptDTO
@@ -40,7 +41,7 @@ class GeminiVisionService
               "message": (string, lo que haya en motivo o mensaje. Si no hay, pon vacío "")
             }';
 
-        $response = Http::post($url, [
+        $response = OutboundHttp::to('gemini')->post($url, [
             'contents' => [
                 [
                     'parts' => [
@@ -48,24 +49,25 @@ class GeminiVisionService
                         [
                             'inlineData' => [
                                 'mimeType' => $mimeType,
-                                'data' => $base64Image
-                            ]
-                        ]
-                    ]
-                ]
+                                'data' => $base64Image,
+                            ],
+                        ],
+                    ],
+                ],
             ],
-            'generationConfig' => ['responseMimeType' => 'application/json']
+            'generationConfig' => ['responseMimeType' => 'application/json'],
         ]);
 
-        if (!$response->successful()) {
-            Log::error("❌ Gemini Error: " . $response->body());
+        if (! $response->successful()) {
+            Log::error('❌ Gemini Error: '.$response->body());
+
             return null;
         }
 
         $data = $response->json();
         $jsonString = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
 
-        if (!$jsonString) {
+        if (! $jsonString) {
             return null;
         }
 

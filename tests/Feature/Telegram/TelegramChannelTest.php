@@ -116,6 +116,56 @@ it('no lanza cuando Telegram rechaza la respuesta', function () {
 
     $this->channel->reply('123456789', 'Comprobante registrado');
 
+    // Antes este caso afirmaba `assertSentCount(1)`, o sea "no reintentamos".
+    // Ahora reintenta una vez: 429 es transitorio por definicion. La assertion
+    // se cambio a proposito y no por conveniencia — la parte que importa sigue
+    // siendo la misma y esta arriba: llegar aca sin excepcion. La transaccion ya
+    // esta guardada y hacer fallar el job la duplicaria en el reintento.
+    Http::assertSentCount(2);
+});
+
+it('reintenta una sola vez el envio, porque sendMessage no es idempotente', function () {
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => false], 500)]);
+
+    $this->channel->reply('123456789', 'Comprobante registrado');
+
+    // Dos y no tres: si Telegram acepto el mensaje y se perdio la respuesta,
+    // cada reintento manda un "✅ Registrado" duplicado al usuario.
+    Http::assertSentCount(2);
+});
+
+it('no reintenta un rechazo definitivo del envio', function () {
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => false], 400)]);
+
+    $this->channel->reply('123456789', 'Comprobante registrado');
+
+    // Un 400 no mejora insistiendo: el pedido estaba mal y va a seguir mal.
+    Http::assertSentCount(1);
+});
+
+it('reintenta la descarga cuando Telegram devuelve un error transitorio', function () {
+    Http::fake([
+        'api.telegram.org/botBOT-TOKEN/getFile*' => Http::response([
+            'ok' => true,
+            'result' => ['file_path' => 'photos/file_9.png'],
+        ]),
+        'api.telegram.org/file/*' => Http::sequence()
+            ->push('', 503)
+            ->push('bytes-del-comprobante', 200),
+    ]);
+
+    // Sin reintento este comprobante se perdia y el usuario recibia
+    // "no pude leer ese envio" por un 503 que duro un segundo.
+    expect($this->channel->fetchMedia('file-9')?->bytes)->toBe('bytes-del-comprobante');
+});
+
+it('no reintenta cuando getFile responde que el archivo no existe', function () {
+    Http::fake([
+        'api.telegram.org/botBOT-TOKEN/getFile*' => Http::response(['ok' => false], 404),
+    ]);
+
+    expect($this->channel->fetchMedia('file-inexistente'))->toBeNull();
+
     Http::assertSentCount(1);
 });
 

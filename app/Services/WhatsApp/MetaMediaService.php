@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\WhatsApp;
 
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 use Illuminate\Support\Facades\Log;
 
 class MetaMediaService
@@ -20,7 +20,8 @@ class MetaMediaService
 
         $accessToken = $this->accessToken();
 
-        $response = Http::withToken($accessToken)
+        $response = OutboundHttp::to('meta')
+            ->withToken($accessToken)
             ->get("https://graph.facebook.com/v21.0/{$mediaId}");
 
         if (! $response->successful()) {
@@ -38,11 +39,22 @@ class MetaMediaService
             return null;
         }
 
-        $mediaBytes = Http::withToken($accessToken)->get($mediaUrl)->body();
+        $download = OutboundHttp::to('meta')->withToken($accessToken)->get($mediaUrl);
+
+        // Esta descarga no miraba su propio status: `->body()` sobre una
+        // respuesta 500 devuelve el cuerpo del error, y ese texto seguia viaje
+        // hasta Gemini como si fueran los bytes de una imagen. Una llamada
+        // gastada para leer un mensaje de error de Meta.
+        if (! $download->successful() || $download->body() === '') {
+            Log::error("❌ WhatsApp: falló la descarga del media {$mediaId}.");
+
+            return null;
+        }
+
         Log::info('⬇️ Media descargada exitosamente.');
 
         return [
-            'bytes' => $mediaBytes,
+            'bytes' => $download->body(),
             'mimeType' => $mimeType,
         ];
     }

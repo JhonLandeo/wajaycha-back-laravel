@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Capture;
 
 use App\DTOs\Capture\CapturedMedia;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -35,7 +35,7 @@ class TelegramChannel implements CaptureChannel
     {
         $token = $this->botToken();
 
-        $response = Http::get("https://api.telegram.org/bot{$token}/getFile", [
+        $response = OutboundHttp::to('telegram')->get("https://api.telegram.org/bot{$token}/getFile", [
             'file_id' => $mediaReference,
         ]);
 
@@ -47,7 +47,7 @@ class TelegramChannel implements CaptureChannel
             return null;
         }
 
-        $download = Http::get("https://api.telegram.org/file/bot{$token}/{$path}");
+        $download = OutboundHttp::to('telegram')->get("https://api.telegram.org/file/bot{$token}/{$path}");
 
         if (! $download->successful() || $download->body() === '') {
             // Un 200 con cuerpo vacio no se distingue de un archivo real vacio, y
@@ -65,7 +65,9 @@ class TelegramChannel implements CaptureChannel
     {
         $token = $this->botToken();
 
-        $response = Http::post("https://api.telegram.org/bot{$token}/sendMessage", [
+        // Perfil aparte del de lectura: sendMessage no es idempotente, asi que
+        // reintenta una sola vez. El intercambio esta anotado en config/http.php.
+        $response = OutboundHttp::to('telegram_send')->post("https://api.telegram.org/bot{$token}/sendMessage", [
             'chat_id' => $externalId,
             'text' => $text,
         ]);

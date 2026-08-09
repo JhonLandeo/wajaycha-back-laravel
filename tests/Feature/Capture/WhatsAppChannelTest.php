@@ -65,5 +65,10 @@ it('no lanza cuando Meta rechaza el envio de la respuesta', function () {
     // y hacer fallar el job la duplicaria en el reintento.
     $this->channel->reply('51999888777', 'Comprobante registrado');
 
-    Http::assertSentCount(1);
+    // Antes era 1, o sea "no reintentamos". Ahora son 2: 429 es transitorio y
+    // merece un segundo intento. Uno solo, porque el endpoint de mensajes de
+    // Meta es una escritura sin clave de idempotencia — el mismo limite que
+    // `telegram_send`, por el mismo motivo. Lo que este caso protege sigue
+    // siendo lo de arriba: llegar aca sin excepcion.
+    Http::assertSentCount(2);
 });

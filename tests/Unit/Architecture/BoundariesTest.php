@@ -194,7 +194,7 @@ arch('an enum depends on nothing')
  * change next has business in them.
  */
 arch('the newer namespaces declare strict types')
-    ->expect(['App\DTOs', 'App\Enums', 'App\Services\Capture', 'App\Services\Coaching'])
+    ->expect(['App\DTOs', 'App\Enums', 'App\Services\Capture', 'App\Services\Coaching', 'App\Support'])
     ->toUseStrictTypes()
     ->ignoring([
         'App\DTOs\TransactionDataDTO',
