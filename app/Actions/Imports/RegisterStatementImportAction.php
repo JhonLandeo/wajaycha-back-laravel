@@ -46,6 +46,7 @@ class RegisterStatementImportAction
                 $statement->storedPath,
                 $financialEntityId,
                 $this->statementYear($statement->originalName),
+                $this->statementMonth($statement->originalName),
                 $password,
             )->afterCommit();
 
@@ -65,5 +66,20 @@ class RegisterStatementImportAction
     private function statementYear(string $originalName): int
     {
         return (int) substr($originalName, 6, 4);
+    }
+
+    /**
+     * The month the statement was issued, read from characters 5-6 of its
+     * filename — `EECC` `06` `2023` `_06703564.pdf`.
+     *
+     * Positional like `statementYear()` and just as fragile, but the parser needs
+     * it: a statement covers the month before the one it is issued in, so the
+     * issue month is the only thing that says whether a December movement in a
+     * January statement belongs to the previous year. See
+     * `StatementLineParser::readDate()`.
+     */
+    private function statementMonth(string $originalName): int
+    {
+        return (int) substr($originalName, 4, 2);
     }
 }

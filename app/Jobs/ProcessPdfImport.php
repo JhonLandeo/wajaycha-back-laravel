@@ -8,6 +8,7 @@ use App\Models\Detail;
 use App\Models\Import;
 use App\Models\Transaction;
 use App\Services\CategorizationService;
+use App\Services\Imports\StatementLineParser;
 use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
@@ -41,19 +42,41 @@ class ProcessPdfImport implements ShouldQueue
 
     protected int $year;
 
-    protected string $password;
+    /**
+     * Con default a propósito. Los jobs encolados se restauran con
+     * `unserialize()`, que nunca pasa por el constructor, y
+     * `SerializesModels::__unserialize()` saltea toda propiedad que no venga en
+     * el payload. Un job encolado antes de que existiera `$month` quedaría con
+     * la propiedad sin inicializar y leerla lanzaría
+     * `Error: Typed property must not be accessed before initialization`
+     * adentro del try, que el catch convierte en un import FAILED con un
+     * mensaje incomprensible y sin reintento.
+     *
+     * El 0 significa "mes de emisión desconocido", y `StatementLineParser`
+     * lo interpreta como el comportamiento anterior al cambio: no retroceder
+     * el año. Un job viejo se procesa como se hubiera procesado antes.
+     */
+    protected int $month = 0;
+
+    // Declarada `string` mientras la Action ya pasaba `?string`: construir el job
+    // sin contraseña tiraba `TypeError: Cannot assign null to property of type
+    // string` dentro de la transacción de RegisterStatementImportAction. Hoy no
+    // se alcanza porque PdfRequest exige el campo, pero el día que la contraseña
+    // sea opcional —no todo extracto viene encriptado— eso es un 500.
+    protected ?string $password;
 
     protected CategorizationService $categorizationService;
 
     protected TransactionAnalyzer $transactionAnalyzer;
 
-    public function __construct(int $importId, int $userId, string $storedPath, int $accountId, int $year, ?string $password)
+    public function __construct(int $importId, int $userId, string $storedPath, int $accountId, int $year, int $month, ?string $password)
     {
         $this->importId = $importId;
         $this->userId = $userId;
         $this->storedPath = $storedPath;
         $this->accountId = $accountId;
         $this->year = $year;
+        $this->month = $month;
         $this->password = $password;
         $this->categorizationService = app(CategorizationService::class);
         $this->transactionAnalyzer = app(TransactionAnalyzer::class);
@@ -64,10 +87,16 @@ class ProcessPdfImport implements ShouldQueue
         Import::where('id', $this->importId)->update(['status' => ImportStatus::PROCESSING]);
         $filePath = Storage::path($this->storedPath);
 
+        // `decryptPdf()` escribe una copia SIN CONTRASEÑA del extracto en
+        // storage/app/private/. Antes no se borraba nunca: ni al terminar bien ni
+        // en el catch, así que cada import encriptado dejaba el estado de cuenta
+        // en texto plano acumulándose en disco. Se limpia en el finally.
+        $decryptedPath = null;
+
         try {
             DB::beginTransaction();
             if ($this->isEncrypted($filePath)) {
-                $filePath = $this->decryptPdf($filePath, $this->password);
+                $filePath = $decryptedPath = $this->decryptPdf($filePath, (string) $this->password);
             }
 
             $text = $this->extractTextFromPdf($filePath);
@@ -75,49 +104,9 @@ class ProcessPdfImport implements ShouldQueue
                 $text = (new TesseractOCR($filePath))->run();
             }
 
-            $lines = explode("\n", $text);
-            $parsedTransactions = [];
-
-            foreach ($lines as $line) {
-                if (preg_match('/(\d{2}[A-Z]{3})\s+(\d{2}[A-Z]{3})/', $line, $matches)) {
-                    $line_subtracted = explode(' ', substr($line, 0, -1));
-                    $description = '';
-                    for ($i = 2; $i < count($line_subtracted); $i++) {
-                        if (trim($line_subtracted[$i]) === '') {
-                            break;
-                        }
-                        $description .= $line_subtracted[$i].' ';
-                    }
-                    $description = trim($description);
-                    $income = $expense = null;
-
-                    foreach ($line_subtracted as $index => $item) {
-                        $itemCleaned = $item;
-                        if (strpos($itemCleaned, '.') !== false) {
-                            if ($index === count($line_subtracted) - 1) {
-                                $income = $itemCleaned;
-                            } else {
-                                $expense = $itemCleaned;
-                            }
-                        }
-                    }
-
-                    $income = $income ?? 0;
-                    $expense = $expense ?? 0;
-                    $day = substr($line_subtracted[1], 0, 2);
-                    $month = substr($line_subtracted[1], 2);
-                    $monthFormat = $month == 'SET' ? 'SEP' : $month;
-                    $dayMonth = $day.$monthFormat;
-                    $parsedTransactions[] = new TransactionDataDTO(
-                        amount: $income == 0 ? floatval(str_replace(',', '', $expense)) : floatval(str_replace(',', '', $income)),
-                        date_operation: Carbon::createFromLocaleFormat('dM', 'es', $dayMonth)->setYear($this->year)->format('Y-m-d'),
-                        type_transaction: $income == 0 ? 'expense' : 'income',
-                        description: $description
-                    );
-                }
-            }
-
-            $this->processParsedTransactions($parsedTransactions);
+            $this->processParsedTransactions(
+                app(StatementLineParser::class)->parse($text, $this->year, $this->month)
+            );
 
             Import::where('id', $this->importId)->update(['status' => ImportStatus::COMPLETED]);
             DB::commit();
@@ -128,6 +117,10 @@ class ProcessPdfImport implements ShouldQueue
                 'status' => ImportStatus::FAILED,
                 'error_message' => $th->getMessage(),
             ]);
+        } finally {
+            if ($decryptedPath !== null && is_file($decryptedPath)) {
+                @unlink($decryptedPath);
+            }
         }
     }
 

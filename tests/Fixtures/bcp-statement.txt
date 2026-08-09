@@ -1,0 +1,76 @@
+BANCO DE CREDITO DEL PERU                                                 
+ESTADO DE CUENTA - CUENTA DE AHORROS 000-00000000-0-00                    
+FECHA      FECHA     DESCRIPCION OPERACION            CARGO         ABONO 
+01MAY 01MAY PANA BODE a 060684                   08.13                    
+01MAY 01MAY GRIFO                 *               2.33                    
+01MAY 01MAY GRIFO                 *                                 83.33 
+01MAY 01MAY FAR*MERCA TIENDA                     71.33                    
+02MAY 02MAY GRIFO                 *               2.33                    
+03MAY 03MAY POLL.LIBR.PANA.BM     *                              7,333.33 
+03MAY 03MAY PANA BODE a 064426                    5.93                    
+03MAY 03MAY PANA BODE a 064617                   04.43                    
+03MAY 03MAY PANA BODE a 483630                   03.33                    
+03MAY 03MAY BODEG  *GRIFOPRIMA                    1.33                    
+03MAY 03MAY GRIFO                 *               2.33                    
+04MAY 04MAY FARM MERC BODE                      731.00                    
+04MAY 04MAY GRIFO                 *               2.33                    
+04MAY 04MAY PANA BODE a 300002                   47.93                    
+04MAY 04MAY TIEND POL LIBRER C                   98.78                    
+04MAY 04MAY PANA BODE a 060236                    3.03                    
+05MAY 05MAY GRIFO                 *               2.33                    
+06MAY 06MAY GRIFO                 *               2.33                    
+07MAY 07MAY GRIFO                 *               2.33                    
+09MAY 09MAY YQ-FAR*PANADERIAS                    05.33                    
+10MAY 10MAY YQ-FAR*PANADERIAS                     0.33                    
+10MAY 10MAY PANA BODE a 064349                   05.33                    
+11MAY 11MAY PANA BODE a 064784                   04.13                    
+11MAY 11MAY PANA BODE a 064290                   09.23                    
+11MAY 11MAY PANA BODE a 064301                   43.23                    
+11MAY 11MAY PANA BODE a 773377                  033.33                    
+12MAY 12MAY YQ-FAR*PANADERIAS                     2.83                    
+12MAY 12MAY BODE GRIF-FARMAC Q    *                                733.33 
+12MAY 12MAY PANA BODE de 06023                                     733.33 
+13MAY 13MAY GRIFO                 *              73.33                    
+13MAY 13MAY POLL.LIBR.MERC.BM                   933.33                    
+15MAY 15MAY YQ-FAR*PANADERIAS                     9.83                    
+15MAY 15MAY TIEN363672956686                    417.33                    
+15MAY 15MAY YC-BODEG  *POLLERI                    9.83                    
+16MAY 16MAY PANA BODE a 064331                    8.33                    
+17MAY 17MAY PANA BODE a 061320                   06.33                    
+18MAY 18MAY YQ-FAR*PANADERIAS                     7.33                    
+18MAY 18MAY PANA BODE a 060281                   07.83                    
+18MAY 18MAY PANA BODE a 064426                   72.23                    
+18MAY 18MAY PANA BODE a 064210                   09.03                    
+18MAY 18MAY PANA BODE a 064267                   78.33                    
+18MAY 18MAY PANA BODE a 064617                   87.93                    
+18MAY 18MAY PANA BODE a 061286                    9.53                    
+18MAY 18MAY PANA BODE a 064349                    9.33                    
+18MAY 18MAY PANA BODE a 064477                   18.33                    
+18MAY 18MAY BODE GRIF-LIBR PAN    *                                 08.33 
+18MAY 18MAY PANA BODE a 060489                   13.33                    
+18MAY 18MAY PANA BODE a 060130                   73.33                    
+18MAY 18MAY PANA BODE a 060471                   79.33                    
+18MAY 18MAY BODE GRIF-LIBR PAN    *                                 23.33 
+20MAY 20MAY PANA BODE a 060236                   73.33                    
+22MAY 22MAY YQ-FAR*PANADERIAS                     8.83                    
+22MAY 22MAY PANA BODE a 064422                    4.33                    
+24MAY 24MAY PANA BODE a 064331                    8.33                    
+24MAY 24MAY GRIF-BODEG GRIFO M                    6.13                    
+24MAY 24MAY FARMAC AG 696100                     53.33                    
+24MAY 24MAY MERCA  TIENDAELS                    093.33                    
+24MAY 24MAY POLLER                               16.33                    
+24MAY 24MAY PANA BODE a 773626                   73.33                    
+24MAY 24MAY PANA BODE a 064671                   03.53                    
+25MAY 25MAY PANA BODE a 064426                   40.33                    
+25MAY 25MAY POLL.LIBR.PANA.BM     *                                083.33 
+25MAY 25MAY PANA BODE a 064617                   65.83                    
+25MAY 25MAY PANA BODE a 061305                    6.33                    
+25MAY 25MAY PANA BODE a 060386                   08.33                    
+26MAY 26MAY GRIFO                 *               2.83                    
+27MAY 27MAY PANA BODE a 060281                   78.13                    
+28MAY 28MAY YQ-FAR*PANADERIAS                     7.33                    
+28MAY 28MAY BODE GRIF-LIBR PAN    *                                 88.33 
+29MAY 29MAY LIBRE PAN MI LIBRE                   76.63                    
+30MAY 30MAY PANA BODE a 060684                   03.33                    
+30MAY 30MAY PANA BODE a 060281                   04.63                    
+30MAY 30MAY BODE. GRIFOP FAR78    0               3.33                    

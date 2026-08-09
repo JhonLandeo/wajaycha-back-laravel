@@ -47,11 +47,17 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
         }
 
         // Parseo de Fechas
-        $dateOperation = null;
         $dateString = $row['Fecha de operación'];
-        if (Carbon::hasFormat($dateString, 'd/m/Y H:i:s')) {
-            $dateOperation = Carbon::createFromFormat('d/m/Y H:i:s', $dateString)->format('Y-m-d H:i:s');
+        if (! Carbon::hasFormat($dateString, 'd/m/Y H:i:s')) {
+            // `date_operation` es NOT NULL. Dejar pasar la fila con la fecha en
+            // null hacía que el insert abortara con SQLSTATE 23502 y se cayera
+            // el import completo, no solo la fila defectuosa. Una fecha que no
+            // se puede parsear deja la fila inutilizable igual que un campo
+            // vacío, así que se descarta con el mismo criterio.
+            return null;
         }
+
+        $dateOperation = Carbon::createFromFormat('d/m/Y H:i:s', $dateString)->format('Y-m-d H:i:s');
 
         // Lógica de Duplicados (Transacción)
         $toleranceInSeconds = 60;
