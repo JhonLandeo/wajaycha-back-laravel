@@ -67,7 +67,23 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            // Must exceed the longest `$timeout` of any job that runs on this
+            // connection, and by a margin. `retry_after` is how long a reserved
+            // job may stay reserved before the queue assumes the worker died and
+            // hands it to someone else — so a value below a job's own timeout
+            // means a second worker picks up a job that is still running.
+            //
+            // At 90 that was true of all three jobs that declare a timeout:
+            // ProcessTelegramCapture (180), ProcessExcelImport (500) and
+            // ProcessPdfImport (600). With `tries: 1` the second worker fails the
+            // job immediately and tells the sender it broke, while the first one
+            // goes on to finish and confirm — a Transaction registered and denied
+            // in the same breath, which is how a user ends up sending the same
+            // receipt twice.
+            //
+            // `QueueRetryAfterTest` derives the maximum from the job classes
+            // themselves and fails if any of them ever grows past this value.
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 660),
             'block_for' => null,
             'after_commit' => false,
         ],

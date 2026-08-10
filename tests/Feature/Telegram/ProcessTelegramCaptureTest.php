@@ -53,6 +53,7 @@ function runTelegramJob(
     ?string $text = null,
     ?string $mediaReference = null,
     ?ParsedReceiptDTO $parsed = null,
+    bool $unsupported = false,
 ): void {
     $vision = Mockery::mock(GeminiVisionService::class);
     $vision->shouldReceive('parseReceipt')->andReturn($parsed);
@@ -60,7 +61,7 @@ function runTelegramJob(
     $textService = Mockery::mock(GeminiTextService::class);
     $textService->shouldReceive('parseText')->andReturn($parsed);
 
-    (new ProcessTelegramCapture($chatId, $text, $mediaReference))->handle(
+    (new ProcessTelegramCapture($chatId, $text, $mediaReference, $unsupported))->handle(
         app(CaptureChannelRegistry::class),
         app(ChannelIdentityResolver::class),
         app(ChannelLinkTokenRedeemer::class),
@@ -196,8 +197,13 @@ it('avisa y no registra cuando el medio de la foto no se puede descargar', funct
 
     runTelegramJob('123456789', null, 'file-inexistente', CaptureFixtures::validMovement());
 
+    // Bajar el archivo y leerlo son dos fallos distintos y se dicen distinto.
+    // "No pude leer ese envio" ante una descarga fallida le echaba la culpa a la
+    // foto del usuario por una caida nuestra, y el usuario respondia sacando la
+    // foto otra vez — que falla igual mientras dure la caida.
     expect(Transaction::count())->toBe(0)
-        ->and(lastTelegramReply())->toContain('No pude leer');
+        ->and(lastTelegramReply())->toContain('No pude descargar tu comprobante')
+        ->and(lastTelegramReply())->toContain('problema nuestro');
 });
 
 it('avisa y no registra cuando la IA no lee la foto', function () {
@@ -217,4 +223,64 @@ it('avisa y no registra cuando la foto no es un comprobante', function () {
     // La foto se descargo bien y Gemini la leyo: simplemente no era un movimiento.
     expect(Transaction::count())->toBe(0)
         ->and(lastTelegramReply())->toContain('no parece un movimiento');
+});
+
+it('le avisa al remitente cuando el tipo de mensaje no se puede leer', function () {
+    telegramSender();
+
+    // Una nota de voz, un sticker, un documento. El controlador ya decidio que no
+    // hay nada que parsear; esto llega a la cola solo para que el remitente no se
+    // quede en silencio, porque la entrega ya quedo reclamada y Telegram no la
+    // reenvia. Todas las demas ramas de fallo contestan; el silencio se leia como
+    // que el bot estaba caido.
+    runTelegramJob('123456789', null, null, null, true);
+
+    expect(Transaction::count())->toBe(0)
+        ->and(lastTelegramReply())->toContain('Todavía no puedo leer ese tipo de mensaje');
+});
+
+it('no le pide a Gemini que parsee un mensaje que ya se sabe ilegible', function () {
+    telegramSender();
+
+    $vision = Mockery::mock(GeminiVisionService::class);
+    $vision->shouldNotReceive('parseReceipt');
+
+    $textService = Mockery::mock(GeminiTextService::class);
+    $textService->shouldNotReceive('parseText');
+
+    // Una llamada a Gemini cuesta dinero real. La rama de aviso corta antes.
+    (new ProcessTelegramCapture('123456789', null, null, true))->handle(
+        app(CaptureChannelRegistry::class),
+        app(ChannelIdentityResolver::class),
+        app(ChannelLinkTokenRedeemer::class),
+        $vision,
+        $textService,
+        app(App\Actions\Capture\RegisterCapturedTransactionAction::class),
+    );
+
+    expect(lastTelegramReply())->toContain('Todavía no puedo leer');
+});
+
+it('rechaza un movimiento valido que vino sin monto, en vez de romper contra la base', function () {
+    telegramSender();
+
+    // `isValid` y `amount` los arma el DTO por separado desde la respuesta de
+    // Gemini, y nada los ata: el acoplamiento vive solo como una frase en el
+    // prompt. Sin este control el null llegaba a una columna NOT NULL, el job
+    // explotaba y el usuario recibia el mensaje generico de error inesperado en
+    // lugar del que describe lo que realmente paso.
+    $sinMonto = new ParsedReceiptDTO(
+        isValid: true,
+        amount: null,
+        destination: 'Mercado Central',
+        origin: 'Yape',
+        dateOperation: '2026-08-09',
+        type: 'expense',
+        message: null,
+    );
+
+    runTelegramJob('123456789', 'gaste no se cuanto', null, $sinMonto);
+
+    expect(Transaction::count())->toBe(0)
+        ->and(lastTelegramReply())->toContain('no parece un movimiento con monto');
 });

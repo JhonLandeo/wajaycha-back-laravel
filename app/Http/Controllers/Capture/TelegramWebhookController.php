@@ -13,6 +13,7 @@ use App\Support\Redact;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class TelegramWebhookController extends Controller
 {
@@ -37,8 +38,15 @@ class TelegramWebhookController extends Controller
      * - Iteration over every update, so a batched delivery does not silently drop
      *   all but the first.
      *
-     * It always answers 200: a non-2xx makes Telegram redeliver, and a payload we
-     * cannot use will not become usable on the second attempt.
+     * It answers 200 for everything it managed to decide about — including a
+     * payload it cannot use, which will not become usable on the second attempt,
+     * so making Telegram redeliver it buys nothing.
+     *
+     * The one case that does earn a non-2xx is failing to hand the work off at
+     * all. That is not a verdict on the delivery, it is the absence of one, and
+     * it is temporary by nature: the queue comes back. Answering 200 there would
+     * combine with the claim above to lose the movement for good — the claim
+     * refuses the redelivery, and nothing else is holding the work.
      */
     public function receive(Request $request, ChannelUpdateDeduplicator $dedup, TelegramChannel $telegram): Response
     {
@@ -67,7 +75,19 @@ class TelegramWebhookController extends Controller
                 continue;
             }
 
-            $this->dispatchUpdate($update, $telegram);
+            try {
+                $this->dispatchUpdate($update, $telegram);
+            } catch (Throwable $e) {
+                // El claim prometia que alguien se hacia cargo, y nadie se hizo
+                // cargo: se devuelve para que la reentrega no choque contra el
+                // indice unico y se descarte.
+                $dedup->release('telegram', $updateId);
+
+                Log::error('❌ Telegram: no se pudo encolar la entrega, se pide la reentrega. '
+                    .Redact::secrets($e->getMessage()));
+
+                return response('Encolado no disponible', 500);
+            }
         }
 
         return response('OK', 200);
@@ -113,7 +133,8 @@ class TelegramWebhookController extends Controller
             $fileId = $telegram->largestPhotoUnder($message['photo']);
 
             if ($fileId === null) {
-                Log::warning('ℹ️ Telegram: ninguna variante utilizable del chat '.Redact::id($chatId).', se ignora.');
+                Log::warning('ℹ️ Telegram: ninguna variante utilizable del chat '.Redact::id($chatId).'.');
+                ProcessTelegramCapture::dispatch($chatId, null, null, true);
 
                 return;
             }
@@ -129,7 +150,12 @@ class TelegramWebhookController extends Controller
             return;
         }
 
-        Log::info('ℹ️ Telegram: tipo de mensaje no soportado del chat '.Redact::id($chatId).', se ignora.');
+        // No se ignora en silencio. La entrega ya quedo reclamada y Telegram no la
+        // va a reenviar, asi que si no se contesta aca el remitente no recibe
+        // absolutamente nada — y todas las demas ramas de fallo si contestan, con
+        // lo cual el silencio se lee como que el bot esta caido.
+        Log::info('ℹ️ Telegram: tipo de mensaje no soportado del chat '.Redact::id($chatId).'.');
+        ProcessTelegramCapture::dispatch($chatId, null, null, true);
     }
 
     /**

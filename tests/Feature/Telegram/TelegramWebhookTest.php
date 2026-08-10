@@ -95,9 +95,11 @@ it('sigue con el resto cuando un update de la tanda no es utilizable', function 
         textUpdate(22, 'gaste 22'),
     ])->assertOk();
 
-    // Dos encolados, tres recordados: el no soportado tambien se marca, porque
-    // reintentarlo no lo va a volver utilizable.
-    Queue::assertPushed(ProcessTelegramCapture::class, 2);
+    // Tres y tres. El no soportado tambien se marca, porque reintentarlo no lo va
+    // a volver utilizable, y tambien se encola: no para parsearlo sino para
+    // avisarle al remitente. Antes se ignoraba en silencio, y como la entrega ya
+    // quedaba reclamada, esa persona no recibia nada nunca.
+    Queue::assertPushed(ProcessTelegramCapture::class, 3);
     expect(ProcessedChannelUpdate::count())->toBe(3);
 });
 
@@ -171,7 +173,7 @@ it('acota cuantos updates procesa de una sola entrega', function () {
     expect(ProcessedChannelUpdate::count())->toBe(100);
 });
 
-it('no encola nada cuando ninguna variante de la foto entra en el limite', function () {
+it('no manda a parsear una foto sin ninguna variante utilizable, pero si avisa', function () {
     postUpdate([
         'update_id' => 50,
         'message' => [
@@ -181,8 +183,14 @@ it('no encola nada cuando ninguna variante de la foto entra en el limite', funct
     ])->assertOk();
 
     // Elegir la variante es conocimiento de Telegram y vive en este borde, asi que
-    // una foto inservible ni siquiera llega a la cola.
-    Queue::assertNothingPushed();
+    // una foto inservible no llega a Gemini. Lo que si llega a la cola es el aviso
+    // al remitente, que antes no existia.
+    Queue::assertPushed(function (ProcessTelegramCapture $job) {
+        $reflection = new ReflectionClass($job);
+
+        return $reflection->getProperty('unsupported')->getValue($job) === true
+            && $reflection->getProperty('mediaReference')->getValue($job) === null;
+    });
     expect(ProcessedChannelUpdate::count())->toBe(1);
 });
 
@@ -202,5 +210,41 @@ it('encola el file id ya elegido, no el arreglo de variantes', function () {
         $prop = (new ReflectionClass($job))->getProperty('mediaReference');
 
         return $prop->getValue($job) === 'grande';
+    });
+});
+
+it('libera el claim y pide la reentrega cuando no se puede encolar', function () {
+    // El claim promete que alguien se hace cargo. Si el encolado falla, nadie se
+    // hizo cargo: dejar la fila puesta y contestar 200 borraba el movimiento del
+    // usuario para siempre, porque la reentrega la rechaza el propio indice unico.
+    Queue::shouldReceive('push')->andThrow(new RuntimeException('Redis caido'));
+
+    postUpdate(textUpdate(70, 'gaste 20 en el mercado', '987654321'))
+        ->assertStatus(500);
+
+    expect(ProcessedChannelUpdate::count())->toBe(0);
+});
+
+it('contesta 200 y deja el claim puesto cuando el encolado funciona', function () {
+    // El contrapeso del caso anterior: sin esto, un controlador que devolviera
+    // 500 siempre lo pasaria igual.
+    postUpdate(textUpdate(71, 'gaste 20 en el mercado', '987654321'))->assertOk();
+
+    expect(ProcessedChannelUpdate::count())->toBe(1);
+});
+
+it('encola un aviso cuando el tipo de mensaje no se puede leer', function () {
+    postUpdate([
+        'update_id' => 72,
+        'message' => ['chat' => ['id' => 987654321], 'voice' => ['file_id' => 'nota-de-voz']],
+    ])->assertOk();
+
+    // Antes esto se ignoraba en silencio. Como la entrega ya quedo reclamada y
+    // Telegram no la reenvia, el remitente no recibia absolutamente nada.
+    Queue::assertPushed(function (ProcessTelegramCapture $job) {
+        $reflection = new ReflectionClass($job);
+
+        return $reflection->getProperty('unsupported')->getValue($job) === true
+            && $reflection->getProperty('chatId')->getValue($job) === '987654321';
     });
 });

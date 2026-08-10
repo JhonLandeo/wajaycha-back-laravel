@@ -45,4 +45,27 @@ class ChannelUpdateDeduplicator
             return false;
         }
     }
+
+    /**
+     * Gives the claim back, so the delivery can be accepted again.
+     *
+     * A claim is a promise that the work was taken on. When whatever was meant
+     * to take it on never got the chance — a queue that will not accept the
+     * dispatch — the promise is false, and leaving the row behind means the
+     * delivery can never be retried: the sender's movement is gone with no error
+     * anywhere, because the redelivery is refused by this very class.
+     *
+     * Releasing is only correct BEFORE the work is handed off. Once the job is
+     * queued the row stays, whatever becomes of the job — that is the duplicate
+     * this class exists to prevent.
+     */
+    public function release(string $channel, string $externalUpdateId): void
+    {
+        ProcessedChannelUpdate::query()
+            ->where('channel', $channel)
+            ->where('external_update_id', $externalUpdateId)
+            ->delete();
+
+        Log::warning("↩️ {$channel}: se libera la entrega {$externalUpdateId} para que pueda reintentarse.");
+    }
 }

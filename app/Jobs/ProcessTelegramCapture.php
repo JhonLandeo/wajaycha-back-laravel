@@ -51,6 +51,13 @@ class ProcessTelegramCapture implements ShouldQueue
      * The number is not tuned by feel: `OutboundHttpBudgetTest` derives the sum
      * from config and fails if it ever exceeds this value, so raising a timeout
      * or a retry in `config/http.php` cannot silently outgrow the job again.
+     *
+     * It has a ceiling as well as a floor, and the first version of this comment
+     * only reasoned about the floor. `queue.connections.redis.retry_after` is how
+     * long the queue lets a job stay reserved before assuming the worker died —
+     * it was 90, well under this 180, so a slow capture was handed to a second
+     * worker while the first was still running it. `QueueRetryAfterTest` now
+     * pins that direction too.
      */
     public int $timeout = 180;
 
@@ -63,11 +70,16 @@ class ProcessTelegramCapture implements ShouldQueue
 
     /**
      * @param  string|null  $mediaReference  The already-chosen file id, if this was a photo.
+     * @param  bool  $unsupported  The delivery had a sender but nothing this
+     *                             pipeline can read — a sticker, a voice note, a
+     *                             photo with no usable rendition. It still gets a
+     *                             reply, which is why it becomes a job at all.
      */
     public function __construct(
         private readonly string $chatId,
         private readonly ?string $text = null,
         private readonly ?string $mediaReference = null,
+        private readonly bool $unsupported = false,
     ) {}
 
     public function handle(
@@ -102,27 +114,52 @@ class ProcessTelegramCapture implements ShouldQueue
             return;
         }
 
-        // 3. PARSEAR: foto o texto, mismo destino
-        $parsed = $this->mediaReference !== null
-            ? $this->parsePhoto($channel, $vision)
-            : $textService->parseText((string) $this->text);
-
-        if (! $parsed) {
-            $channel->reply($this->chatId, '❌ No pude leer ese envío. Intenta de nuevo o contacta con soporte si el problema persiste.');
+        // 3. AVISAR CUANDO NO HAY NADA QUE PARSEAR
+        if ($this->unsupported) {
+            $channel->reply($this->chatId, '❌ Todavía no puedo leer ese tipo de mensaje. Envíame una foto del comprobante o dime cuánto gastaste.');
 
             return;
         }
 
-        if (! $parsed->isValid) {
+        // 4. PARSEAR: foto o texto, mismo destino
+        if ($this->mediaReference !== null) {
+            $media = $channel->fetchMedia((string) $this->mediaReference);
+
+            if ($media === null) {
+                // Bajar el archivo y leerlo son dos fallos distintos y se dicen
+                // distinto. Colapsarlos en "no pude leer ese envio" le echaba la
+                // culpa a la foto del usuario por una caida nuestra, y el usuario
+                // reaccionaba sacando la foto de nuevo — que falla igual.
+                $channel->reply($this->chatId, '❌ No pude descargar tu comprobante de Telegram. Es un problema nuestro: vuelve a enviarlo en un momento.');
+
+                return;
+            }
+
+            $parsed = $vision->parseReceipt($media->bytes, $media->mimeType);
+        } else {
+            $parsed = $textService->parseText((string) $this->text);
+        }
+
+        if (! $parsed) {
+            $channel->reply($this->chatId, '❌ No pude leer ese envío ahora mismo. Vuelve a intentarlo en unos minutos.');
+
+            return;
+        }
+
+        // Un monto nulo no lo tapa `isValid`: el DTO los arma por separado desde
+        // la respuesta de Gemini y nada los ata. Sin este control el null llega a
+        // una columna NOT NULL, el job explota y el usuario recibe el mensaje
+        // generico de error en vez de este, que es el que corresponde.
+        if (! $parsed->isValid || $parsed->amount === null) {
             $channel->reply($this->chatId, '❌ Eso no parece un movimiento con monto. Envíame un comprobante o dime cuánto gastaste.');
 
             return;
         }
 
-        // 4. REGISTRAR (ORQUESTACION)
+        // 5. REGISTRAR (ORQUESTACION)
         $transaction = $registerAction->execute($user, $parsed);
 
-        // 5. CONFIRMAR
+        // 6. CONFIRMAR
         $isExpense = $parsed->type === 'expense';
         $description = $isExpense ? $parsed->destination : $parsed->origin;
         $channel->reply(
@@ -131,7 +168,7 @@ class ProcessTelegramCapture implements ShouldQueue
                 .($isExpense ? ' pagado a ' : ' recibido de ').$description.'.'
         );
 
-        // 6. COACHEAR (opcional, jamas debe romper una captura ya confirmada;
+        // 7. COACHEAR (opcional, jamas debe romper una captura ya confirmada;
         //    design.md §5.3). Un gasto sin categoria no puede acusar a nadie,
         //    y un ingreso no tiene presupuesto que rebasar.
         if ($isExpense && $transaction->category_id !== null) {
@@ -204,12 +241,5 @@ class ProcessTelegramCapture implements ShouldQueue
         // Una sola respuesta para todo rechazo. Distinguir "vencido" de "inexistente"
         // le diria a un curioso que tokens son reales.
         $channel->reply($this->chatId, '❌ Ese enlace no es válido o ya fue usado. Genera uno nuevo desde la app.');
-    }
-
-    private function parsePhoto(CaptureChannel $channel, GeminiVisionService $vision): mixed
-    {
-        $media = $channel->fetchMedia((string) $this->mediaReference);
-
-        return $media ? $vision->parseReceipt($media->bytes, $media->mimeType) : null;
     }
 }
