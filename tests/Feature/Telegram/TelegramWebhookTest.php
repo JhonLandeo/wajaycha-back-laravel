@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Middleware\VerifyTelegramSecretToken;
 use App\Jobs\ProcessTelegramCapture;
 use App\Models\ProcessedChannelUpdate;
+use App\Services\Capture\ChannelLinkTokenRedeemer;
 use App\Services\Capture\TelegramChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -115,7 +116,7 @@ it('responde 200 ante un cuerpo que no tiene forma de update', function () {
 });
 
 it('pasa el texto y el chat id tal como llegaron', function () {
-    postUpdate(textUpdate(40, '/start un-token', '987654321'))->assertOk();
+    postUpdate(textUpdate(40, 'gaste 20 en el mercado', '987654321'))->assertOk();
 
     Queue::assertPushed(function (ProcessTelegramCapture $job) {
         $reflection = new ReflectionClass($job);
@@ -124,7 +125,23 @@ it('pasa el texto y el chat id tal como llegaron', function () {
         $text = $reflection->getProperty('text');
 
         return $chatId->getValue($job) === '987654321'
-            && $text->getValue($job) === '/start un-token';
+            && $text->getValue($job) === 'gaste 20 en el mercado';
+    });
+});
+
+it('reemplaza el token de /start por su digest antes de despachar', function () {
+    postUpdate(textUpdate(41, '/start un-token', '987654321'))->assertOk();
+
+    Queue::assertPushed(function (ProcessTelegramCapture $job) {
+        $text = (new ReflectionClass($job))->getProperty('text')->getValue($job);
+
+        // El payload de un job despachado es durable: vive en Redis y, ante
+        // cualquier fallo previo al canje, queda copiado para siempre en
+        // failed_jobs.payload, que Horizon muestra en el navegador. Mandar el
+        // token en claro reintroducia una capa mas abajo justamente el plaintext
+        // que channel_link_tokens evita guardando solo token_hash.
+        return $text === '/start '.ChannelLinkTokenRedeemer::hash('un-token')
+            && ! str_contains($text, 'un-token');
     });
 });
 

@@ -28,6 +28,16 @@ final class Redact
      */
     private const DIGEST_LENGTH = 10;
 
+    /** What a credential is replaced by, in any text that reaches a log. */
+    private const SECRET_MARKER = '<secreto>';
+
+    /**
+     * Below this length a configured value is not a credential — it is a
+     * placeholder or an empty-ish leftover, and replacing it would shred the
+     * line instead of protecting it.
+     */
+    private const MIN_SECRET_LENGTH = 8;
+
     /**
      * A stable pseudonym for a phone number, a chat id or any other handle that
      * points at a person.
@@ -87,6 +97,74 @@ final class Redact
         $length = mb_strlen(trim($value));
 
         return $length === 0 ? '<vacío>' : "<texto: {$length} caracteres>";
+    }
+
+    /**
+     * The same text with every credential this application holds replaced by a
+     * marker.
+     *
+     * This exists for one reason: the Telegram Bot API puts the bot token in the
+     * URL path, and Gemini puts its key in the query string. When an outbound
+     * call cannot complete, Guzzle raises a `ConnectionException` whose message
+     * ends with the full request URI — so `$exception->getMessage()` carries the
+     * credential, and every `Log::error('...: '.$e->getMessage())` writes it to
+     * `storage/logs` and ships it to Sentry as a breadcrumb.
+     *
+     * Callers should still keep secrets out of a message when they can. This is
+     * the net under the cases where the value is not theirs to shape, and it is
+     * deliberately value-based rather than pattern-based: it replaces what this
+     * application actually holds, so it cannot be fooled by a format change.
+     * The two patterns below only cover a credential that is no longer the
+     * configured one — mid-rotation, or a second bot.
+     */
+    public static function secrets(?string $text): string
+    {
+        $text = (string) $text;
+
+        if ($text === '') {
+            return '';
+        }
+
+        foreach (self::secretValues() as $secret) {
+            $text = str_replace($secret, self::SECRET_MARKER, $text);
+        }
+
+        // `https://api.telegram.org/bot<digits>:<rest>/method` and any `key=`
+        // query parameter, for a credential this process does not have in config.
+        $text = (string) preg_replace('#/bot\d+:[A-Za-z0-9_-]+#', '/bot'.self::SECRET_MARKER, $text);
+
+        return (string) preg_replace('#(\bkey=)[^&\s]+#i', '$1'.self::SECRET_MARKER, $text);
+    }
+
+    /**
+     * Every credential worth replacing, longest first.
+     *
+     * Longest first matters: if one secret is a substring of another, replacing
+     * the shorter one first would leave the tail of the longer one readable.
+     *
+     * @return array<int, string>
+     */
+    private static function secretValues(): array
+    {
+        $candidates = [
+            (string) config('services.telegram.bot_token'),
+            (string) config('services.telegram.secret_token'),
+            (string) config('services.gemini.api_key'),
+            (string) config('services.whatsapp.access_token'),
+            (string) config('services.whatsapp.verify_token'),
+            (string) config('app.key'),
+        ];
+
+        $secrets = array_values(array_filter(
+            $candidates,
+            // A one or two character "secret" would replace half the line. Any
+            // real credential clears this by a wide margin.
+            fn (string $value): bool => strlen(trim($value)) >= self::MIN_SECRET_LENGTH,
+        ));
+
+        usort($secrets, fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        return $secrets;
     }
 
     /** Null when `app.key` is absent, which the caller reports rather than hides. */

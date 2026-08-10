@@ -54,7 +54,12 @@ class ProcessTelegramCapture implements ShouldQueue
      */
     public int $timeout = 180;
 
-    private const LINK_PREFIX = '/start ';
+    /**
+     * Public because the controller has to recognise a link attempt before
+     * dispatching, so it can replace the token with its digest. See
+     * {@see \App\Services\Capture\ChannelLinkTokenRedeemer::hash()}.
+     */
+    public const LINK_PREFIX = '/start ';
 
     /**
      * @param  string|null  $mediaReference  The already-chosen file id, if this was a photo.
@@ -151,20 +156,27 @@ class ProcessTelegramCapture implements ShouldQueue
         try {
             app(FinancialCoachingService::class)->speak($user, CoachingScope::forCategory($categoryId, $amount));
         } catch (Throwable $e) {
-            Log::error('⚠️ Coaching falló tras una captura ya registrada: '.$e->getMessage());
+            Log::error('⚠️ Coaching falló tras una captura ya registrada: '.Redact::secrets($e->getMessage()));
         }
     }
 
+    /**
+     * The message is sanitised, not trusted. An exception raised by an outbound
+     * call carries the request URI, and both dependencies put a credential in
+     * it — Telegram the bot token in the path, Gemini its key in the query. The
+     * adapters keep their own exceptions from reaching here, but this method
+     * logs whatever failed, including code that has not been written yet.
+     */
     public function failed(Throwable $exception): void
     {
-        Log::error('❌ Job ProcessTelegramCapture falló inesperadamente: '.$exception->getMessage());
+        Log::error('❌ Job ProcessTelegramCapture falló inesperadamente: '.Redact::secrets($exception->getMessage()));
 
         try {
             app(CaptureChannelRegistry::class)
                 ->for('telegram')
                 ->reply($this->chatId, '❌ Ocurrió un error inesperado al procesar tu envío. Intenta de nuevo o contacta con soporte.');
         } catch (Throwable $e) {
-            Log::error('❌ No se pudo avisar del fallo al remitente: '.$e->getMessage());
+            Log::error('❌ No se pudo avisar del fallo al remitente: '.Redact::secrets($e->getMessage()));
         }
     }
 
@@ -173,11 +185,17 @@ class ProcessTelegramCapture implements ShouldQueue
         return $this->text !== null && str_starts_with($this->text, self::LINK_PREFIX);
     }
 
+    /**
+     * The value after the prefix is already a digest — the controller replaces
+     * the token before dispatch so the plaintext never enters the queue payload,
+     * and from there `failed_jobs`. This method therefore redeems by hash and
+     * never sees the credential itself.
+     */
     private function link(CaptureChannel $channel, ChannelLinkTokenRedeemer $redeemer): void
     {
-        $token = trim(substr((string) $this->text, strlen(self::LINK_PREFIX)));
+        $hash = trim(substr((string) $this->text, strlen(self::LINK_PREFIX)));
 
-        if ($redeemer->redeem($channel->key(), $this->chatId, $token)) {
+        if ($redeemer->redeemHash($channel->key(), $this->chatId, $hash)) {
             $channel->reply($this->chatId, '✅ Cuenta vinculada. Ya puedes enviarme tus comprobantes.');
 
             return;

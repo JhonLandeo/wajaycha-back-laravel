@@ -81,13 +81,13 @@ class ProcessWhatsAppImage implements ShouldQueue
      */
     public function failed(\Throwable $exception): void
     {
-        Log::error('❌ Job ProcessWhatsAppImage falló inesperadamente: '.$exception->getMessage());
+        Log::error('❌ Job ProcessWhatsAppImage falló inesperadamente: '.Redact::secrets($exception->getMessage()));
 
         try {
             $channel = app(\App\Services\Capture\CaptureChannelRegistry::class)->for('whatsapp');
             $channel->reply($this->from, '❌ Ocurrió un error inesperado al procesar tu comprobante. Por favor, contacta con soporte técnico.');
         } catch (\Exception $e) {
-            Log::error('❌ No se pudo enviar el mensaje de fallo al usuario (en failed): '.$e->getMessage());
+            Log::error('❌ No se pudo enviar el mensaje de fallo al usuario (en failed): '.Redact::secrets($e->getMessage()));
         }
     }
 }

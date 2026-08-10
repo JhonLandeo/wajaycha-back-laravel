@@ -6,6 +6,8 @@ namespace App\Services\Capture;
 
 use App\DTOs\Capture\CapturedMedia;
 use App\Support\OutboundHttp;
+use App\Support\Redact;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -30,8 +32,26 @@ class TelegramChannel implements CaptureChannel
     /**
      * Resolve a file id to its bytes. Telegram needs two calls: getFile to learn
      * where the file lives, then a download from the file endpoint.
+     *
+     * A transport failure comes back as null, exactly like an unusable response:
+     * `OutboundHttp::to()` passes `throw: false`, which suppresses a 4xx or 5xx
+     * but not the `ConnectionException` raised when the call never completes at
+     * all. Letting that escape turned a network blip into a failed job, and its
+     * message carries the request URI — which is where the bot token lives.
      */
     public function fetchMedia(string $mediaReference): ?CapturedMedia
+    {
+        try {
+            return $this->download($mediaReference);
+        } catch (ConnectionException $e) {
+            Log::error('❌ Telegram: no se pudo contactar a la API para bajar un archivo. '
+                .Redact::secrets($e->getMessage()));
+
+            return null;
+        }
+    }
+
+    private function download(string $mediaReference): ?CapturedMedia
     {
         $token = $this->botToken();
 
@@ -67,10 +87,22 @@ class TelegramChannel implements CaptureChannel
 
         // Perfil aparte del de lectura: sendMessage no es idempotente, asi que
         // reintenta una sola vez. El intercambio esta anotado en config/http.php.
-        $response = OutboundHttp::to('telegram_send')->post("https://api.telegram.org/bot{$token}/sendMessage", [
-            'chat_id' => $externalId,
-            'text' => $text,
-        ]);
+        try {
+            $response = OutboundHttp::to('telegram_send')->post("https://api.telegram.org/bot{$token}/sendMessage", [
+                'chat_id' => $externalId,
+                'text' => $text,
+            ]);
+        } catch (ConnectionException $e) {
+            // Mismo contrato que el fallo por status, y por la misma razon. El
+            // guard de abajo solo se alcanza cuando existe una respuesta, asi que
+            // una conexion que nunca se completa lo esquivaba y hacia fallar el
+            // job con la transaccion ya guardada — justo lo que el guard existe
+            // para impedir. El mensaje se sanea porque la URI trae el bot token.
+            Log::error('❌ Telegram: no se pudo contactar a la API para responder. '
+                .Redact::secrets($e->getMessage()));
+
+            return;
+        }
 
         if (! $response->successful()) {
             // No se propaga: la transaccion ya quedo guardada y hacer fallar el job

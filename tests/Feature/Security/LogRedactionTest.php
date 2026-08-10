@@ -233,3 +233,89 @@ it('no escribe el chat id de Telegram cuando el remitente no esta vinculado', fu
     expect($transcripcion)->not->toContain($chatId)
         ->and($transcripcion)->toContain(Redact::id($chatId));
 });
+
+/**
+ * The credential cases below are a different failure from the ones above.
+ *
+ * Everything so far protects the user's data. What follows protects the
+ * application's own keys, and the leak is not something anyone wrote: the
+ * Telegram Bot API puts the bot token in the URL path and Gemini puts its key
+ * in the query string, so when an outbound call cannot complete at all, the
+ * `ConnectionException` Guzzle raises carries the full request URI in its
+ * message. Every `Log::error('...: '.$e->getMessage())` then writes a live
+ * credential to `storage/logs` and ships it to Sentry as a breadcrumb.
+ */
+it('no escribe el bot token cuando no se puede contactar a Telegram para responder', function () {
+    config()->set('services.telegram.bot_token', '123456:BOT-TOKEN-DE-PRODUCCION');
+
+    Http::fake(fn () => throw new Illuminate\Http\Client\ConnectionException(
+        'cURL error 6: Could not resolve host (see https://curl.se/libcurl/c/libcurl-errors.html) '
+        .'for https://api.telegram.org/bot123456:BOT-TOKEN-DE-PRODUCCION/sendMessage'
+    ));
+
+    $lines = capturedLogLines();
+
+    // No debe lanzar: la transaccion ya estaria guardada y hacer fallar el job
+    // la duplicaria en el reintento.
+    app(App\Services\Capture\TelegramChannel::class)->reply('123456789', 'Registrado');
+
+    $transcripcion = loggedTranscript($lines);
+
+    expect($transcripcion)->not->toContain('BOT-TOKEN-DE-PRODUCCION')
+        ->and($transcripcion)->toContain('<secreto>');
+});
+
+it('no escribe el bot token cuando no se puede contactar a Telegram para bajar un archivo', function () {
+    config()->set('services.telegram.bot_token', '123456:BOT-TOKEN-DE-PRODUCCION');
+
+    Http::fake(fn () => throw new Illuminate\Http\Client\ConnectionException(
+        'cURL error 28: Operation timed out for https://api.telegram.org/bot123456:BOT-TOKEN-DE-PRODUCCION/getFile?file_id=abc'
+    ));
+
+    $lines = capturedLogLines();
+
+    $media = app(App\Services\Capture\TelegramChannel::class)->fetchMedia('abc');
+
+    expect($media)->toBeNull()
+        ->and(loggedTranscript($lines))->not->toContain('BOT-TOKEN-DE-PRODUCCION');
+});
+
+it('tapa el token de un bot que ya no es el configurado', function () {
+    config()->set('services.telegram.bot_token', 'el-que-si-esta-configurado');
+
+    // Durante una rotacion la excepcion puede traer el token viejo, que ya no
+    // esta en config y por lo tanto no se puede tapar por valor. El patron de la
+    // URL de Telegram lo cubre igual.
+    $saneado = Redact::secrets('for https://api.telegram.org/bot987654:TOKEN-VIEJO_x-y/sendMessage');
+
+    expect($saneado)->not->toContain('TOKEN-VIEJO')
+        ->and($saneado)->toContain('<secreto>');
+});
+
+it('tapa la api key de Gemini que viaja en el query string', function () {
+    config()->set('services.gemini.api_key', 'AIzaSyClaveDeProduccion');
+
+    $saneado = Redact::secrets(
+        'cURL error 28 for https://generativelanguage.googleapis.com/v1/models:generateContent?key=AIzaSyClaveDeProduccion'
+    );
+
+    expect($saneado)->not->toContain('AIzaSyClaveDeProduccion');
+});
+
+it('deja intacto un mensaje que no trae ningun secreto', function () {
+    config()->set('services.telegram.bot_token', '123456:BOT-TOKEN-DE-PRODUCCION');
+
+    // El contrapeso: sin este caso, un metodo que devolviera '<secreto>' siempre
+    // pasaria todas las afirmaciones negativas de arriba.
+    expect(Redact::secrets('cURL error 28: Operation timed out'))
+        ->toBe('cURL error 28: Operation timed out');
+});
+
+it('no confunde un valor de configuracion vacio con un secreto', function () {
+    config()->set('services.telegram.bot_token', '');
+    config()->set('services.whatsapp.access_token', '');
+
+    // Un secreto sin configurar es cadena vacia. Reemplazar la cadena vacia
+    // insertaria el marcador entre cada caracter de la linea.
+    expect(Redact::secrets('un mensaje cualquiera'))->toBe('un mensaje cualquiera');
+});

@@ -19,10 +19,33 @@ use Illuminate\Support\Facades\Log;
  */
 class ChannelLinkTokenRedeemer
 {
+    /** Hashes the token and redeems it. See {@see redeemHash()} for the rest. */
     public function redeem(string $channel, string $externalId, string $token): bool
     {
-        $hash = hash('sha256', $token);
+        return $this->redeemHash($channel, $externalId, self::hash($token));
+    }
 
+    /**
+     * The digest of a link token, which is the only form of it worth moving
+     * around.
+     *
+     * `channel_link_tokens` stores `token_hash` and never the token itself, so
+     * anything that carries the plaintext further than the request that received
+     * it is undoing that on purpose. The queue payload was doing exactly that:
+     * a `/start <token>` message was dispatched verbatim, so the credential sat
+     * in Redis and, on any failure before redemption, was written permanently
+     * into `failed_jobs.payload` where Horizon renders it.
+     *
+     * Knowing the digest is not enough to link an account: the only path an
+     * outsider can reach is a `/start` message, which is hashed on arrival.
+     */
+    public static function hash(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
+    public function redeemHash(string $channel, string $externalId, string $hash): bool
+    {
         return DB::transaction(function () use ($channel, $externalId, $hash): bool {
             $candidate = ChannelLinkToken::query()
                 ->where('token_hash', $hash)

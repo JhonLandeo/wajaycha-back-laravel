@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Capture;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessTelegramCapture;
+use App\Services\Capture\ChannelLinkTokenRedeemer;
 use App\Services\Capture\ChannelUpdateDeduplicator;
 use App\Services\Capture\TelegramChannel;
 use App\Support\Redact;
@@ -123,11 +124,35 @@ class TelegramWebhookController extends Controller
         }
 
         if (isset($message['text']) && is_string($message['text'])) {
-            ProcessTelegramCapture::dispatch($chatId, $message['text']);
+            ProcessTelegramCapture::dispatch($chatId, $this->withHashedLinkToken($message['text']));
 
             return;
         }
 
         Log::info('ℹ️ Telegram: tipo de mensaje no soportado del chat '.Redact::id($chatId).', se ignora.');
+    }
+
+    /**
+     * The same message with a `/start` link token replaced by its digest.
+     *
+     * A dispatched job's arguments are serialised into the queue payload, which
+     * is not a pipe but a store: it sits in Redis, and the moment anything
+     * throws before redemption it is copied into `failed_jobs.payload`, which
+     * has no expiry and which Horizon renders in the browser. Sending the token
+     * verbatim therefore reintroduced, one layer down, exactly the plaintext
+     * that `channel_link_tokens` avoids by storing only `token_hash`.
+     *
+     * Hashing here rather than in the job is the whole point: the job's own
+     * arguments are what gets stored, so it is already too late by then.
+     */
+    private function withHashedLinkToken(string $text): string
+    {
+        if (! str_starts_with($text, ProcessTelegramCapture::LINK_PREFIX)) {
+            return $text;
+        }
+
+        $token = trim(substr($text, strlen(ProcessTelegramCapture::LINK_PREFIX)));
+
+        return ProcessTelegramCapture::LINK_PREFIX.ChannelLinkTokenRedeemer::hash($token);
     }
 }

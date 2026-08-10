@@ -139,7 +139,9 @@ it('vincula la cuenta cuando llega /start con un token valido', function () {
     $user = User::factory()->create();
     $token = app(ChannelLinkTokenIssuer::class)->issue($user)->token;
 
-    runTelegramJob('123456789', "/start {$token}");
+    // El job recibe el digest, no el token: el controlador lo reemplaza antes de
+    // despachar para que el credencial no quede en el payload de la cola.
+    runTelegramJob('123456789', '/start '.ChannelLinkTokenRedeemer::hash($token));
 
     expect(app(ChannelIdentityResolver::class)->resolve('telegram', '123456789')?->id)->toBe($user->id)
         ->and(lastTelegramReply())->toContain('Cuenta vinculada');
@@ -149,13 +151,15 @@ it('responde lo mismo ante un /start con token invalido, vencido o ya usado', fu
     $user = User::factory()->create();
     $token = app(ChannelLinkTokenIssuer::class)->issue($user)->token;
 
-    runTelegramJob('111', "/start {$token}");
+    $hash = ChannelLinkTokenRedeemer::hash($token);
+
+    runTelegramJob('111', "/start {$hash}");
     $tokenUsado = lastTelegramReply();
 
-    runTelegramJob('222', "/start {$token}");
+    runTelegramJob('222', "/start {$hash}");
     $yaGastado = lastTelegramReply();
 
-    runTelegramJob('333', '/start token-inventado');
+    runTelegramJob('333', '/start '.ChannelLinkTokenRedeemer::hash('token-inventado'));
     $inventado = lastTelegramReply();
 
     // El exito se distingue; los rechazos entre si, no.
