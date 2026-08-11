@@ -6,6 +6,7 @@ namespace App\Services\Capture;
 
 use App\Models\ChannelIdentity;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\LazyCollection;
 
 /**
@@ -55,6 +56,35 @@ class ChannelIdentityResolver
         }
 
         return null;
+    }
+
+    /**
+     * Every channel identity a user holds, for showing them what their account is
+     * already reachable on.
+     *
+     * Lives here rather than in a repository of its own because Capture owns
+     * `channel_identities` and this class is already its door — the same reason
+     * {@see preferredIdentityFor()} does not query it from Coaching.
+     *
+     * `external_id` is deliberately absent from the projection. Nothing upstream
+     * needs a chat id or a phone number to answer "is this linked", and a column
+     * that is never selected cannot leak through a serialiser someone adds later.
+     *
+     * Ordered explicitly: `channel_identities` is unique on (channel, external_id),
+     * so a user can legitimately hold several rows, and a list that reshuffles
+     * between two requests reads as data changing when nothing changed.
+     *
+     * @return Collection<int, ChannelIdentity>
+     */
+    public function identitiesFor(int $userId): Collection
+    {
+        return ChannelIdentity::query()
+            ->select(['id', 'channel', 'linked_at'])
+            ->where('user_id', $userId)
+            ->orderBy('channel')
+            ->orderBy('linked_at')
+            ->orderBy('id')
+            ->get();
     }
 
     /**

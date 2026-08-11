@@ -1,0 +1,4 @@
+# Only docker/entrypoint.sh is COPYed at build time; the source tree arrives via
+# a bind mount at run time. Everything else here keeps the build context small.
+*
+!docker/entrypoint.sh

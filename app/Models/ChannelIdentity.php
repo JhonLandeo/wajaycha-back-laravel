@@ -16,6 +16,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Whoever adds a channel must decide that shape and keep the write path and the
  * read path agreeing on it, because a mismatch produces an identity nobody will
  * ever match.
+ *
+ * @property int $id
+ * @property int $user_id
+ * @property string $channel
+ * @property string $external_id
+ * @property \Illuminate\Support\Carbon $linked_at
+ * @property string|null $legacy_whatsapp_phone
  */
 class ChannelIdentity extends Model
 {
