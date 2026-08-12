@@ -18,23 +18,59 @@
         </include>
     </source>
     <php>
-        <env name="APP_ENV" value="testing"/>
-        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
-        <env name="BCRYPT_ROUNDS" value="4"/>
-        <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="pgsql"/>
-        <env name="DB_DATABASE" value="wajaycha-1"/>
+        <!--
+            force="true" en todas: sin ese atributo PHPUnit define la variable
+            SOLO si no existe ya en el entorno del proceso, asi que cualquier
+            valor ambiente gana.
+
+            Eso no es hipotetico. compose inyecta DB_DATABASE y QUEUE_CONNECTION
+            en los contenedores PHP (x-backend-env en compose.yaml). Corriendo la
+            suite dentro del contenedor, DB_DATABASE resolvia a la base de
+            desarrollo y RefreshDatabase le pasaba migrate:fresh por encima —
+            con la suite en verde, porque borrar la base equivocada no falla
+            ningun test. El dano era silencioso.
+
+            Y force NO alcanza solo. Medido: escribe putenv() y $_ENV, pero no
+            toca $_SERVER, y Laravel arma su repositorio de entorno con
+            ServerConstAdapter adelante (Illuminate\Support\Env). Docker publica
+            sus variables tambien en $_SERVER, asi que env() seguia devolviendo
+            la base de desarrollo con getenv() ya devolviendo la de tests. De ahi
+            el bloque <server> de abajo: es el unico que cierra ese hueco.
+
+            Lo que NO se declara aca se hereda a proposito: DB_HOST, DB_PORT y
+            las credenciales tienen que seguir al entorno, o la suite no
+            encontraria el servidor. Se fija a que base se conecta, no donde.
+        -->
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>
+        <env name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <env name="DB_CONNECTION" value="pgsql" force="true"/>
+        <env name="DB_DATABASE" value="wajaycha-1" force="true"/>
         <!--
             Los reintentos salientes quedan ACTIVOS en la suite: son
             comportamiento y tienen que ejercitarse. Lo que se pone en cero es
             la espera entre uno y otro, porque un backoff real convertiria cada
             test de camino fallido en segundos de reloj sin verificar nada mas.
         -->
-        <env name="HTTP_RETRY_BASE_DELAY_MS" value="0"/>
-        <env name="MAIL_MAILER" value="array"/>
-        <env name="PULSE_ENABLED" value="false"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SESSION_DRIVER" value="array"/>
-        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="HTTP_RETRY_BASE_DELAY_MS" value="0" force="true"/>
+        <env name="MAIL_MAILER" value="array" force="true"/>
+        <env name="PULSE_ENABLED" value="false" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
+        <env name="TELESCOPE_ENABLED" value="false" force="true"/>
+
+        <!--
+            Las tres que compose inyecta y esta configuracion tiene que ganar.
+            Duplicadas a proposito: <env> cubre getenv() y $_ENV, <server> cubre
+            $_SERVER, que es el que lee Laravel primero. Falta cualquiera de las
+            dos mitades y la variable queda resuelta a medias.
+
+            Si mañana se agrega un nombre a x-backend-env en compose.yaml y esta
+            suite lo declara, tiene que aparecer en las dos listas.
+        -->
+        <server name="DB_CONNECTION" value="pgsql" force="true"/>
+        <server name="DB_DATABASE" value="wajaycha-1" force="true"/>
+        <server name="QUEUE_CONNECTION" value="sync" force="true"/>
     </php>
 </phpunit>
