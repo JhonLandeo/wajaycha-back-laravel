@@ -104,6 +104,11 @@ class AppServiceProvider extends ServiceProvider
                 'REDIS_HOST',
                 'REDIS_PORT',
                 'QUEUE_CONNECTION',
+                // Not a connection setting, but it fails the same way:
+                // config/cors.php reads it, and only the served request needs
+                // it. Without it here the CORS header is computed from the
+                // 5173 fallback while artisan reports the injected value.
+                'FRONTEND_URL',
             ],
         )));
     }
