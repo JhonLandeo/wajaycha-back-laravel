@@ -36,9 +36,17 @@ it('no aplica la regla exacta de otro usuario sobre el mismo comercio', function
     $otro = User::factory()->create();
     $detail = Detail::factory()->create(['user_id' => $this->user->id, 'entity_clean' => 'bodega el chino']);
 
-    $this->service->setRule($otro->id, $detail->id, $this->transporte->id);
+    // El otro usuario tiene su propia fila del mismo comercio y su propia
+    // categoría. Compartirlas es lo que las claves compuestas de
+    // `categorization_rules` ahora rechazan, y con razón: `DetailResolver`
+    // nunca le entrega a un usuario el detail de otro, así que la regla
+    // cruzada no era sólo ilegal, era inalcanzable.
+    $suDetail = Detail::factory()->create(['user_id' => $otro->id, 'entity_clean' => 'bodega el chino']);
+    $suCategoria = Category::factory()->create(['user_id' => $otro->id, 'name' => 'Transporte']);
 
-    expect($this->service->findCategory($this->user->id, $detail, null))->not->toBe($this->transporte->id);
+    $this->service->setRule($otro->id, $suDetail->id, $suCategoria->id);
+
+    expect($this->service->findCategory($this->user->id, $detail, null))->not->toBe($suCategoria->id);
 });
 
 it('usa el mensaje para elegir una categoria hoja del usuario cuando no hay regla', function () {

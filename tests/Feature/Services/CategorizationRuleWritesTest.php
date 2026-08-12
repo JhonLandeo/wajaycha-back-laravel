@@ -66,7 +66,17 @@ it('no toca la regla de otro usuario sobre el mismo comercio', function () {
     $otro = User::factory()->create();
     $suCategoria = Category::factory()->create(['user_id' => $otro->id]);
 
-    $this->service->setRule($otro->id, $this->detail->id, $suCategoria->id);
+    // "El mismo comercio" son dos filas, no una compartida: `details` lleva
+    // `user_id`, y desde `fk_categorization_rules_detail_id` la base rechaza una
+    // regla sobre el detail de otro usuario. Antes este test montaba ese estado
+    // imposible, que ningún flujo real podía producir — `DetailResolver` sólo
+    // devuelve details del usuario que consulta.
+    $suDetail = Detail::factory()->create([
+        'user_id' => $otro->id,
+        'description' => $this->detail->description,
+    ]);
+
+    $this->service->setRule($otro->id, $suDetail->id, $suCategoria->id);
     $this->service->setRule($this->user->id, $this->detail->id, $this->comida->id);
 
     expect(CategorizationRule::where('user_id', $otro->id)->sole()->category_id)->toBe($suCategoria->id)

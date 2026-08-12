@@ -66,15 +66,26 @@ it('lista los details que ya son regla de la categoria', function () {
     expect(collect($response->json('data'))->pluck('description'))->toContain('RAPPI');
 });
 
-it('no lista como regla propia la regla de otro usuario sobre la misma categoria', function () {
+/**
+ * La premisa cambió: una regla de otro usuario SOBRE LA MISMA categoría ya no
+ * se puede construir — `fk_categorization_rules_category_id` exige que la
+ * categoría sea del dueño de la regla, y `categories` lleva `user_id`. Ese
+ * cruce lo garantiza ahora la base.
+ *
+ * Lo que sigue teniendo filo, y es lo que se prueba acá, es que el endpoint no
+ * filtre sólo por categoría: si la consulta uniera `details` sin acotar por
+ * usuario, el comercio del extraño aparecería igual.
+ */
+it('no lista el comercio de otro usuario entre las reglas de la categoria', function () {
     [$user, $headers] = ruleOwner();
     $stranger = User::factory()->create();
     $category = Category::factory()->create(['user_id' => $user->id]);
+    $strangersCategory = Category::factory()->create(['user_id' => $stranger->id]);
 
     $mine = Detail::factory()->create(['user_id' => $user->id, 'description' => 'PROPIO']);
     $theirs = Detail::factory()->create(['user_id' => $stranger->id, 'description' => 'AJENO']);
     ruleFor($user, $category, $mine);
-    ruleFor($stranger, $category, $theirs);
+    ruleFor($stranger, $strangersCategory, $theirs);
 
     $descriptions = collect($this->getJson("/api/categories/{$category->id}/rules", $headers)->json('data'))
         ->pluck('description');
