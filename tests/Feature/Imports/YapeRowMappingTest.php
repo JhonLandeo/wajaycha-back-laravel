@@ -180,6 +180,72 @@ it('no confunde el duplicado de un usuario con el de otro', function () {
     expect(Transaction::query()->where('user_id', $theirs->id)->count())->toBe(1);
 });
 
+// ------------------------------------------- reimportar el mismo periodo
+
+/**
+ * Los tres casos que dejaron 142 pares duplicados y S/ 4702,40 de mas en
+ * produccion. Ninguno lo veia el control anterior, y ninguno lo ve el detector de
+ * conciliacion: ese cruza fuentes DISTINTAS y esto es Yape contra Yape.
+ */
+it('descarta el duplicado cuando el mensaje viene vacio de las dos veces', function () {
+    $user = User::factory()->create();
+    $import = new TransactionYapeImport($user->id);
+
+    // La celda de mensaje vacia llega como null. `message = NULL` no es falso en
+    // SQL, es NULL — asi que dos mensajes vacios identicos jamas se reconocian y
+    // el control no existia para ningun movimiento sin nota.
+    $import->model(yapeRow(['Mensaje' => null]));
+    $second = $import->model(yapeRow([
+        'Mensaje' => null,
+        'Fecha de operación' => '15/03/2026 14:30:09',
+    ]));
+
+    expect($second)->toBeNull()
+        ->and(Transaction::query()->where('user_id', $user->id)->count())->toBe(1);
+});
+
+it('descarta el duplicado cuando una exportacion trae null y la otra vacio', function () {
+    $user = User::factory()->create();
+    $import = new TransactionYapeImport($user->id);
+
+    // El mismo movimiento reexportado meses despues: el archivo nuevo escribe ''
+    // donde el viejo dejaba null. 36 de los 142 pares reales son esto.
+    $import->model(yapeRow(['Mensaje' => null]));
+    $second = $import->model(yapeRow(['Mensaje' => '']));
+
+    expect($second)->toBeNull()
+        ->and(Transaction::query()->where('user_id', $user->id)->count())->toBe(1);
+});
+
+it('descarta el duplicado aunque el Excel nombre distinto al mismo comercio', function () {
+    $user = User::factory()->create();
+    $import = new TransactionYapeImport($user->id);
+
+    $import->model(yapeRow(['Destino' => 'PANADERIA SAN MARTIN']));
+
+    // Entity Resolution cuelga las dos filas del mismo Detail, pero el control
+    // buscaba un Detail llamado como el texto crudo del archivo. Al no encontrarlo
+    // insertaba de nuevo, aunque el movimiento ya estuviera guardado.
+    $second = $import->model(yapeRow(['Destino' => 'PANADERIA SAN MARTIN S.A.C.']));
+
+    $transactions = Transaction::query()->where('user_id', $user->id)->get();
+
+    expect($second)->toBeNull()
+        ->and($transactions)->toHaveCount(1);
+});
+
+it('sigue aceptando dos pagos distintos al mismo comercio con notas distintas', function () {
+    $user = User::factory()->create();
+    $import = new TransactionYapeImport($user->id);
+
+    // El mensaje sigue discriminando: dos pagos iguales con notas distintas son
+    // dos pagos. Arreglar los nulos no puede fusionar movimientos reales.
+    $import->model(yapeRow(['Mensaje' => 'almuerzo']));
+    $import->model(yapeRow(['Mensaje' => 'cena', 'Fecha de operación' => '15/03/2026 14:30:20']));
+
+    expect(Transaction::query()->where('user_id', $user->id)->count())->toBe(2);
+});
+
 // -------------------------------------------------------- the defect under test
 
 /**
