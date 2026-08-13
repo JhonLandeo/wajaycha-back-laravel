@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
 use App\Jobs\ProcessTelegramCapture;
 use App\Models\ChannelIdentity;
+use App\Models\ChannelLinkToken;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\AI\GeminiTextService;
@@ -167,6 +168,33 @@ it('responde lo mismo ante un /start con token invalido, vencido o ya usado', fu
     expect($tokenUsado)->toContain('Cuenta vinculada')
         ->and($yaGastado)->toBe($inventado)
         ->and($yaGastado)->toContain('no es válido o ya fue usado');
+});
+
+it('le dice al remitente ya vinculado que no necesita otro enlace', function () {
+    $user = telegramSender();
+
+    // Un token perfectamente valido de otro usuario: el rechazo viene de la
+    // identidad del remitente, no del token, y por eso "genera uno nuevo" nunca
+    // lo hubiera sacado del bucle.
+    $token = app(ChannelLinkTokenIssuer::class)->issue(User::factory()->create())->token;
+
+    runTelegramJob('123456789', '/start '.ChannelLinkTokenRedeemer::hash($token));
+
+    expect(lastTelegramReply())->toContain('ya está vinculada')
+        ->and(lastTelegramReply())->not->toContain('Genera uno nuevo')
+        // El chat sigue siendo del mismo dueño y el token del otro usuario
+        // sigue sin gastarse: solo cambio lo que se responde.
+        ->and(app(ChannelIdentityResolver::class)->resolve('telegram', '123456789')?->id)->toBe($user->id)
+        ->and(ChannelIdentity::where('external_id', '123456789')->count())->toBe(1)
+        ->and(ChannelLinkToken::sole()->redeemed_at)->toBeNull();
+});
+
+it('no revela nada nuevo a un remitente sin vincular', function () {
+    // El mismo token invalido desde un chat sin dueño sigue recibiendo la
+    // respuesta generica: la rama nueva solo alcanza a quien ya esta vinculado.
+    runTelegramJob('999999999', '/start '.ChannelLinkTokenRedeemer::hash('token-inventado'));
+
+    expect(lastTelegramReply())->toContain('no es válido o ya fue usado');
 });
 
 it('no intenta parsear un /start como si fuera un movimiento', function () {

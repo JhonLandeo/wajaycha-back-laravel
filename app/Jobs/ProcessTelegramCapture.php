@@ -95,7 +95,7 @@ class ProcessTelegramCapture implements ShouldQueue
         // 1. VINCULACION: /start <token> llega antes que cualquier identidad, porque
         //    es justamente lo que la crea.
         if ($this->isLinkAttempt()) {
-            $this->link($channel, $redeemer);
+            $this->link($channel, $identities, $redeemer);
 
             return;
         }
@@ -228,12 +228,32 @@ class ProcessTelegramCapture implements ShouldQueue
      * and from there `failed_jobs`. This method therefore redeems by hash and
      * never sees the credential itself.
      */
-    private function link(CaptureChannel $channel, ChannelLinkTokenRedeemer $redeemer): void
-    {
+    private function link(
+        CaptureChannel $channel,
+        ChannelIdentityResolver $identities,
+        ChannelLinkTokenRedeemer $redeemer,
+    ): void {
         $hash = trim(substr((string) $this->text, strlen(self::LINK_PREFIX)));
 
         if ($redeemer->redeemHash($channel->key(), $this->chatId, $hash)) {
             $channel->reply($this->chatId, '✅ Cuenta vinculada. Ya puedes enviarme tus comprobantes.');
+
+            return;
+        }
+
+        // Un remitente ya vinculado es el unico caso que "genera uno nuevo desde
+        // la app" no puede resolver: el redeemer lo rechaza por la identidad, no
+        // por el token, asi que cada enlace nuevo falla igual y el consejo lo
+        // manda a un bucle.
+        //
+        // Decirselo no ensancha lo que el mensaje filtra. El hecho se deduce del
+        // chat id del propio remitente y nunca del token, de modo que responde
+        // por una cuenta que el remitente ya controla; el paso 2 de handle() ya
+        // le contesta lo mismo ante cualquier mensaje suelto. Los rechazos que
+        // SI hablan del token — inexistente, vencido, gastado — siguen colapsados
+        // en la respuesta de abajo.
+        if ($identities->resolve($channel->key(), $this->chatId) !== null) {
+            $channel->reply($this->chatId, '✅ Esta cuenta de Telegram ya está vinculada. No necesitas otro enlace: envíame un comprobante cuando quieras.');
 
             return;
         }
