@@ -57,14 +57,25 @@ class ReconcileImportDuplicates extends Command
         }
 
         $satellites = array_sum(array_map(static fn (array $g): int => count($g['satellites']), $groups));
-        $amount = array_sum(array_map(static fn (array $g): float => $g['amount'] * count($g['satellites']), $groups));
 
-        $this->info(sprintf(
-            '%d grupo(s), %d fila(s) de más, S/ %s que hoy cuentan doble.',
-            count($groups),
-            $satellites,
-            number_format($amount, 2)
-        ));
+        // Gasto e ingreso se informan por separado y jamas sumados. Una sola cifra
+        // mezclando los dos no significa nada -- restar mil de ingreso a dos mil de
+        // gasto no describe ninguna magnitud real -- y en una herramienta de
+        // finanzas un numero asi hace desconfiar de todos los demas.
+        $this->info(sprintf('%d grupo(s), %d fila(s) de más.', count($groups), $satellites));
+
+        foreach (['expense' => 'Gasto', 'income' => 'Ingreso'] as $type => $label) {
+            $ofType = array_filter($groups, static fn (array $g): bool => $g['type'] === $type);
+
+            if ($ofType === []) {
+                continue;
+            }
+
+            $rows = array_sum(array_map(static fn (array $g): int => count($g['satellites']), $ofType));
+            $amount = array_sum(array_map(static fn (array $g): float => $g['amount'] * count($g['satellites']), $ofType));
+
+            $this->line(sprintf('  %-8s %2d fila(s), S/ %s contando doble.', $label, $rows, number_format($amount, 2)));
+        }
 
         if (! $this->option('apply')) {
             // El modo informativo es el default a proposito. Esto cambia lo que
@@ -112,18 +123,21 @@ class ReconcileImportDuplicates extends Command
     private function duplicateGroups(): array
     {
         $rows = Transaction::query()
-            ->select(['id', 'user_id', 'detail_id', 'amount', 'message', 'date_operation'])
+            ->select(['id', 'user_id', 'detail_id', 'amount', 'type_transaction', 'message', 'date_operation'])
             ->where('source_type', SourceType::IMPORT_APP->value)
             ->whereNull('matched_transaction_id')
             ->orderBy('date_operation')
             ->orderBy('id')
             ->get()
             // Misma clave que el control corregido del importador, incluida la
-            // lectura de NULL y cadena vacia como el mismo mensaje ausente.
+            // lectura de NULL y cadena vacia como el mismo mensaje ausente, y el
+            // tipo: fusionar plata que entra con plata que sale seria el peor
+            // error posible en un libro contable.
             ->groupBy(fn (Transaction $t): string => implode('|', [
                 $t->user_id,
                 $t->detail_id,
                 $t->amount,
+                $t->type_transaction,
                 $t->message ?? '',
             ]));
 
@@ -140,6 +154,7 @@ class ReconcileImportDuplicates extends Command
                         'master' => (int) $row->id,
                         'satellites' => [],
                         'amount' => (float) $row->amount,
+                        'type' => (string) $row->type_transaction,
                     ];
 
                     continue;

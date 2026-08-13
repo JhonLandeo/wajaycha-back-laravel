@@ -10,6 +10,7 @@ use App\Models\ReconciliationCandidate;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 
 uses(RefreshDatabase::class);
 
@@ -18,13 +19,19 @@ uses(RefreshDatabase::class);
  * el mismo movimiento repetido, a veces con el mensaje en null y a veces en
  * cadena vacia.
  */
-function importedRow(User $user, Detail $detail, string $amount, string $at, ?string $message = null): Transaction
-{
+function importedRow(
+    User $user,
+    Detail $detail,
+    string $amount,
+    string $at,
+    ?string $message = null,
+    string $type = 'expense'
+): Transaction {
     return Transaction::create([
         'user_id' => $user->id,
         'detail_id' => $detail->id,
         'amount' => $amount,
-        'type_transaction' => 'expense',
+        'type_transaction' => $type,
         'date_operation' => $at,
         'message' => $message,
         'source_type' => SourceType::IMPORT_APP->value,
@@ -180,6 +187,46 @@ it('no vuelve a unir lo que el usuario ya separo', function () {
 
     expect($repetida->fresh()->matched_transaction_id)->toBeNull()
         ->and(ReconciliationCandidate::count())->toBe(1);
+});
+
+it('nunca fusiona un ingreso con un gasto', function () {
+    $user = User::factory()->create();
+    $detail = merchant($user);
+
+    // Mismo monto, mismo comercio, mismo instante, sentidos opuestos. Colapsarlos
+    // haria desaparecer plata que entro y plata que salio a la vez.
+    $gasto = importedRow($user, $detail, '100.00', '2026-07-08 14:52:00');
+    $ingreso = importedRow($user, $detail, '100.00', '2026-07-08 14:52:00', null, 'income');
+
+    $this->artisan('transactions:reconcile-import-duplicates --apply')->assertSuccessful();
+
+    expect($gasto->fresh()->matched_transaction_id)->toBeNull()
+        ->and($ingreso->fresh()->matched_transaction_id)->toBeNull();
+});
+
+it('informa el gasto y el ingreso por separado, nunca sumados', function () {
+    $user = User::factory()->create();
+    $detail = merchant($user);
+
+    importedRow($user, $detail, '200.00', '2026-07-08 14:52:00');
+    importedRow($user, $detail, '200.00', '2026-07-08 14:52:00');
+
+    $otro = merchant($user, 'SUELDO');
+    importedRow($user, $otro, '50.00', '2026-07-09 10:00:00', null, 'income');
+    importedRow($user, $otro, '50.00', '2026-07-09 10:00:00', null, 'income');
+
+    // Se captura la salida entera en vez de encadenar `expectsOutputToContain`:
+    // cada expectativa de esas consume UNA linea, y aca las dos afirmaciones que
+    // importan -- la etiqueta y su monto -- viven en la misma.
+    Artisan::call('transactions:reconcile-import-duplicates');
+    $output = Artisan::output();
+
+    // Una sola cifra de S/ 250 no describiria ninguna magnitud real.
+    expect($output)->toContain('Gasto')
+        ->and($output)->toContain('S/ 200.00')
+        ->and($output)->toContain('Ingreso')
+        ->and($output)->toContain('S/ 50.00')
+        ->and($output)->not->toContain('S/ 250.00');
 });
 
 it('es idempotente', function () {

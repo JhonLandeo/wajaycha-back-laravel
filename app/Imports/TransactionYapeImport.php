@@ -91,7 +91,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             $features['type']
         );
 
-        if ($this->alreadyImported($detail->id, $messageRaw, (float) $row['Monto'], $dateOperation)) {
+        if ($this->alreadyImported($detail->id, $messageRaw, (float) $row['Monto'], $typeTransaction, $dateOperation)) {
             return null;
         }
 
@@ -151,11 +151,23 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
      * A message that says something still discriminates. Two payments of the same
      * amount to the same merchant carrying different notes remain two payments.
      *
+     * `type_transaction` is part of the key even though the previous version left
+     * it out. In practice the counterparty text differs between an expense and an
+     * income — one reads `Destino`, the other `Origen` — so the resolved Detail
+     * usually differs too and the collision never surfaced. "Usually" is not a
+     * guarantee, and what it would allow is collapsing money coming in with money
+     * going out.
+     *
      * The tolerance stays at 60 seconds: the same movement re-exported can carry
      * truncated seconds in one file and full seconds in another.
      */
-    private function alreadyImported(int $detailId, ?string $message, float $amount, string $dateOperation): bool
-    {
+    private function alreadyImported(
+        int $detailId,
+        ?string $message,
+        float $amount,
+        string $typeTransaction,
+        string $dateOperation
+    ): bool {
         $tolerance = 60;
 
         return Transaction::query()
@@ -163,6 +175,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             ->where('source_type', SourceType::IMPORT_APP->value)
             ->where('detail_id', $detailId)
             ->where('amount', $amount)
+            ->where('type_transaction', $typeTransaction)
             ->whereRaw("coalesce(message, '') = coalesce(?, '')", [$message])
             ->whereBetween('date_operation', [
                 Carbon::parse($dateOperation)->subSeconds($tolerance),

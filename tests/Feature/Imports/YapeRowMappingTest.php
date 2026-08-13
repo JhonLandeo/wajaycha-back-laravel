@@ -234,6 +234,19 @@ it('descarta el duplicado aunque el Excel nombre distinto al mismo comercio', fu
         ->and($transactions)->toHaveCount(1);
 });
 
+it('no confunde un ingreso con un gasto del mismo monto', function () {
+    $user = User::factory()->create();
+    $import = new TransactionYapeImport($user->id);
+
+    // La contraparte se lee de columnas distintas segun el sentido, asi que en la
+    // practica el Detail suele diferir. "Suele" no es una garantia, y lo que
+    // habilita es colapsar plata que entra con plata que sale.
+    $import->model(yapeRow(['Tipo de Transacción' => 'PAGASTE', 'Destino' => 'JUAN', 'Origen' => 'JUAN']));
+    $import->model(yapeRow(['Tipo de Transacción' => 'RECIBISTE', 'Destino' => 'JUAN', 'Origen' => 'JUAN']));
+
+    expect(Transaction::query()->where('user_id', $user->id)->count())->toBe(2);
+});
+
 it('sigue aceptando dos pagos distintos al mismo comercio con notas distintas', function () {
     $user = User::factory()->create();
     $import = new TransactionYapeImport($user->id);
