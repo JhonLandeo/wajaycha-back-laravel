@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DetailsController;
 use App\Http\Controllers\ImportController;
 use App\Http\Controllers\ParetoClassificationController;
+use App\Http\Controllers\Reconciliation\ReconciliationCandidateController;
 use App\Http\Controllers\TagsController;
 use App\Http\Controllers\TransactionsController;
 use App\Http\Controllers\TransactionYapeController;
@@ -46,6 +47,15 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::resource('imports', ImportController::class);
     Route::resource('details', DetailsController::class);
     Route::resource('tags', TagsController::class);
+
+    // Duplicados entre fuentes. Los pares separados por segundos los unifica el
+    // sistema; los dudosos se preguntan. `auto-merged` es lo que hace legitima esa
+    // decision automatica: lo unificado queda a la vista y `undo` lo revierte.
+    Route::get('reconciliation-candidates', [ReconciliationCandidateController::class, 'index']);
+    Route::get('reconciliation-candidates/auto-merged', [ReconciliationCandidateController::class, 'autoMerged']);
+    Route::post('reconciliation-candidates/{candidate}/confirm', [ReconciliationCandidateController::class, 'confirm']);
+    Route::post('reconciliation-candidates/{candidate}/reject', [ReconciliationCandidateController::class, 'reject']);
+    Route::post('reconciliation-candidates/{candidate}/undo', [ReconciliationCandidateController::class, 'undo']);
 
     Route::get('all-categories', [CategoryController::class, 'all']);
     Route::get('all-pareto-classification', [ParetoClassificationController::class, 'all']);

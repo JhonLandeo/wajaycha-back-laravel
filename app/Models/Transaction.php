@@ -42,6 +42,7 @@ class Transaction extends Model
         'user_id',
         'detail_id',
         'is_manual',
+        'is_date_estimated',
         'message',
         'source_type',
         'financial_entity_id',

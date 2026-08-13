@@ -2,9 +2,11 @@
 
 namespace App\Imports;
 
+use App\Enums\SourceType;
 use App\Models\Transaction;
 use App\Services\CategorizationService;
 use App\Services\DetailResolver;
+use App\Services\Reconciliation\DuplicateCandidateDetector;
 use App\Services\TransactionAnalyzer;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\ToModel;
@@ -23,12 +25,15 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
 
     protected DetailResolver $detailResolver;
 
+    protected DuplicateCandidateDetector $duplicateDetector;
+
     public function __construct(int $userId)
     {
         $this->userId = $userId;
         $this->transactionAnalyzer = app(TransactionAnalyzer::class);
         $this->categorizationService = app(CategorizationService::class);
         $this->detailResolver = app(DetailResolver::class);
+        $this->duplicateDetector = app(DuplicateCandidateDetector::class);
     }
 
     public function headingRow(): int
@@ -108,7 +113,7 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             $messageRaw
         );
 
-        return Transaction::create([
+        $transaction = Transaction::create([
             'message' => $messageRaw,
             'amount' => (float) $row['Monto'],
             'date_operation' => $dateOperation,
@@ -118,8 +123,18 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             'category_id' => $categoryId,
             'financial_entity_id' => 1,
             'payment_service_id' => 1,
-            'source_type' => 'import_app',
+            'source_type' => SourceType::IMPORT_APP->value,
             'is_manual' => false,
         ]);
+
+        // El control de duplicados de arriba solo mira filas `import_app`, y esa
+        // restriccion es correcta: compara `message` y la descripcion literal, textos
+        // que solo coinciden entre dos exportaciones de Yape. Un movimiento que ya
+        // entro por una foto de Telegram trae la descripcion que leyo Gemini, jamas
+        // igual a la que Yape registro, asi que ninguna comparacion de texto lo
+        // encuentra. Ese cruce se decide por monto, tipo y fecha, y no aqui.
+        $this->duplicateDetector->inspect($transaction);
+
+        return $transaction;
     }
 }
