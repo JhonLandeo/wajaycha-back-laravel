@@ -288,3 +288,30 @@ it('no categoriza los movimientos de otro usuario al marcar uno como frecuente',
     expect($ownerTransaction->fresh()->category_id)->toBe($category->id)
         ->and($otherTransaction->fresh()->category_id)->toBeNull();
 });
+
+it('lista transacciones recurrentes sin romperse', function () {
+    // `recurring=true` es la única rama que llama a `get_transactions_by_detail`
+    // (TransactionRepository.php:22). Esa función quedó meses apuntando a una
+    // tabla borrada en producción sin que nada la ejercitara, porque el resto de
+    // la pantalla pasa por `get_transactions`.
+    //
+    // Este test no habría detectado aquella deriva —las migraciones crean la
+    // función correcta en cada corrida— pero deja la rama cubierta, que es lo
+    // que faltaba para que un error de esta forma aparezca antes que un usuario.
+    $user = $this->createUserWithCategories();
+    $headers = $this->actingAsJwtUser($user);
+
+    $detail = Detail::factory()->create(['user_id' => $user->id]);
+    Transaction::factory()->count(2)->create([
+        'user_id' => $user->id,
+        'detail_id' => $detail->id,
+        'type_transaction' => 'expense',
+        'category_id' => null,
+    ]);
+
+    $this->getJson(
+        '/api/transactions?per_page=10&page=1&amount=0.00&category=without_category'
+        .'&recurring=true&weekend=true&workday=false',
+        $headers
+    )->assertOk();
+});
