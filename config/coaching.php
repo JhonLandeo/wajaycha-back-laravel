@@ -94,9 +94,16 @@ return [
     | `digest_hour` is read by the scheduler in `routes/console.php`. Changing it
     | is a config edit and a redeploy of the schedule, never a migration.
     |
+    | The default is FALSE, unlike every other switch here. This is the only
+    | feature in the subsystem that starts talking to people on its own the
+    | morning after it ships, without anyone having asked for it that day. A
+    | default of true would mean the deploy itself is the decision to send it,
+    | and that decision belongs to the owner, on a date they picked. Ship dark,
+    | then set `COACHING_DIGEST_ENABLED=true` per environment.
+    |
     */
 
-    'digest_enabled' => (bool) env('COACHING_DIGEST_ENABLED', true),
+    'digest_enabled' => (bool) env('COACHING_DIGEST_ENABLED', false),
 
     'digest_max_categories' => (int) env('COACHING_DIGEST_MAX_CATEGORIES', 10),
 

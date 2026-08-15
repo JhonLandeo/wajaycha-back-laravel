@@ -105,3 +105,25 @@ it('still returns the observation once the dial is back at its default', functio
     expect($observations)->toHaveCount(1)
         ->and($observations[0]->band)->toBe('over_budget');
 });
+
+/**
+ * El parte matutino se despliega apagado, y esto lo fija.
+ *
+ * Es la unica pieza del subsistema que empieza a escribirle a la gente por su
+ * cuenta la mañana siguiente al deploy, sin que nadie lo haya pedido ese dia.
+ * Con default true, el deploy mismo seria la decision de mandarlo — y esa
+ * decision es del dueño, en la fecha que el elija. Si alguien invierte esta
+ * perilla, que sea rompiendo un test y no de callado.
+ */
+it('despliega el parte matutino apagado y el resto de sus perillas listas', function () {
+    expect(config('coaching.digest_enabled'))->toBeFalse()
+        ->and(config('coaching.digest_max_categories'))->toBe(10)
+        ->and(config('coaching.digest_hour'))->toBe('08:00');
+});
+
+it('mantiene encendidos los sobres anuales, que no le hablan a nadie por su cuenta', function () {
+    // Estos solo cambian COMO se evalua algo que el coach ya iba a decir; no
+    // agregan una voz nueva, asi que no hay razon para desplegarlos en oscuro.
+    expect(config('coaching.envelope_consumed_share'))->toBe(0.80)
+        ->and(config('coaching.envelope_min_months_remaining'))->toBe(2);
+});

@@ -15,6 +15,15 @@ use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
 
+// El parte se despliega apagado: `coaching.digest_enabled` tiene default false
+// para que el deploy no sea, por si solo, la decision de empezar a escribirle a
+// la gente. Cada test que espera un envio tiene que declarar que lo enciende —
+// heredar el default y confiar en que sea true es como estos tests se volverian
+// verdes el dia que alguien cambie esa perilla por otra razon.
+beforeEach(function () {
+    config(['coaching.digest_enabled' => true]);
+});
+
 /**
  * The morning digest end to end.
  *
