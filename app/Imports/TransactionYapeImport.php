@@ -3,6 +3,8 @@
 namespace App\Imports;
 
 use App\Enums\SourceType;
+use App\Models\FinancialEntity;
+use App\Models\PaymentService;
 use App\Models\Transaction;
 use App\Services\CategorizationService;
 use App\Services\DetailResolver;
@@ -110,8 +112,8 @@ class TransactionYapeImport implements ToModel, WithHeadingRow
             'user_id' => $this->userId,
             'detail_id' => $detail->id,
             'category_id' => $categoryId,
-            'financial_entity_id' => 1,
-            'payment_service_id' => 1,
+            'financial_entity_id' => FinancialEntity::BCP_ID,
+            'payment_service_id' => PaymentService::YAPE_ID,
             'source_type' => SourceType::IMPORT_APP->value,
             'is_manual' => false,
         ]);

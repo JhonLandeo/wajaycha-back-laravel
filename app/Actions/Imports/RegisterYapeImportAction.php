@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Actions\Imports;
 
 use App\Jobs\ProcessExcelImport;
+use App\Models\FinancialEntity;
 use App\Models\Import;
+use App\Models\PaymentService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -18,19 +20,6 @@ use Illuminate\Support\Facades\DB;
  */
 class RegisterYapeImportAction
 {
-    /**
-     * Whichever rows the seeders insert first.
-     *
-     * These moved here with the use case rather than being repaired, and they are
-     * fragile in a specific way: they hold only while the sequence agrees with them.
-     * Resolving Yape and BCP by code instead of id would be sturdier, but it is a
-     * different question — it can return null, which is a behaviour this change has no
-     * test for and no mandate to introduce.
-     */
-    private const FINANCIAL_BCP_ID = 1;
-
-    private const PAYMENT_SERVICE_YAPE_ID = 1;
-
     public function execute(UploadedStatement $statement, int $userId): Import
     {
         return DB::transaction(function () use ($statement, $userId): Import {
@@ -41,8 +30,8 @@ class RegisterYapeImportAction
             $import->mime = $statement->mime;
             $import->size = $statement->size;
             $import->user_id = $userId;
-            $import->payment_service_id = self::PAYMENT_SERVICE_YAPE_ID;
-            $import->financial_entity_id = self::FINANCIAL_BCP_ID;
+            $import->payment_service_id = PaymentService::YAPE_ID;
+            $import->financial_entity_id = FinancialEntity::BCP_ID;
             $import->save();
 
             // `afterCommit` is what keeps the worker from reading a row that is not
