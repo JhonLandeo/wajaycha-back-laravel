@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Enums\ReconciliationKind;
 use App\Enums\ReconciliationStatus;
 use App\Enums\ResolvedBy;
 use App\Enums\SourceType;
@@ -192,6 +193,14 @@ class ReconcileImportDuplicates extends Command
                         'user_id' => $userId,
                         'transaction_id' => $masterId,
                         'candidate_transaction_id' => $satelliteId,
+                        // Los grupos de este comando son de UNA sola fuente por
+                        // construccion — se agrupan por usuario, Detail, monto, fuente
+                        // y minuto — y por eso un grupo de tres colapsa sobre un
+                        // sobreviviente con dos satelites. Marcarlos asi es lo que
+                        // mantiene a `unq_reconciliation_candidates_cross_source_master`
+                        // fuera de esta operacion, donde seria incorrecto.
+                        'kind' => ReconciliationKind::SAME_SOURCE,
+                        'master_transaction_id' => $masterId,
                         'status' => ReconciliationStatus::CONFIRMED,
                         'resolved_by' => ResolvedBy::SYSTEM,
                         'resolved_at' => now(),

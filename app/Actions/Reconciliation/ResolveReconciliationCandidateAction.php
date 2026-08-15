@@ -39,10 +39,15 @@ class ResolveReconciliationCandidateAction
 
             [$master, $satellite] = $this->linker->link($a, $b);
 
+            // `master_transaction_id` va junto con el estado y no despues: el CHECK
+            // exige que existan o falten a la vez, y es lo que hace que el indice
+            // unico alcance tambien al camino del usuario. Confirmar a mano dos pares
+            // contra el mismo asiento choca aca igual que lo haria el detector.
             $candidate->update([
                 'status' => ReconciliationStatus::CONFIRMED,
                 'resolved_by' => ResolvedBy::USER,
                 'resolved_at' => now(),
+                'master_transaction_id' => $master->id,
             ]);
 
             Log::info("🔗 Reconciliación confirmada: transacción {$satellite->id} deja de contar,"
@@ -91,10 +96,14 @@ class ResolveReconciliationCandidateAction
 
             $this->linker->unlink($a, $b);
 
+            // El maestro se va con la unificacion. Dejarlo apuntando a una fila que
+            // volvio a contar sola seria un descuento registrado que ya no existe, y
+            // ademas bloquearia ese asiento para el par correcto.
             $candidate->update([
                 'status' => ReconciliationStatus::REJECTED,
                 'resolved_by' => ResolvedBy::USER,
                 'resolved_at' => now(),
+                'master_transaction_id' => null,
             ]);
 
             Log::info("↩️ Unificación automática deshecha: {$candidate->transaction_id} y "
