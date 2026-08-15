@@ -29,31 +29,48 @@ final class UpdateTransactionAction
             throw new \RuntimeException('Transaction not found');
         }
 
-        $updateData = [
-            'amount' => $dto->amount,
-            'date_operation' => $dto->date_operation,
-            'type_transaction' => $dto->type_transaction,
-        ];
+        $updateData = [];
+
+        // Monto, fecha, tipo y comercio de un movimiento importado son el
+        // registro del banco, no del usuario: reescribirlos desde una peticion
+        // HTTP falsea el asiento. La categoria no es eso — es la clasificacion
+        // que hace el usuario, y es el unico campo aqui que el banco nunca
+        // proveyo.
+        //
+        // La distincion vive en la accion y no en el controlador a proposito.
+        // El controlador solo sabria confiar en el payload; aqui se decide sobre
+        // la fila ya cargada, asi que un cliente que mande un monto distinto
+        // sobre un movimiento importado no lo escribe, en vez de que lo escriba
+        // si el guard de arriba se olvida.
+        if ($transaction->is_manual) {
+            $updateData = [
+                'amount' => $dto->amount,
+                'date_operation' => $dto->date_operation,
+                'type_transaction' => $dto->type_transaction,
+            ];
+
+            if ($dto->detail_id !== null) {
+                $updateData['detail_id'] = $dto->detail_id;
+            }
+
+            if (empty($dto->detail_id) && ! empty($dto->detail_description)) {
+                /** @var Detail $detail */
+                $detail = Detail::query()->firstOrCreate([
+                    'user_id' => $dto->user_id,
+                    'description' => $dto->detail_description,
+                ]);
+                $updateData['detail_id'] = $detail->id;
+                GenerateEmbeddingForDetail::dispatch($detail, $dto->category_id);
+            }
+        }
 
         if ($dto->category_id !== null) {
             $updateData['category_id'] = $dto->category_id;
         }
 
-        if ($dto->detail_id !== null) {
-            $updateData['detail_id'] = $dto->detail_id;
+        if ($updateData !== []) {
+            $this->repository->update($transaction, $updateData);
         }
-
-        if (empty($dto->detail_id) && ! empty($dto->detail_description)) {
-            /** @var Detail $detail */
-            $detail = Detail::query()->firstOrCreate([
-                'user_id' => $dto->user_id,
-                'description' => $dto->detail_description,
-            ]);
-            $updateData['detail_id'] = $detail->id;
-            GenerateEmbeddingForDetail::dispatch($detail, $dto->category_id);
-        }
-
-        $this->repository->update($transaction, $updateData);
 
         $newCategoryId = $dto->category_id ?? $transaction->category_id;
 
@@ -83,8 +100,21 @@ final class UpdateTransactionAction
             $transaction->load('detail');
             $detail = $transaction->detail;
             if ($detail && $newCategoryId) {
+                // El filtro por usuario no es defensa en profundidad, es la
+                // condicion que faltaba: el join es por `d.description`, no por
+                // `d.id`, asi que sin el alcanza los movimientos de CUALQUIER
+                // usuario que le haya puesto el mismo nombre al comercio —
+                // "RAPPI", "YAPE"— y les asigna una categoria que no es suya.
+                //
+                // Hoy eso no corrompe nada porque el FK compuesto
+                // `fk_transactions_category_id (category_id, user_id)` lo
+                // rechaza, pero entonces la peticion revienta con un 500 en vez
+                // de categorizar. Estuvo latente mientras editar un movimiento
+                // importado era imposible; abrir esa puerta lo vuelve el camino
+                // normal.
                 Transaction::query()
                     ->join('details as d', 'transactions.detail_id', '=', 'd.id')
+                    ->where('transactions.user_id', $transaction->user_id)
                     ->where('d.description', $detail->description)
                     ->whereNull('transactions.category_id')
                     ->update(['category_id' => $newCategoryId]);

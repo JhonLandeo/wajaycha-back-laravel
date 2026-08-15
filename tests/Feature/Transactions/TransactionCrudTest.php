@@ -85,7 +85,69 @@ it('puede actualizar una transacción manual propia', function () {
     ]);
 });
 
-it('no puede actualizar una transacción no-manual', function () {
+it('puede categorizar una transacción no-manual', function () {
+    // Bloquear la edición entera dejaba cada importación permanentemente sin
+    // categorizar: este es el único camino para asignarle una categoría a una
+    // fila que trajo el banco.
+    $user = $this->createUserWithCategories();
+    $headers = $this->actingAsJwtUser($user);
+
+    $detail = Detail::factory()->create(['user_id' => $user->id]);
+    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
+    $transaction = Transaction::factory()->create([
+        'user_id' => $user->id,
+        'detail_id' => $detail->id,
+        'category_id' => null,
+        'is_manual' => false,
+    ]);
+
+    $this->putJson("/api/transactions/{$transaction->id}", [
+        'amount' => $transaction->amount,
+        'date_operation' => (string) $transaction->date_operation,
+        'type_transaction' => $transaction->type_transaction,
+        'category_id' => $category->id,
+    ], $headers)->assertOk();
+
+    expect($transaction->fresh()->category_id)->toBe($category->id);
+});
+
+it('ignora el dato del banco al categorizar una transacción no-manual', function () {
+    // El monto, la fecha y el tipo son el asiento del banco. Un cliente que los
+    // mande distintos no los escribe: la regla se decide sobre la fila cargada,
+    // no confiando en el payload.
+    $user = $this->createUserWithCategories();
+    $headers = $this->actingAsJwtUser($user);
+
+    $detail = Detail::factory()->create(['user_id' => $user->id]);
+    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
+    $transaction = Transaction::factory()->create([
+        'user_id' => $user->id,
+        'detail_id' => $detail->id,
+        'amount' => 50.00,
+        'type_transaction' => 'expense',
+        'is_manual' => false,
+    ]);
+    $originalDate = $transaction->date_operation;
+
+    $this->putJson("/api/transactions/{$transaction->id}", [
+        'amount' => 9999.99,
+        'date_operation' => now()->addYear()->toIso8601String(),
+        'type_transaction' => 'income',
+        'category_id' => $category->id,
+    ], $headers)->assertOk();
+
+    $fresh = $transaction->fresh();
+    expect((float) $fresh->amount)->toBe(50.00)
+        ->and($fresh->type_transaction)->toBe('expense')
+        // Se comparan como instantes: la ida y vuelta por la base devuelve el
+        // mismo momento con el offset explicito ('-05'), y comparar los strings
+        // crudos fallaria por el formato aunque la fecha no se haya movido.
+        ->and(Carbon::parse((string) $fresh->date_operation)->toDateTimeString())
+        ->toBe(Carbon::parse((string) $originalDate)->toDateTimeString())
+        ->and($fresh->category_id)->toBe($category->id);
+});
+
+it('sigue permitiendo editar el monto de una transacción manual', function () {
     $user = $this->createUserWithCategories();
     $headers = $this->actingAsJwtUser($user);
 
@@ -93,16 +155,17 @@ it('no puede actualizar una transacción no-manual', function () {
     $transaction = Transaction::factory()->create([
         'user_id' => $user->id,
         'detail_id' => $detail->id,
-        'is_manual' => false
+        'amount' => 50.00,
+        'is_manual' => true,
     ]);
 
-    $response = $this->putJson("/api/transactions/{$transaction->id}", [
+    $this->putJson("/api/transactions/{$transaction->id}", [
         'amount' => 200.00,
         'date_operation' => now()->toIso8601String(),
-        'type_transaction' => 'expense'
-    ], $headers);
+        'type_transaction' => 'expense',
+    ], $headers)->assertOk();
 
-    $response->assertStatus(403);
+    expect((float) $transaction->fresh()->amount)->toBe(200.00);
 });
 
 it('no puede actualizar una transacción de otro usuario', function () {
@@ -185,4 +248,43 @@ it('el endpoint get-summary-by-category retorna datos agrupados', function () {
     $response = $this->getJson('/api/get-summary-by-category?month=4&year=2026', $headers);
 
     $response->assertStatus(200);
+});
+
+it('no categoriza los movimientos de otro usuario al marcar uno como frecuente', function () {
+    // El bulk update de `is_frequent` une por `d.description`, no por `d.id`, así
+    // que sin filtro de usuario alcanza a cualquiera que le haya puesto el mismo
+    // nombre al comercio. Estuvo latente mientras editar un movimiento importado
+    // era imposible; permitir categorizarlos lo vuelve el camino normal.
+    $owner = $this->createUserWithCategories();
+    $other = $this->createUserWithCategories();
+    $headers = $this->actingAsJwtUser($owner);
+
+    $ownerDetail = Detail::factory()->create(['user_id' => $owner->id, 'description' => 'RAPPI']);
+    $otherDetail = Detail::factory()->create(['user_id' => $other->id, 'description' => 'RAPPI']);
+
+    $category = Category::factory()->create(['user_id' => $owner->id, 'type' => 'expense']);
+
+    $ownerTransaction = Transaction::factory()->create([
+        'user_id' => $owner->id,
+        'detail_id' => $ownerDetail->id,
+        'category_id' => null,
+        'is_manual' => false,
+    ]);
+    $otherTransaction = Transaction::factory()->create([
+        'user_id' => $other->id,
+        'detail_id' => $otherDetail->id,
+        'category_id' => null,
+        'is_manual' => false,
+    ]);
+
+    $this->putJson("/api/transactions/{$ownerTransaction->id}", [
+        'amount' => $ownerTransaction->amount,
+        'date_operation' => (string) $ownerTransaction->date_operation,
+        'type_transaction' => $ownerTransaction->type_transaction,
+        'category_id' => $category->id,
+        'is_frequent' => true,
+    ], $headers)->assertOk();
+
+    expect($ownerTransaction->fresh()->category_id)->toBe($category->id)
+        ->and($otherTransaction->fresh()->category_id)->toBeNull();
 });

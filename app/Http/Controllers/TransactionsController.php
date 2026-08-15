@@ -84,10 +84,12 @@ final class TransactionsController extends Controller
             return response()->json(['message' => 'Transacción no encontrada'], 404);
         }
 
-        if (!$transaction->is_manual) {
-            return response()->json(['message' => 'Solo las transacciones manuales pueden ser editadas.'], 403);
-        }
-
+        // Un movimiento importado ya no se rechaza entero. Bloquearlo dejaba cada
+        // importacion permanentemente sin categorizar: la categoria es lo unico
+        // que el usuario aporta sobre una fila que trajo el banco, y este era el
+        // unico camino para asignarla. UpdateTransactionAction aplica la
+        // categoria y descarta monto, fecha, tipo y comercio, que siguen siendo
+        // el registro del banco.
         $dto = TransactionDataDTO::fromUpdateRequest($request, (int) Auth::id(), $id);
         $this->updateAction->execute($dto);
 
