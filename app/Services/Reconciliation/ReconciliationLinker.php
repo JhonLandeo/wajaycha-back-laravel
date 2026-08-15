@@ -40,7 +40,14 @@ class ReconciliationLinker
         return $authorityOfA > $authorityOfB ? [$a, $b] : [$b, $a];
     }
 
-    /** Points the weaker record at the stronger one and returns the pair. */
+    /**
+     * Points the weaker record at the stronger one and returns the pair.
+     *
+     * @return array{0: Transaction, 1: Transaction} master first, satellite second —
+     *                                               the order `rank()` decided, which
+     *                                               every caller destructures by
+     *                                               position
+     */
     public function link(Transaction $a, Transaction $b): array
     {
         [$master, $satellite] = $this->rank($a, $b);

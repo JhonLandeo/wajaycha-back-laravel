@@ -8,7 +8,6 @@ use App\Enums\ReconciliationKind;
 use App\Enums\ReconciliationStatus;
 use App\Enums\ResolvedBy;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -32,8 +31,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ReconciliationCandidate extends Model
 {
-    /** @use HasFactory<\Database\Factories\ReconciliationCandidateFactory> */
-    use HasFactory;
+    // Sin `HasFactory`: `ReconciliationCandidateFactory` nunca se escribio, y el
+    // trait declaraba un generico apuntando a una clase inexistente. Los tests
+    // construyen estas filas por el repositorio, que es el unico camino que la
+    // aplicacion usa. Si algun dia hace falta una factory, se agrega la clase y
+    // el trait juntos.
 
     protected $table = 'reconciliation_candidates';
 

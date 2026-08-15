@@ -119,7 +119,12 @@ class ReconcileImportDuplicates extends Command
      * `fn_get_transactions` counts rows whose `matched_transaction_id` is null,
      * so a chain drops the far end out of the totals altogether.
      *
-     * @return array<int, array{user_id: int, master: int, satellites: int[], amount: float}>
+     * `type` viaja en cada grupo porque gasto e ingreso se informan por separado
+     * y jamas sumados. Estuvo ausente de esta firma mientras el codigo si lo
+     * escribia, y el analisis estatico —que solo puede creerle a la firma—
+     * dedujo que el desglose por tipo era codigo muerto.
+     *
+     * @return array<int, array{user_id: int, master: int, satellites: int[], amount: float, type: string}>
      */
     private function duplicateGroups(): array
     {
