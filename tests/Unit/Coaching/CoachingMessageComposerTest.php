@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\DTOs\Coaching\BlindnessObservation;
 use App\DTOs\Coaching\CoachingCause;
 use App\DTOs\Coaching\PaceObservation;
+use App\Enums\BudgetPeriod;
 use App\Services\Coaching\CoachingMessageComposer;
 use Carbon\CarbonImmutable;
 
@@ -23,6 +24,8 @@ function paceObservation(
     ?float $projected = 878.33,
     int $dayOfMonth = 12,
     mixed $cause = null,
+    BudgetPeriod $periodKind = BudgetPeriod::MONTHLY,
+    ?int $monthsRemaining = null,
 ): PaceObservation {
     return new PaceObservation(
         subjectKey: $subjectKey,
@@ -35,6 +38,29 @@ function paceObservation(
         projected: $projected,
         dayOfMonth: $dayOfMonth,
         cause: $cause,
+        periodKind: $periodKind,
+        monthsRemaining: $monthsRemaining,
+    );
+}
+
+/** A yearly-envelope observation: `spent` and `budget` are both annual figures. */
+function envelopeObservation(
+    string $band = 'envelope_consumed',
+    float $spentInYear = 960.0,
+    float $annualBudget = 1200.0,
+    ?int $monthsRemaining = 4,
+    mixed $cause = null,
+): PaceObservation {
+    return paceObservation(
+        name: 'Salud',
+        band: $band,
+        spent: $spentInYear,
+        budget: $annualBudget,
+        projected: null,
+        dayOfMonth: 15,
+        cause: $cause,
+        periodKind: BudgetPeriod::YEARLY,
+        monthsRemaining: $monthsRemaining,
     );
 }
 
@@ -296,4 +322,83 @@ it('omite la fecha entera cuando la compra dominante no la trae', function () {
     expect($mensaje)->toContain('Falabella')
         ->and($mensaje)->not->toContain('el .')
         ->and($mensaje)->not->toMatch('/\s+\.$/m');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Yearly envelopes
+|--------------------------------------------------------------------------
+*/
+
+it('ancla la frase de un sobre al año, nunca a un dia del mes', function () {
+    $message = (new CoachingMessageComposer)->composeObservation(
+        envelopeObservation(band: 'envelope_consumed', spentInYear: 960.0, annualBudget: 1200.0, monthsRemaining: 4)
+    );
+
+    expect($message)->toBe('Salud: S/ 960.00 de S/ 1,200.00 al año, llevás el 80% consumido y quedan 4 meses.')
+        // Decir "el día 15" sobre un presupuesto anual invita justo a la
+        // lectura mensual que budget_period existe para impedir.
+        ->and($message)->not->toContain('día');
+});
+
+it('dice "anual" al reportar un exceso de sobre, para que no se lea como el mes', function () {
+    $message = (new CoachingMessageComposer)->composeObservation(
+        envelopeObservation(band: 'envelope_exceeded', spentInYear: 1350.0, annualBudget: 1200.0, monthsRemaining: null)
+    );
+
+    expect($message)->toBe('Salud: S/ 1,350.00 de S/ 1,200.00 al año, ya pasaste el presupuesto anual.');
+});
+
+it('concuerda en singular cuando queda un solo mes', function () {
+    $message = (new CoachingMessageComposer)->composeObservation(
+        envelopeObservation(spentInYear: 960.0, annualBudget: 1200.0, monthsRemaining: 1)
+    );
+
+    expect($message)->toContain('y queda 1 mes.');
+});
+
+it('nombra lo que movio el sobre este mes sin inventarle un porcentaje', function () {
+    $message = (new CoachingMessageComposer)->composeObservation(
+        envelopeObservation(
+            band: 'envelope_exceeded',
+            spentInYear: 1350.0,
+            monthsRemaining: null,
+            cause: new CoachingCause(
+                merchantName: 'Clinica Internacional',
+                amount: 350.0,
+                frequency: 1,
+                transactionDate: CarbonImmutable::create(2026, 8, 15),
+            ),
+        )
+    );
+
+    expect($message)->toBe(
+        'Salud: S/ 1,350.00 de S/ 1,200.00 al año, ya pasaste el presupuesto anual. '
+        .'Este mes fue S/ 350.00 en Clinica Internacional el 15.'
+    )
+        // La causa se consulta por mes y `spent` es del año: 350/1350 = 26%
+        // seria aritmeticamente valido y no significaria nada.
+        ->and($message)->not->toContain('%');
+});
+
+it('omite la fecha del movimiento del sobre cuando la causa no la trae', function () {
+    $message = (new CoachingMessageComposer)->composeObservation(
+        envelopeObservation(
+            cause: new CoachingCause(merchantName: 'Clinica Internacional', amount: 350.0, frequency: 1),
+        )
+    );
+
+    expect($message)->toEndWith('Este mes fue S/ 350.00 en Clinica Internacional.');
+});
+
+it('se niega ante un envelope_consumed sin meses restantes, en vez de bajar a la otra frase', function () {
+    expect(fn () => (new CoachingMessageComposer)->composeObservation(
+        envelopeObservation(band: 'envelope_consumed', monthsRemaining: null)
+    ))->toThrow(InvalidArgumentException::class);
+});
+
+it('se niega ante una banda de sobre que no conoce', function () {
+    expect(fn () => (new CoachingMessageComposer)->composeObservation(
+        envelopeObservation(band: 'envelope_inventada')
+    ))->toThrow(InvalidArgumentException::class);
 });

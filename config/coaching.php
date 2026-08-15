@@ -53,6 +53,57 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Envelope Thresholds
+    |--------------------------------------------------------------------------
+    |
+    | The yearly-budget half of PaceThresholds, for categories whose
+    | `budget_period` is 'yearly'. An envelope is consumed, not paced, so there
+    | is deliberately no projection knob here to match `overrun_margin`.
+    |
+    | `envelope_consumed_share` is how much of the year's budget has to be gone
+    | before the coach says so; `envelope_min_months_remaining` is how much of
+    | the year has to be left for saying it to be worth anything. Reporting in
+    | December that 85% of a yearly budget is spent is a true statement with
+    | nothing behind it.
+    |
+    */
+
+    'envelope_consumed_share' => (float) env('COACHING_ENVELOPE_CONSUMED_SHARE', 0.80),
+
+    'envelope_min_months_remaining' => (int) env('COACHING_ENVELOPE_MIN_MONTHS_REMAINING', 2),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Morning Budget Digest
+    |--------------------------------------------------------------------------
+    |
+    | The standing status board (`app:send-budget-digest`), sent before the day's
+    | decisions rather than after them. It is a second voice, not a second copy
+    | of the coach: it repeats the same facts every morning on purpose, which is
+    | exactly what `SpokenObservationLedger` forbids the coach from doing.
+    |
+    | `digest_enabled` turns off the morning message alone. `coaching.enabled`
+    | still silences it too — a subsystem kill switch that leaves one channel
+    | talking is not a kill switch.
+    |
+    | `digest_max_categories` is the digest's own ceiling instead of
+    | `max_observations_per_message`. The coach caps at 3 because each of its
+    | lines carries a cause and gets long; a digest line is one short row, and a
+    | status board silently truncated to 3 would read as complete when it is not.
+    |
+    | `digest_hour` is read by the scheduler in `routes/console.php`. Changing it
+    | is a config edit and a redeploy of the schedule, never a migration.
+    |
+    */
+
+    'digest_enabled' => (bool) env('COACHING_DIGEST_ENABLED', true),
+
+    'digest_max_categories' => (int) env('COACHING_DIGEST_MAX_CATEGORIES', 10),
+
+    'digest_hour' => (string) env('COACHING_DIGEST_HOUR', '08:00'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Max Observations Per Message
     |--------------------------------------------------------------------------
     |

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\DTOs\Coaching\CategoryMonthSnapshot;
+use App\Enums\BudgetPeriod;
 use App\Exceptions\Coaching\TooManyCategoriesException;
 use App\Models\Category;
 use App\Repositories\Contracts\CategoryRepositoryContract;
@@ -33,9 +34,22 @@ final class CategoryRepository implements CategoryRepositoryContract
     public function getMonthlyReport(int $userId, int $month, int $year, int $page, int $perPage, ?string $search = null): LengthAwarePaginator
     {
         // Rule 02 Violation Fix: Explicit columns instead of SELECT *
+        //
+        // `budget_period` arrives through a join placed AROUND the function, never
+        // by editing it. `get_monthly_category_budget_report` carries Financial
+        // Analysis rules that CLAUDE.md forbids extending, and the client needs
+        // this column for a reason the function has no part in: labelling S/ 1200
+        // as annual so nobody reads it as a monthly figure.
+        //
+        // LEFT JOIN, not INNER: the report's row count and its `total_records`
+        // must not depend on this join. An inner join would silently drop a row —
+        // and shift the pagination — if a category disappeared between the
+        // function's read and this one.
         $results = DB::select(
-            'SELECT id, name, monthly_budget, spent, available_budget, percentage_spent, rule_quantity, total_records 
-             FROM get_monthly_category_budget_report(?, ?, ?, ?, ?, ?)',
+            'SELECT r.id, r.name, r.monthly_budget, r.spent, r.available_budget, r.percentage_spent,
+                    r.rule_quantity, r.total_records, c.budget_period
+             FROM get_monthly_category_budget_report(?, ?, ?, ?, ?, ?) r
+             LEFT JOIN categories c ON c.id = r.id',
             [$page, $perPage, $userId, $month, $year, $search]
         );
 
@@ -136,18 +150,20 @@ final class CategoryRepository implements CategoryRepositoryContract
             throw TooManyCategoriesException::forUser($userId, $totalRecords, $maxCategories);
         }
 
-        // The function returns no `type` column (design.md D2 item 2). Intersect
-        // with expense category ids so income/transfer never reach the evaluator.
-        $expenseCategoryIds = Category::query()
+        // The function returns neither a `type` nor a `budget_period` column
+        // (design.md D2 item 2). One query carries both: the keys are the expense
+        // category ids the intersection needs, the values are the budget unit the
+        // evaluator needs.
+        /** @var array<int, string> $periodByCategory */
+        $periodByCategory = Category::query()
             ->where('user_id', $userId)
             ->where('type', 'expense')
-            ->pluck('id')
+            ->pluck('budget_period', 'id')
             ->all();
-        $expenseCategoryIds = array_flip($expenseCategoryIds);
 
         $survivingRows = array_values(array_filter(
             $rows,
-            fn (object $row): bool => isset($expenseCategoryIds[$row->id]) && (float) $row->spent > 0.0
+            fn (object $row): bool => isset($periodByCategory[(int) $row->id]) && (float) $row->spent > 0.0
         ));
 
         if ($survivingRows === []) {
@@ -157,6 +173,18 @@ final class CategoryRepository implements CategoryRepositoryContract
         $survivingIds = array_map(fn (object $row): int => (int) $row->id, $survivingRows);
         $largestExpenseByCategory = $this->largestExpenseByCategory($userId, $survivingIds, $month, $year);
 
+        // Only yearly categories pay for the year-to-date query, and only when at
+        // least one of them survived. A workspace with no envelope budgets — which
+        // is every workspace until the owner marks one — issues exactly the queries
+        // it issued before this column existed.
+        $yearlyIds = array_values(array_filter(
+            $survivingIds,
+            fn (int $id): bool => BudgetPeriod::fromColumn($periodByCategory[$id] ?? null) === BudgetPeriod::YEARLY
+        ));
+        $spentInYearByCategory = $yearlyIds === []
+            ? []
+            : $this->spentInYearByCategory($userId, $yearlyIds, $year);
+
         return array_map(
             fn (object $row): CategoryMonthSnapshot => new CategoryMonthSnapshot(
                 categoryId: (int) $row->id,
@@ -165,9 +193,53 @@ final class CategoryRepository implements CategoryRepositoryContract
                 monthlyBudget: (float) $row->monthly_budget,
                 spent: (float) $row->spent,
                 largestExpenseAmount: $largestExpenseByCategory[(int) $row->id] ?? 0.0,
+                budgetPeriod: BudgetPeriod::fromColumn($periodByCategory[(int) $row->id] ?? null),
+                spentInYear: $spentInYearByCategory[(int) $row->id] ?? 0.0,
             ),
             $survivingRows
         );
+    }
+
+    /**
+     * Year-to-date expense total per category, for yearly budgets only.
+     *
+     * Reads `v_unified_transactions` — the same source `spent` and
+     * `largestExpenseByCategory()` come from. A yearly envelope is compared
+     * against this figure and a monthly budget against `spent`, and if the two
+     * came from different sources the coach could report a category as both
+     * within its envelope and over its month using numbers that never agreed.
+     *
+     * The window is the calendar year in the reference timezone. That is a
+     * simplification the owner can revisit: a budget "for the year" could
+     * reasonably mean a rolling twelve months, but a calendar year is what a
+     * person means when they set one, and it is the only reading that makes two
+     * users' Januaries comparable.
+     *
+     * @param  int[]  $categoryIds
+     * @return array<int, float> keyed by category_id
+     */
+    private function spentInYearByCategory(int $userId, array $categoryIds, int $year): array
+    {
+        $timezone = (string) config('app.timezone');
+        $startsAt = CarbonImmutable::create($year, 1, 1, 0, 0, 0, $timezone);
+        $endsAt = $startsAt->addYear();
+
+        $rows = DB::table('v_unified_transactions')
+            ->select('category_id', DB::raw('SUM(amount) as spent_in_year'))
+            ->where('user_id', $userId)
+            ->where('type_transaction', 'expense')
+            ->whereIn('category_id', $categoryIds)
+            ->where('date_operation', '>=', $startsAt)
+            ->where('date_operation', '<', $endsAt)
+            ->groupBy('category_id')
+            ->get();
+
+        $spentByCategory = [];
+        foreach ($rows as $row) {
+            $spentByCategory[(int) $row->category_id] = (float) $row->spent_in_year;
+        }
+
+        return $spentByCategory;
     }
 
     /**

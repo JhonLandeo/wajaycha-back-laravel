@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\DTOs\Coaching\CategoryMonthSnapshot;
+use App\Enums\BudgetPeriod;
 use App\Exceptions\Coaching\TooManyCategoriesException;
 use App\Models\Category;
 use App\Models\Detail;
@@ -112,4 +113,69 @@ it('throws when total_records exceeds the configured category ceiling instead of
 
     expect(fn () => $repository->expenseBudgetSnapshotsForMonth($user->id, (int) now()->format('n'), (int) now()->format('Y')))
         ->toThrow(TooManyCategoriesException::class);
+});
+
+it('carries budget_period through to the snapshot', function () {
+    $user = User::factory()->create();
+    $health = Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'name' => 'Salud',
+        'monthly_budget' => 1200,
+        'budget_period' => BudgetPeriod::YEARLY->value,
+    ]);
+    makeExpenseTransaction($user, $health, 350);
+
+    $snapshots = (new CategoryRepository)->expenseBudgetSnapshotsForMonth($user->id, (int) now()->format('n'), (int) now()->format('Y'));
+
+    expect($snapshots[0]->budgetPeriod)->toBe(BudgetPeriod::YEARLY);
+});
+
+it('defaults an existing category to a monthly budget period', function () {
+    $user = User::factory()->create();
+    $groceries = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense', 'monthly_budget' => 400]);
+    makeExpenseTransaction($user, $groceries, 150);
+
+    $snapshots = (new CategoryRepository)->expenseBudgetSnapshotsForMonth($user->id, (int) now()->format('n'), (int) now()->format('Y'));
+
+    expect($snapshots[0]->budgetPeriod)->toBe(BudgetPeriod::MONTHLY)
+        ->and($snapshots[0]->spentInYear)->toBe(0.0);
+});
+
+it('sums the whole year into spentInYear for a yearly category, not just the month', function () {
+    $user = User::factory()->create();
+    $health = Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 1200,
+        'budget_period' => BudgetPeriod::YEARLY->value,
+    ]);
+
+    // Marzo y este mes. `spent` solo puede ver el segundo; el sobre anual necesita los dos.
+    makeExpenseTransaction($user, $health, 600, now()->startOfYear()->addMonths(2)->setDay(10));
+    makeExpenseTransaction($user, $health, 350);
+
+    $snapshots = (new CategoryRepository)->expenseBudgetSnapshotsForMonth($user->id, (int) now()->format('n'), (int) now()->format('Y'));
+
+    expect($snapshots[0]->spent)->toBe(350.0)
+        ->and($snapshots[0]->spentInYear)->toBe(950.0);
+});
+
+it('leaves last year out of spentInYear', function () {
+    $user = User::factory()->create();
+    $health = Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 1200,
+        'budget_period' => BudgetPeriod::YEARLY->value,
+    ]);
+
+    makeExpenseTransaction($user, $health, 900, now()->startOfYear()->subDay());
+    makeExpenseTransaction($user, $health, 350);
+
+    $snapshots = (new CategoryRepository)->expenseBudgetSnapshotsForMonth($user->id, (int) now()->format('n'), (int) now()->format('Y'));
+
+    // Un sobre anual se renueva con el año: arrastrar diciembre pasado lo
+    // reportaria excedido en enero por gasto que ya no cuenta.
+    expect($snapshots[0]->spentInYear)->toBe(350.0);
 });

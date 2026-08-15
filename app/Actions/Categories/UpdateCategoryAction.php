@@ -25,6 +25,13 @@ final class UpdateCategoryAction
                 'parent_id' => $dto->parent_id,
             ];
 
+            // Omitted, never defaulted: a client that does not know the column
+            // exists must not reset a yearly envelope back to monthly by saving
+            // an unrelated field.
+            if ($dto->budget_period !== null) {
+                $data['budget_period'] = $dto->budget_period->value;
+            }
+
             $this->repository->update($category, $data);
 
             if ($dto->pareto_classification_id) {

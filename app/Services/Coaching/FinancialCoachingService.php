@@ -51,6 +51,14 @@ class FinancialCoachingService
     private const BAND_SEVERITY = [
         'projected_over' => 1,
         'over_budget' => 2,
+        // The envelope family reuses ranks 1 and 2 rather than extending the
+        // ladder. This map is only ever consulted per subject_key, and a
+        // category has exactly one budget_period, so the two families never meet
+        // on the same subject. The one case that can mix them — the owner
+        // switching a category from monthly to yearly mid-month — still behaves:
+        // "already past the line" outranks "heading for it" in either family.
+        'envelope_consumed' => 1,
+        'envelope_exceeded' => 2,
     ];
 
     public function __construct(
@@ -268,13 +276,27 @@ class FinancialCoachingService
             return [];
         }
 
+        $amount = $scope->amount ?? 0.0;
+
+        // `budgetPeriod` has to be carried through: rebuilt without it the
+        // counterfactual would default to monthly, so a yearly category would be
+        // compared against the envelope table with the transaction and against
+        // the pace table without it — two different questions, and the
+        // comparison of their answers would be meaningless.
+        //
+        // `spentInYear` drops by the same amount for the same reason `spent`
+        // does: the counterfactual asks "what would the band be if this
+        // transaction had not happened", and it did not happen in the year
+        // either.
         $withoutSnapshot = new CategoryMonthSnapshot(
             categoryId: $snapshot->categoryId,
             name: $snapshot->name,
             type: $snapshot->type,
             monthlyBudget: $snapshot->monthlyBudget,
-            spent: $snapshot->spent - ($scope->amount ?? 0.0),
+            spent: $snapshot->spent - $amount,
             largestExpenseAmount: $snapshot->largestExpenseAmount,
+            budgetPeriod: $snapshot->budgetPeriod,
+            spentInYear: $snapshot->spentInYear - $amount,
         );
 
         $withoutBand = $this->evaluator->evaluate([$withoutSnapshot], $cursor, $thresholds)[0]->band ?? null;
@@ -317,7 +339,12 @@ class FinancialCoachingService
      */
     private function causeFor(int $userId, PaceObservation $observation, MonthCursor $cursor): ?CoachingCause
     {
-        if ($observation->isLumpy) {
+        // An envelope takes the single-largest-expense branch for the same
+        // reason a lumpy month does: one purchase is what moved it. Asking for a
+        // merchant breakdown with a frequency would describe a rate the category
+        // does not have. The window stays the month — "what moved this" is a
+        // question about what just happened, not about the whole year.
+        if ($observation->isLumpy || $observation->isEnvelope()) {
             $row = $this->transactions->largestExpenseForCategoryMonth(
                 $userId,
                 $observation->categoryId,
@@ -434,17 +461,7 @@ class FinancialCoachingService
 
     private function cursor(): MonthCursor
     {
-        $timezone = (string) config('app.timezone');
-        $now = CarbonImmutable::now($timezone);
-        $periodMonth = $now->startOfMonth();
-
-        return new MonthCursor(
-            day: $now->day,
-            daysInMonth: $now->daysInMonth,
-            periodMonth: $periodMonth,
-            startsAt: $periodMonth,
-            endsAt: $periodMonth->addMonthNoOverflow(),
-        );
+        return MonthCursor::forInstant(CarbonImmutable::now((string) config('app.timezone')));
     }
 
     private function thresholds(): PaceThresholds
@@ -454,6 +471,8 @@ class FinancialCoachingService
             overrunMargin: (float) config('coaching.overrun_margin'),
             lumpyShare: (float) config('coaching.lumpy_share'),
             maxObservations: (int) config('coaching.max_observations_per_message'),
+            envelopeConsumedShare: (float) config('coaching.envelope_consumed_share'),
+            envelopeMinMonthsRemaining: (int) config('coaching.envelope_min_months_remaining'),
         );
     }
 }

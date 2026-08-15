@@ -24,4 +24,29 @@ final class MonthCursor
         public readonly CarbonImmutable $startsAt,
         public readonly CarbonImmutable $endsAt,
     ) {}
+
+    /**
+     * The cursor for the month containing `$now`.
+     *
+     * Takes the instant rather than calling `now()` so this stays a value object:
+     * a DTO that reads the clock cannot be asserted against a fixed date, and
+     * every caller here already resolves the reference timezone itself.
+     *
+     * It exists because two entry points now build this cursor — the coaching
+     * sweep and the morning digest — and five lines of calendar arithmetic copied
+     * between them is where an off-by-one month lives. `addMonthNoOverflow` is the
+     * load-bearing detail: `addMonth()` on January 31 lands in March.
+     */
+    public static function forInstant(CarbonImmutable $now): self
+    {
+        $periodMonth = $now->startOfMonth();
+
+        return new self(
+            day: $now->day,
+            daysInMonth: $now->daysInMonth,
+            periodMonth: $periodMonth,
+            startsAt: $periodMonth,
+            endsAt: $periodMonth->addMonthNoOverflow(),
+        );
+    }
 }

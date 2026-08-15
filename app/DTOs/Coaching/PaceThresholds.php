@@ -13,10 +13,25 @@ namespace App\DTOs\Coaching;
  */
 final class PaceThresholds
 {
+    /**
+     * @param  float  $envelopeConsumedShare  share of a yearly envelope that has
+     *                                        to be gone before the coach says so.
+     *                                        Never a projection: an envelope is
+     *                                        consumed, not paced, so this reports
+     *                                        depletion that already happened.
+     * @param  int  $envelopeMinMonthsRemaining  months that must still be left in
+     *                                           the year for depletion to be worth
+     *                                           reporting. Telling someone in
+     *                                           December that they used 85% of a
+     *                                           yearly budget is a fact with
+     *                                           nothing behind it.
+     */
     public function __construct(
         public readonly int $minDayForProjection,
         public readonly float $overrunMargin,
         public readonly float $lumpyShare,
         public readonly int $maxObservations,
+        public readonly float $envelopeConsumedShare = 0.80,
+        public readonly int $envelopeMinMonthsRemaining = 2,
     ) {}
 }

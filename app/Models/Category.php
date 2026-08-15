@@ -18,7 +18,8 @@ class Category extends Model
         'parent_id',
         'name',
         'user_id',
-        'monthly_budget'
+        'monthly_budget',
+        'budget_period',
     ];
 
     public function categorizationRules(): HasMany

@@ -38,9 +38,12 @@ use Illuminate\Support\Facades\DB;
  */
 class SpokenObservationLedger
 {
+    /** Kept in sync with FinancialCoachingService::BAND_SEVERITY by hand, as its docblock records. */
     private const BAND_SEVERITY = [
         'projected_over' => 1,
         'over_budget' => 2,
+        'envelope_consumed' => 1,
+        'envelope_exceeded' => 2,
     ];
 
     /**

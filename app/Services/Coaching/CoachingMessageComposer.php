@@ -85,9 +85,18 @@ final class CoachingMessageComposer
      * day, and either the projection (`projected_over`) or "ya pasaste el
      * presupuesto" (`over_budget`, linear or lumpy — lumpiness never adds a
      * projection, design.md rule "over_budget, lumpy … no projection").
+     *
+     * Envelope bands leave through {@see composeEnvelopeFact()} before any of
+     * that: their sentence is anchored to the year, not to a day of the month,
+     * and saying "el día 15" about a yearly budget would invite exactly the
+     * monthly reading `budget_period` exists to prevent.
      */
     private function composeFact(PaceObservation $observation): string
     {
+        if ($observation->isEnvelope()) {
+            return $this->composeEnvelopeFact($observation);
+        }
+
         $spent = $this->money($observation->spent);
         $budget = $this->money($observation->budget);
 
@@ -111,6 +120,47 @@ final class CoachingMessageComposer
     }
 
     /**
+     * The two envelope shapes. Both state the year's position against the year's
+     * budget, and neither carries a projection — there is no field on the
+     * observation that could supply one.
+     *
+     * `envelope_exceeded` says "ya pasaste el presupuesto anual" only when the
+     * YEAR's spend passed the YEAR's budget. That word is the correction this
+     * whole change is for: a single consultation against a monthly figure used
+     * to produce the same sentence about a budget the user had not exceeded at
+     * all, and a coach that cries wolf once is a coach that gets muted.
+     */
+    private function composeEnvelopeFact(PaceObservation $observation): string
+    {
+        $spent = $this->money($observation->spent);
+        $budget = $this->money($observation->budget);
+
+        $status = match ($observation->band) {
+            'envelope_exceeded' => 'ya pasaste el presupuesto anual',
+            'envelope_consumed' => $observation->monthsRemaining !== null
+                ? sprintf(
+                    'llevás el %d%% consumido y %s %d %s',
+                    $this->share($observation->spent, $observation->budget),
+                    $this->pluralize($observation->monthsRemaining, 'queda', 'quedan'),
+                    $observation->monthsRemaining,
+                    $this->pluralize($observation->monthsRemaining, 'mes', 'meses'),
+                )
+                // Same contract as the monthly bands: a band whose defining
+                // number is missing is a programming error, and falling back to
+                // the other band's wording would tell the user they exceeded a
+                // budget they have not exceeded.
+                : throw new InvalidArgumentException(
+                    "PaceObservation {$observation->subjectKey} llego con banda envelope_consumed y sin meses restantes."
+                ),
+            default => throw new InvalidArgumentException(
+                "PaceObservation {$observation->subjectKey} llego con una banda de sobre desconocida: {$observation->band}."
+            ),
+        };
+
+        return "{$observation->name}: {$spent} de {$budget} al año, {$status}.";
+    }
+
+    /**
      * The second sentence, when a cause is known. The refund guard (design.md §6
      * rule 2) applies identically to both shapes: when the cause's amount exceeds
      * `spent`, the share is omitted and the merchant is still named — a share above
@@ -118,11 +168,33 @@ final class CoachingMessageComposer
      */
     private function composeCause(PaceObservation $observation, CoachingCause $cause): string
     {
+        if ($observation->isEnvelope()) {
+            return $this->composeEnvelopeCause($cause);
+        }
+
         $isRefund = $cause->amount > $observation->spent;
 
         return $observation->isLumpy
             ? $this->composeLumpyCause($observation, $cause, $isRefund)
             : $this->composeLinearCause($observation, $cause, $isRefund);
+    }
+
+    /**
+     * What moved the envelope this month. Deliberately carries no percentage.
+     *
+     * Every other cause shape renders `amount / spent`, and for an envelope
+     * those two are measured over different windows: the cause query is
+     * month-scoped (FinancialCoachingService::causeFor) while `spent` is the
+     * year to date. "El 39% son 1 compra" would be a month's purchase divided by
+     * a year's spending — a number that is arithmetically valid and means
+     * nothing. Stating the amount is honest; stating the share is not.
+     */
+    private function composeEnvelopeCause(CoachingCause $cause): string
+    {
+        $amount = $this->money($cause->amount);
+        $when = $cause->transactionDate !== null ? " el {$cause->transactionDate->day}" : '';
+
+        return "Este mes fue {$amount} en {$cause->merchantName}{$when}.";
     }
 
     private function composeLinearCause(PaceObservation $observation, CoachingCause $cause, bool $isRefund): string
