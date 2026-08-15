@@ -10,6 +10,15 @@ class FinancialEntity extends Model
 {
     /** @use HasFactory<\Database\Factories\FinancialEntityFactory> */
     use HasFactory;
+
+    /**
+     * The row `FinancialEntitiesSeeder` inserts first — Banco de Crédito del Perú.
+     *
+     * Carries the same caveat as {@see \App\Models\PaymentService::YAPE_ID}: it is
+     * an assumption about seeded ids, not a fact the schema enforces.
+     */
+    public const BCP_ID = 1;
+
     protected $fillable = [
         'name',
         'country',

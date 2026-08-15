@@ -13,8 +13,7 @@ final class UpdateCategoryAction
 {
     public function __construct(
         private readonly CategoryRepositoryContract $repository
-    ) {
-    }
+    ) {}
 
     public function execute(Category $category, CategoryDataDTO $dto): Category
     {
@@ -26,20 +25,22 @@ final class UpdateCategoryAction
                 'parent_id' => $dto->parent_id,
             ];
 
+            // Omitted, never defaulted: a client that does not know the column
+            // exists must not reset a yearly envelope back to monthly by saving
+            // an unrelated field.
+            if ($dto->budget_period !== null) {
+                $data['budget_period'] = $dto->budget_period->value;
+            }
+
             $this->repository->update($category, $data);
 
             if ($dto->pareto_classification_id) {
-                DB::table('category_pareto_assignments')->updateOrInsert(
-                    ['category_id' => $category->id],
-                    [
-                        'pareto_classification_id' => $dto->pareto_classification_id,
-                        'updated_at' => now(),
-                    ]
+                $this->repository->assignParetoClassification(
+                    $category->id,
+                    $dto->pareto_classification_id
                 );
             } else {
-                DB::table('category_pareto_assignments')
-                    ->where('category_id', $category->id)
-                    ->delete();
+                $this->repository->clearParetoClassification($category->id);
             }
 
             return $category->fresh();

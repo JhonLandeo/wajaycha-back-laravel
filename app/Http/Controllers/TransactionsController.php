@@ -36,8 +36,15 @@ final class TransactionsController extends Controller
         return response()->json($paginator);
     }
 
-    public function show(Transaction $transaction): JsonResponse
+    public function show(int $id): JsonResponse
     {
+        // Resolved through the scoped repository rather than route-model binding:
+        // binding resolves by primary key alone and would expose another user's row.
+        $transaction = $this->repository->findById($id, (int) Auth::id());
+        if (!$transaction) {
+            return response()->json(['message' => 'Transacción no encontrada'], 404);
+        }
+
         $transaction->load('detail');
         return response()->json($transaction);
     }
@@ -69,13 +76,12 @@ final class TransactionsController extends Controller
      */
     public function update(UpdateTransactionRequest $request, int $id): JsonResponse
     {
-        $transaction = $this->repository->findById($id);
+        $transaction = $this->repository->findById($id, (int) Auth::id());
+        // The scoped lookup is the single authorization gate. A row belonging to another
+        // user is indistinguishable from one that does not exist, which is deliberate:
+        // a 403 would confirm the id, handing an enumerator the signal they want.
         if (!$transaction) {
             return response()->json(['message' => 'Transacción no encontrada'], 404);
-        }
-
-        if ($transaction->user_id !== Auth::id()) {
-            return response()->json(['message' => 'No autorizado'], 403);
         }
 
         if (!$transaction->is_manual) {
@@ -93,7 +99,7 @@ final class TransactionsController extends Controller
      */
     public function destroy(int $id): JsonResponse
     {
-        $transaction = $this->repository->findById($id);
+        $transaction = $this->repository->findById($id, (int) Auth::id());
         if (!$transaction) {
             return response()->json(['message' => 'Transacción no encontrada'], 404);
         }

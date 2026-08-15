@@ -7,14 +7,14 @@ namespace App\Repositories;
 use App\DTOs\Transactions\TransactionFilterDTO;
 use App\Models\Transaction;
 use App\Repositories\Contracts\TransactionRepositoryContract;
-use Illuminate\Pagination\LengthAwarePaginator;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator as LengthAwarePaginatorContract;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
 final class TransactionRepository implements TransactionRepositoryContract
 {
     /**
-     * @param TransactionFilterDTO $filters
      * @return LengthAwarePaginatorContract<int, \stdClass>
      */
     public function findPaginated(TransactionFilterDTO $filters): LengthAwarePaginatorContract
@@ -22,12 +22,12 @@ final class TransactionRepository implements TransactionRepositoryContract
         $function = $filters->recurring ? 'get_transactions_by_detail' : 'get_transactions';
 
         // Rule 02 Violation Fix: Explicit columns instead of SELECT *
-        if (!$filters->recurring) {
+        if (! $filters->recurring) {
             $columns = 'id, message, amount, date_operation, type_transaction, category_id, detail_id, detail_name, frequency_general, frequency, yape_trans, yape_id, user_id, source_type, suggested_category_id, suggest_name, tags, is_manual, total_count';
         } else {
             $columns = 'detail_id, detail_name, child_transactions, frequency, amount, total_count';
         }
-        
+
         $statement = DB::select("SELECT $columns FROM $function(?,?,?,?,?,?,?,?,?,?,?,?)", [
             $filters->perPage,
             $filters->page,
@@ -40,11 +40,11 @@ final class TransactionRepository implements TransactionRepositoryContract
             $filters->userId,
             $filters->recurring,
             $filters->weekend,
-            $filters->workday
+            $filters->workday,
         ]);
 
         foreach ($statement as $key => $value) {
-            if (!$filters->recurring) {
+            if (! $filters->recurring) {
                 if (property_exists($value, 'yape_trans')) {
                     $statement[$key]->yape_trans = json_decode((string) $value->yape_trans);
                 }
@@ -59,7 +59,7 @@ final class TransactionRepository implements TransactionRepositoryContract
         }
 
         $total = 0;
-        if (!empty($statement)) {
+        if (! empty($statement)) {
             $total = (int) $statement[0]->total_count;
         }
 
@@ -73,13 +73,6 @@ final class TransactionRepository implements TransactionRepositoryContract
     }
 
     /**
-     * @param int $userId
-     * @param int|null $year
-     * @param int|null $month
-     * @param string|null $type
-     * @param int $perPage
-     * @param int $page
-     * @param string|null $search
      * @return LengthAwarePaginatorContract<int, \App\Models\Transaction>
      */
     public function summaryByCategory(int $userId, ?int $year, ?int $month, ?string $type, int $perPage, int $page, ?string $search = null): LengthAwarePaginatorContract
@@ -110,7 +103,7 @@ final class TransactionRepository implements TransactionRepositoryContract
         }
 
         if ($search) {
-            $query->where('sc.name', 'ILIKE', '%' . $search . '%');
+            $query->where('sc.name', 'ILIKE', '%'.$search.'%');
         }
 
         $query->where('transactions.user_id', $userId);
@@ -121,10 +114,10 @@ final class TransactionRepository implements TransactionRepositoryContract
             ->paginate($perPage, ['*'], 'page', $page);
     }
 
-    public function findById(int $id): ?Transaction
+    public function findById(int $id, int $userId): ?Transaction
     {
         /** @var Transaction|null */
-        return Transaction::query()->find($id);
+        return Transaction::query()->whereKey($id)->where('user_id', $userId)->first();
     }
 
     public function create(array $data): Transaction
@@ -141,5 +134,51 @@ final class TransactionRepository implements TransactionRepositoryContract
     public function delete(Transaction $transaction): bool
     {
         return (bool) $transaction->delete();
+    }
+
+    public function topMerchantsForCategoryMonth(int $userId, int $categoryId, CarbonImmutable $startsAt, CarbonImmutable $endsAt, int $limit): array
+    {
+        // Rule 02 Violation Fix: Explicit columns instead of SELECT *
+        // Deliberately v_unified_transactions, never get_transactions_by_detail()
+        // (design.md D5) — no HAVING, so a single-transaction merchant survives.
+        return DB::table('v_unified_transactions')
+            ->select(
+                'detail_id',
+                'detail_name',
+                DB::raw('SUM(amount) as total'),
+                DB::raw('COUNT(*) as frequency')
+            )
+            ->where('user_id', $userId)
+            ->where('category_id', $categoryId)
+            ->where('type_transaction', 'expense')
+            ->where('date_operation', '>=', $startsAt)
+            ->where('date_operation', '<', $endsAt)
+            ->groupBy('detail_id', 'detail_name')
+            ->orderByDesc('total')
+            ->limit($limit)
+            ->get()
+            ->all();
+    }
+
+    public function largestExpenseForCategoryMonth(int $userId, int $categoryId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): ?object
+    {
+        // Rule 02 Violation Fix: Explicit columns instead of SELECT *
+        return DB::table('v_unified_transactions')
+            ->select('detail_name', 'amount', 'date_operation')
+            ->where('user_id', $userId)
+            ->where('category_id', $categoryId)
+            ->where('type_transaction', 'expense')
+            ->where('date_operation', '>=', $startsAt)
+            ->where('date_operation', '<', $endsAt)
+            ->orderByDesc('amount')
+            ->limit(1)
+            ->first();
+    }
+
+    public function reassignTags(int $fromTransactionId, int $toTransactionId): void
+    {
+        DB::table('transaction_tag')
+            ->where('transaction_id', $fromTransactionId)
+            ->update(['transaction_id' => $toTransactionId]);
     }
 }

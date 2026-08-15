@@ -29,7 +29,9 @@ class ImportFactory extends Factory
             'mime'                => 'application/pdf',
             'size'                => fake()->numberBetween(10000, 500000),
             'status'              => 'completed',
-            'financial_entity_id' => null,
+            // imports.financial_entity_id is NOT NULL; the factory previously set it to
+            // null and could never insert. Nothing used it, so nothing ever failed.
+            'financial_entity_id' => FinancialEntity::factory(),
             'payment_service_id'  => null,
         ];
     }

@@ -36,13 +36,19 @@ return [
     ],
     'openai' => [
         'api_key' => env('OPENAI_KEY'),
-        'api_url' => env('OPENAI_API_URL')
+        'api_url' => env('OPENAI_API_URL'),
     ],
     'aws' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
+    'telegram' => [
+        'bot_username' => env('TELEGRAM_BOT_USERNAME'),
+        'secret_token' => env('TELEGRAM_SECRET_TOKEN'),
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+    ],
+
     'whatsapp' => [
         'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
         'api_url' => env('WHATSAPP_API_URL'),

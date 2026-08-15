@@ -1,20 +1,29 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Mail\NotificationSummaryByMonth;
 use App\Services\FinancialReportService;
-use App\Services\WhatsAppNotificationService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class SendSummaryTransactionByMonth extends Command
 {
     protected $signature = 'app:send-summary-transaction-by-month';
+
     protected $description = 'Envía el reporte de desviación presupuestaria al cerrar el mes';
 
-    public function handle(FinancialReportService $reportService, WhatsAppNotificationService $waService): void
+    /**
+     * Task 6.4/design.md §8: the WhatsApp push is removed entirely — the coach now
+     * owns the conversational channel (ADR-0007). Its "Resumen Ejecutivo" read
+     * `$budgetDeviation->sum('real')`, a property that never existed on the rows
+     * `FinancialReportService::getBudgetDeviation()` returns, so it always rendered
+     * `S/ 0.00`. The monthly email survives unmodified in intent — only repaired.
+     */
+    public function handle(FinancialReportService $reportService): void
     {
         try {
             $userId = 1;
@@ -27,25 +36,11 @@ class SendSummaryTransactionByMonth extends Command
 
             $budgetDeviation = $reportService->getBudgetDeviation($userId, $month, $year);
 
-            // 1. Enviar Email con el PDF/Tabla Markdown
             Mail::to('jpls80032017@gmail.com')->queue(new NotificationSummaryByMonth($budgetDeviation, $monthName));
-
-            // 2. Enviar Resumen Ejecutivo por WhatsApp
-            $totalBudget = $budgetDeviation->sum('budgeted');
-            $totalReal = $budgetDeviation->sum('real');
-            $statusEmoji = $totalReal > $totalBudget ? '⚠️' : '✅';
-
-            $mensajeWA = "📈 *Cierre Mensual Wajaycha: {$monthName}*\n\n"
-                . "💰 Presupuestado Total: S/ " . number_format($totalBudget, 2) . "\n"
-                . "💸 Gasto Real: S/ " . number_format($totalReal, 2) . "\n"
-                . "📊 Estado: " . ($totalReal > $totalBudget ? "*Excedido*" : "*Dentro del ahorro*") . " {$statusEmoji}\n\n"
-                . "_Revisa tu correo para ver el detalle por categoría._";
-
-            $waService->sendTextMessage('+51 992 291 220', $mensajeWA);
 
             $this->info("Reporte mensual de {$monthName} enviado.");
         } catch (\Throwable $th) {
-            Log::error("Error en reporte mensual: " . $th->getMessage());
+            Log::error('Error en reporte mensual: '.$th->getMessage());
         }
     }
 }

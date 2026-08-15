@@ -1,146 +1,83 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
-use App\Imports\ExpensesImport;
-use App\Imports\TransactionYapeImport;
-use App\Models\UnifyTransactions;
+use App\DTOs\Dashboard\DashboardScope;
+use App\Enums\DashboardMeasure;
+use App\Repositories\Contracts\DashboardRepositoryContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Maatwebsite\Excel\Facades\Excel;
 
+/**
+ * Orchestrates the dashboard read model. Decides nothing.
+ *
+ * Its whole job is translation: turn an HTTP request into a scope and a measure, ask
+ * the port, hand back JSON. The wire names — `isChecked`, `year`, `month` — stop here.
+ */
 class DashboardController extends Controller
 {
-
+    public function __construct(
+        private readonly DashboardRepositoryContract $dashboard,
+    ) {}
 
     public function kpiData(Request $request): JsonResponse
     {
-        try {
-            $year = $request->input('year');
-            $month = $request->input('month');
-            $userId = Auth::id();
-
-            $result = DB::select('SELECT get_kpi_data(?, ?, ?) as data', [
-                $userId,
-                $year,
-                $month
-            ]);
-
-            $jsonString = $result[0]->data;
-            return response()->json(json_decode($jsonString));
-        } catch (\Throwable $th) {
-            throw $th;
-        }
+        return response()->json($this->dashboard->kpi($this->scopeFrom($request)));
     }
 
     public function topFiveData(Request $request): JsonResponse
     {
-        try {
-            $year = $request->input('year');
-            $month = $request->input('month');
-            $userId = Auth::id();
-
-            $result = DB::select('SELECT get_top_five_data(?, ?, ?) as data', [
-                $userId,
-                $year,
-                $month
-            ]);
-
-            return response()->json(json_decode($result[0]->data));
-        } catch (\Throwable $th) {
-            throw $th;
-        }
+        return response()->json($this->dashboard->topFive($this->scopeFrom($request)));
     }
 
     public function getWeeklyData(Request $request): JsonResponse
     {
-        try {
-            $isChecked = $request->boolean('isChecked');
-            $year = $request->input('year');
-            $month = $request->input('month');
-            $userId = Auth::id();
-
-            $result = DB::select('SELECT get_weekly_data(?, ?, ?, ?) as data', [
-                $userId,
-                $isChecked,
-                $year,
-                $month
-            ]);
-
-            return response()->json(json_decode($result[0]->data));
-        } catch (\Throwable $th) {
-            throw $th;
-        }
+        return response()->json($this->dashboard->weekly(
+            $this->scopeFrom($request),
+            $this->measureFrom($request),
+        ));
     }
 
     public function getMonthlyData(Request $request): JsonResponse
     {
-        try {
-            $isChecked = $request->boolean('isChecked');
-            $year = $request->input('year');
-            $userId = Auth::id();
-
-            $result = DB::select('SELECT get_monthly_data(?, ?, ?) as data', [
-                $userId,
-                $isChecked,
-                $year
-            ]);
-
-            return response()->json(json_decode($result[0]->data));
-        } catch (\Throwable $th) {
-            throw $th;
-        }
+        return response()->json($this->dashboard->monthly(
+            $this->scopeFrom($request),
+            $this->measureFrom($request),
+        ));
     }
 
     public function getTransactionByCategory(Request $request): JsonResponse
     {
-        $year = $request->input('year', null);
-        $month = $request->input('month', null);
-        $search = $request->input('search');
-        $userId = Auth::id();
+        return response()->json($this->dashboard->spendByCategory(
+            $this->scopeFrom($request),
+            $request->input('search'),
+        ));
+    }
 
-        $nameExpression = "COALESCE(c.name, 'Sin categorizar')";
-        $totalExpression = "SUM(CASE 
-        WHEN t.type_transaction = 'expense' THEN t.amount 
-        WHEN t.type_transaction = 'income' THEN -t.amount 
-        ELSE 0 
-        END)";
+    /**
+     * The owner comes from the token, never from the payload. A caller cannot ask for
+     * someone else's dashboard by naming them.
+     */
+    private function scopeFrom(Request $request): DashboardScope
+    {
+        return new DashboardScope(
+            userId: (int) Auth::id(),
+            year: $request->input('year') !== null ? (int) $request->input('year') : null,
+            month: $request->input('month') !== null ? (int) $request->input('month') : null,
+        );
+    }
 
-        $query = UnifyTransactions::query()
-            ->from('v_unified_transactions as t')
-            ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
-            ->leftJoin('categories as c', 'c.id', '=', 't.category_id')
-            ->select(
-                DB::raw("{$nameExpression} as name"),
-                DB::raw('COUNT(*) as quantity'),
-                DB::raw("{$totalExpression} as total")
-            );
-
-        if ($year) {
-            $query->whereYear('t.date_operation', $year);
-        }
-
-        if ($month) {
-            $query->whereMonth('t.date_operation', $month);
-        }
-
-        if ($search) {
-            $query->where('c.name', 'ILIKE', '%' . $search . '%');
-        }
-
-        if ($userId) {
-            $query->where('t.user_id', $userId);
-        }
-
-        $results = $query
-            ->groupByRaw($nameExpression)
-            ->havingRaw("{$totalExpression} > 0")
-            ->orderByRaw("{$totalExpression} DESC")
-            ->get();
-
-        return response()->json($results);
+    /**
+     * `isChecked` is the checkbox the SPA sends. This is the only place that name is
+     * allowed to mean something.
+     */
+    private function measureFrom(Request $request): DashboardMeasure
+    {
+        return $request->boolean('isChecked')
+            ? DashboardMeasure::Count
+            : DashboardMeasure::Amount;
     }
 }

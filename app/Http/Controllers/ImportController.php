@@ -1,155 +1,136 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Actions\Imports\RegisterStatementImportAction;
+use App\Actions\Imports\UploadedStatement;
 use App\Http\Requests\Import\UpdateImportRequest;
 use App\Http\Requests\PdfRequest;
-use App\Jobs\ProcessPdfImport;
-use App\Jobs\ProcessYapeImport;
-use App\Models\FinancialEntity;
 use App\Models\Import;
-use App\Enums\ImportStatus;
-use App\Models\PaymentService;
+use App\Repositories\Contracts\ImportRepositoryContract;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * Statement uploads and the record of them. Orchestrates; decides nothing.
+ */
 class ImportController extends Controller
 {
+    public function __construct(
+        private readonly ImportRepositoryContract $imports,
+        private readonly RegisterStatementImportAction $registerImport,
+    ) {}
 
-    public function __construct() {}
-
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 10);
-        $page = $request->input('page', 1);
-        $userId = Auth::id();
+        $page = $this->imports->paginateForUser(
+            (int) Auth::id(),
+            (int) $request->input('per_page', 10),
+            (int) $request->input('page', 1),
+        );
 
-        $query = Import::select([
-            'id',
-            'name',
-            'financial_entity_id',
-            'payment_service_id',
-            'status',
-            'extension',
-            'created_at',
-        ])
-            ->with([
-                'financialEntity:id,name',
-                'paymentService:id,name',
-            ])
-            ->where('user_id', $userId)
-            ->orderBy('created_at', 'desc');
-
-        $data = $query->paginate($perPage, ['*'], 'page', $page);
-
-        $data = $data->through(function (Import $item) {
-            return [
-                'id' => $item->id,
-                'name' => $item->name,
-                'financial_entity' => $item->financialEntity?->name,
-                'payment_service' => $item->paymentService?->name,
-                'url' => Storage::url('files/' . $item->name),
-                'created_at' => Carbon::parse($item->created_at)->format('Y-m-d H:i:s'),
-                'status' => $item->status->value,
-                'status_label' => $item->status->label(),
-                'extension' => $item->extension
-            ];
-        });
-
-        return response()->json($data);
+        return response()->json($page->through(fn (Import $item): array => [
+            'id' => $item->id,
+            'name' => $item->name,
+            'financial_entity' => $item->financialEntity?->name,
+            'payment_service' => $item->paymentService?->name,
+            'url' => Storage::url('files/'.$item->name),
+            'created_at' => Carbon::parse($item->created_at)->format('Y-m-d H:i:s'),
+            'status' => $item->status->value,
+            'status_label' => $item->status->label(),
+            'extension' => $item->extension,
+        ]));
     }
 
-
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(PdfRequest $request): JsonResponse
     {
         try {
+            /** @var \Illuminate\Http\UploadedFile $file */
             $file = $request->file('file');
-            $originalName = $file->getClientOriginalName();
-            $financialCode = FinancialEntity::where('id', $request->financial)
-                ->value('code');
+            $financialEntityId = (int) $request->input('financial');
 
-            $folder = 'files/' . $financialCode;
-            $storedPath = $file->store($folder);
-            $userId = Auth::id();
-            $year = (int)substr($originalName, 6, 4);
-            $accountId = $request->financial;
+            $code = $this->imports->financialEntityCode($financialEntityId);
 
-            $import = new Import();
-            $import->name = $originalName;
-            $import->extension = $file->getClientOriginalExtension();
-            $import->path =  $storedPath;
-            $import->mime = $file->getMimeType();
-            $import->size = $file->getSize();
-            $import->user_id = $userId;
-            $import->financial_entity_id = $accountId;
-            $import->status = ImportStatus::PENDING;
-            $import->save();
-
-            ProcessPdfImport::dispatch(
-                $import->id,
-                $userId,
-                $storedPath,
-                $accountId,
-                $year,
-                $request->password
+            $this->registerImport->execute(
+                UploadedStatement::store($file, 'files/'.$code),
+                (int) Auth::id(),
+                $financialEntityId,
+                $request->input('password'),
             );
 
             return response()->json([
                 'status' => 'ok',
-                'message' => 'Tu archivo ha sido recibido y está siendo procesado.'
+                'message' => 'Tu archivo ha sido recibido y está siendo procesado.',
             ]);
         } catch (\Throwable $th) {
-            Log::error("Error al despachar importación: " . $th->getMessage());
-            return response()->json(['status' => 'error', 'message' => 'No se pudo recibir el archivo.'], 500);
+            Log::error('Error al despachar importación: '.$th->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudo recibir el archivo.',
+            ], 500);
         }
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(UpdateImportRequest $request, Import $import): JsonResponse
+    public function update(UpdateImportRequest $request, int $id): JsonResponse
     {
-        $data = $import->update($request->validated());
-        return response()->json($data);
+        $import = $this->imports->findOwned($id, (int) Auth::id());
+
+        if (! $import) {
+            return response()->json(['message' => 'Import no encontrado'], 404);
+        }
+
+        return response()->json($this->imports->update($import, $request->validated()));
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Import $import): JsonResponse
+    public function destroy(int $id): JsonResponse
     {
-        $data = $import->delete();
-        return response()->json($data);
-    }
+        $import = $this->imports->findOwned($id, (int) Auth::id());
 
+        if (! $import) {
+            return response()->json(['message' => 'Import no encontrado'], 404);
+        }
+
+        return response()->json($this->imports->delete($import));
+    }
 
     public function getBank(): JsonResponse
     {
-        $data = FinancialEntity::get();
-        return response()->json($data);
+        return response()->json($this->imports->financialEntities());
     }
 
     public function getService(): JsonResponse
     {
-        $data = PaymentService::get();
-        return response()->json($data);
+        return response()->json($this->imports->paymentServices());
     }
 
-    public function download(int $id): StreamedResponse
+    /**
+     * Stream the file the user originally uploaded.
+     *
+     * This returns the raw bank statement or Yape export, not a derived summary, so the
+     * ownership scope here is the difference between a private document and a public one.
+     */
+    public function download(int $id): StreamedResponse|JsonResponse
     {
-        $import = Import::find($id);
+        $import = $this->imports->findOwned($id, (int) Auth::id());
+
+        if (! $import) {
+            return response()->json(['message' => 'Import no encontrado'], 404);
+        }
+
+        if (! Storage::exists($import->path)) {
+            // The row survives its file: a cleanup, a failed upload or a disk migration
+            // leaves the record pointing at nothing. Report it instead of throwing a 500.
+            return response()->json(['message' => 'El archivo del import ya no está disponible'], 410);
+        }
+
         return Storage::download($import->path, $import->name);
     }
 }

@@ -65,7 +65,7 @@ final class ParetoClassificationController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        $pareto = $this->repository->findById($id);
+        $pareto = $this->repository->findById($id, (int) Auth::id());
         if (!$pareto) {
             return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
         }
@@ -77,7 +77,7 @@ final class ParetoClassificationController extends Controller
      */
     public function update(UpdateParetoClassificationRequest $request, int $id): JsonResponse
     {
-        $pareto = $this->repository->findById($id);
+        $pareto = $this->repository->findById($id, (int) Auth::id());
         if (!$pareto) {
             return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
         }
@@ -93,12 +93,12 @@ final class ParetoClassificationController extends Controller
      */
     public function destroy(int $id): JsonResponse
     {
-        $pareto = $this->repository->findById($id);
+        $pareto = $this->repository->findById($id, (int) Auth::id());
         if (!$pareto) {
             return response()->json(['message' => 'Clasificación Pareto no encontrada'], 404);
         }
 
-        if ($this->repository->getCategories($id)->isNotEmpty()) {
+        if ($this->repository->getCategories($id, (int) Auth::id())->isNotEmpty()) {
             return response()->json([
                 'message' => 'No se puede eliminar porque ya se está haciendo uso de estos.',
             ], 422);
@@ -113,8 +113,15 @@ final class ParetoClassificationController extends Controller
      */
     public function categories(int $id, Request $request): JsonResponse
     {
-        $search = $request->input('search');
-        $categories = $this->repository->getCategories($id, $search);
+        $userId = (int) Auth::id();
+
+        // The classification itself is checked first: without it a caller could probe
+        // which ids exist by the difference between an empty list and a 404.
+        if (!$this->repository->findById($id, $userId)) {
+            return response()->json(['message' => 'Clasificación no encontrada'], 404);
+        }
+
+        $categories = $this->repository->getCategories($id, $userId, $request->input('search'));
         return response()->json($categories);
     }
 }
