@@ -15,6 +15,20 @@ FROM php:8.3-cli-bookworm AS dev
 ARG UID=1000
 ARG GID=1000
 
+# The libraries here are build inputs for the PHP extensions below. The two
+# binaries at the end are different: nothing links against them, `StatementTextExtractor`
+# shells out to them at run time, and their absence is invisible until someone
+# imports a statement.
+#
+# qpdf          — decrypts password-protected statements. BCP ships them encrypted,
+#                 so this is the first thing an import touches, not an edge case.
+# tesseract-ocr — reads a scanned statement that carries no text layer. Pulls
+#                 tesseract-ocr-eng, which is the language the extractor asks for
+#                 by default.
+#
+# Leaving them out is how an import failed with "¿Contraseña incorrecta?" against
+# a correct password: `qpdf` was not on PATH, the shell returned 127, and every
+# non-zero exit read as a bad password.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       git \
@@ -26,6 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libpng-dev \
       libjpeg62-turbo-dev \
       libfreetype6-dev \
+      qpdf \
+      tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 # This list is not guesswork: it is every ext-* requirement in composer.lock

@@ -102,13 +102,49 @@ class StatementTextExtractor
             escapeshellarg($decryptedPath)
         );
 
-        exec($command, $output, $returnVar);
+        // `2>&1` porque `exec()` captura stdout y nada mas. qpdf explica sus fallos
+        // por stderr, asi que su unica explicacion se perdia y lo que quedaba era
+        // el codigo de salida, que este metodo traducia siempre a lo mismo.
+        exec($command.' 2>&1', $output, $returnVar);
 
         if ($returnVar !== 0) {
-            throw new RuntimeException('No se pudo desencriptar el PDF. ¿Contraseña incorrecta?');
+            throw new RuntimeException($this->decryptionFailure($returnVar, $output));
         }
 
         return $decryptedPath;
+    }
+
+    /**
+     * Says what went wrong instead of guessing.
+     *
+     * Every non-zero exit used to become "¿Contraseña incorrecta?". That is one
+     * cause among several, and it was the wrong one the first time it mattered:
+     * the container image shipped no `qpdf`, the shell returned 127, and the user
+     * was told their password was wrong — a question they cannot answer and a fix
+     * they cannot find. An unreadable file and an unwritable destination fell into
+     * the same hole.
+     *
+     * 127 is separated by name because it is the only cause that is not about this
+     * PDF at all, and the only one whose fix is an installation.
+     *
+     * `$command` is deliberately absent from the message. It carries the statement
+     * password as an argument, and this string is written to
+     * `imports.error_message` and to the log, both of which the user can read and
+     * neither of which should hold a password.
+     *
+     * @param  list<string>  $output
+     */
+    private function decryptionFailure(int $exitCode, array $output): string
+    {
+        if ($exitCode === 127) {
+            return 'No se pudo procesar el PDF: falta el binario qpdf en el entorno.';
+        }
+
+        $detail = trim(implode(' ', $output));
+
+        return $detail !== ''
+            ? "No se pudo desencriptar el PDF (qpdf salió con {$exitCode}): {$detail}"
+            : "No se pudo desencriptar el PDF: qpdf salió con {$exitCode}. ¿Contraseña incorrecta?";
     }
 
     /** Returns '' rather than throwing, because an absent text layer is the OCR trigger. */
