@@ -4,14 +4,17 @@ namespace App\Jobs;
 
 use App\DTOs\TransactionDataDTO;
 use App\Enums\ImportStatus;
+use App\Enums\ReconciliationStatus;
+use App\Enums\SourceType;
 use App\Models\Detail;
 use App\Models\Import;
+use App\Models\ReconciliationCandidate;
 use App\Models\Transaction;
 use App\Services\CategorizationService;
 use App\Services\Imports\StatementLineParser;
 use App\Services\Imports\StatementTextExtractor;
+use App\Services\Reconciliation\DuplicateCandidateDetector;
 use App\Services\TransactionAnalyzer;
-use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -46,6 +49,21 @@ class ProcessPdfImport implements ShouldQueue
 
     protected string $storedPath;
 
+    /**
+     * La entidad financiera del extracto — la que el usuario eligio al subirlo.
+     *
+     * `RegisterStatementImportAction` siempre paso este valor y este job siempre lo
+     * ignoro, escribiendo `financial_entity_id => 1` a mano: todo extracto quedaba
+     * marcado como BCP, viniera del banco que viniera. Mientras nadie leyera esa
+     * columna era un dato sucio; desde que `DuplicateCandidateDetector` decide por
+     * institucion, es un cargo de otro banco unificandose contra un pago de Yape.
+     *
+     * El nombre queda como esta a proposito, y no porque describa bien. Un job ya
+     * encolado se restaura con `unserialize()` y `SerializesModels::__unserialize()`
+     * saltea toda propiedad que no venga en el payload: renombrarla dejaria a los
+     * payloads viejos con la propiedad sin inicializar, que es exactamente la
+     * trampa que documenta `$month` mas abajo.
+     */
     protected int $accountId;
 
     protected int $year;
@@ -125,6 +143,7 @@ class ProcessPdfImport implements ShouldQueue
         StatementLineParser $parser,
         TransactionAnalyzer $analyzer,
         CategorizationService $categorizer,
+        DuplicateCandidateDetector $duplicates,
     ): void {
         Import::where('id', $this->importId)->update(['status' => ImportStatus::PROCESSING]);
 
@@ -134,8 +153,8 @@ class ProcessPdfImport implements ShouldQueue
             $rows = $parser->parse($text, $this->year, $this->month);
 
             // ---- Recién acá se abre la transacción ----
-            DB::transaction(function () use ($rows, $analyzer, $categorizer): void {
-                $this->processParsedTransactions($rows, $analyzer, $categorizer);
+            DB::transaction(function () use ($rows, $analyzer, $categorizer, $duplicates): void {
+                $this->processParsedTransactions($rows, $analyzer, $categorizer, $duplicates);
 
                 Import::where('id', $this->importId)->update(['status' => ImportStatus::COMPLETED]);
             }, self::PERSISTENCE_ATTEMPTS);
@@ -157,14 +176,46 @@ class ProcessPdfImport implements ShouldQueue
     }
 
     /**
+     * Writes each parsed line, then asks whether the system already knew about it.
+     *
+     * This method used to carry its own duplicate matcher: same user, same amount,
+     * same type, `whereDate` on the calendar day, first row wins. It predated
+     * `DuplicateCandidateDetector` and disagreed with it on every point that
+     * matters.
+     *
+     * It merged silently. It wrote `matched_transaction_id` straight onto the new
+     * row, with no `reconciliation_candidates` entry behind it, so a movement
+     * dropped out of the totals leaving nothing to see and nothing to undo. That
+     * is the exact property the reconciliation design refuses to give up: deciding
+     * without asking is only legitimate when the decision is visible and
+     * reversible.
+     *
+     * It merged the wrong way round. The satellite was the statement row, so the
+     * export kept counting and the bank's own record stopped — the reverse of
+     * {@see \App\Enums\SourceType::authority()}, where the statement outranks
+     * everything because it is the ledger the money actually moved through.
+     *
+     * It picked arbitrarily. `->first()` with no ordering, over a whole calendar
+     * day: given two candidates, which one got merged came down to whatever
+     * PostgreSQL returned first.
+     *
+     * And it was blind to Telegram. It filtered on `import_app`, so a payment
+     * photographed at the till and then listed on the statement duplicated in
+     * silence — the same blindness `TransactionYapeImport` had before 852c389.
+     *
+     * All four are now the detector's problem, which is where the measurements
+     * behind the thresholds already live.
+     *
      * @param  list<TransactionDataDTO>  $transactionsData
      */
     private function processParsedTransactions(
         array $transactionsData,
         TransactionAnalyzer $analyzer,
         CategorizationService $categorizer,
+        DuplicateCandidateDetector $duplicates,
     ): void {
-        $yapeIdsFounds = [];
+        /** @var array<string, int> $alreadyWritten */
+        $alreadyWritten = [];
 
         foreach ($transactionsData as $txData) {
             $features = $analyzer->analyze($txData->description);
@@ -181,54 +232,110 @@ class ProcessPdfImport implements ShouldQueue
                 ]);
             }
 
-            $finalCategoryId = null;
-            $finalYapeId = null;
+            $key = implode('|', [
+                $detail->id,
+                $txData->date_operation,
+                $txData->amount,
+                $txData->type_transaction,
+            ]);
 
-            // Buscamos un registro de Yape unificado que coincida
-            $transactionYape = Transaction::where('user_id', $this->userId)
-                ->where('source_type', 'import_app')
-                ->whereDate('date_operation', Carbon::parse($txData->date_operation)->toDateString())
-                ->where('amount', $txData->amount)
-                ->where('type_transaction', $txData->type_transaction)
-                ->whereNotIn('id', $yapeIdsFounds)
-                ->first();
+            $alreadyWritten[$key] ??= $this->writtenCountFor($detail->id, $txData);
 
-            if ($transactionYape) {
-                $yapeIdsFounds[] = $transactionYape->id;
-                $finalYapeId = $transactionYape->id;
-                $finalCategoryId = $transactionYape->category_id;
+            // Reimportar el mismo extracto no vuelve a escribir ni a preguntar: la
+            // fila ya existe y ya paso por el detector cuando se creo, e
+            // inspeccionarla de nuevo la ofreceria contra un candidato distinto del
+            // que se descarto entonces.
+            if ($alreadyWritten[$key] > 0) {
+                $alreadyWritten[$key]--;
+
+                continue;
             }
 
-            if (! $finalCategoryId) {
-                $finalCategoryId = $categorizer->findCategory($this->userId, $detail);
-            }
+            $transaction = Transaction::create([
+                'user_id' => $this->userId,
+                'detail_id' => $detail->id,
+                'date_operation' => $txData->date_operation,
+                'amount' => $txData->amount,
+                'type_transaction' => $txData->type_transaction,
+                'source_type' => SourceType::IMPORT_STATEMENT->value,
+                'financial_entity_id' => $this->accountId,
+            ]);
 
-            $transaction = Transaction::firstOrCreate(
-                [
-                    'user_id' => $this->userId,
-                    'detail_id' => $detail->id,
-                    'date_operation' => $txData->date_operation,
-                    'amount' => $txData->amount,
-                    'type_transaction' => $txData->type_transaction,
-                ],
-                [
-                    'category_id' => $finalCategoryId,
-                    'matched_transaction_id' => $finalYapeId,
-                    'source_type' => 'import_statement',
-                    'financial_entity_id' => 1,
-                ]
-            );
+            $record = $duplicates->inspect($transaction);
 
-            // 3. Actualizar las etiquetas si es necesario
-            if ($finalYapeId) {
-                // Como ahora todo está en transaction_tag.transaction_id,
-                // movemos los tags del Yape a la transacción manual si aplica
-                app(\App\Repositories\Contracts\TransactionRepositoryContract::class)
-                    ->reassignTags($finalYapeId, $transaction->id);
-
-                // Opcionalmente, podemos marcar el Yape como matched para que no aparezca en reportes
-                // $transactionYape->update(['source_type' => 'yape_matched']);
-            }
+            $transaction->update([
+                'category_id' => $this->inheritedCategory($record)
+                    ?? $categorizer->findCategory($this->userId, $detail),
+            ]);
         }
+    }
+
+    /**
+     * Cuantas lineas de este movimiento ya estan escritas de importaciones previas.
+     *
+     * Un CONTEO y no un `firstOrCreate`, y esa diferencia es el defecto que esto
+     * arregla. El extracto del BCP no trae hora, asi que dos pagos iguales al mismo
+     * comercio el mismo dia son identicos en las cinco columnas que identificaban la
+     * fila: el primero se escribia y el segundo se daba por ya importado y se
+     * descartaba en silencio. El extracto decia 71 movimientos y entraban 70.
+     *
+     * El sintoma aparecia dos capas mas abajo. Con un solo asiento escrito, la
+     * reconciliacion hacia lo correcto — un asiento explica un pago, y ni uno mas —
+     * y el segundo pago de Yape quedaba contando solo, sin par. El bug se leia como
+     * un problema de reconciliacion y no lo era.
+     *
+     * Contando, la idempotencia se conserva sin apoyarse en que las filas sean
+     * distinguibles: el extracto pide N, la base tiene M, se escriben N-M. Reimportar
+     * el mismo PDF pide 2 sobre 2 y no escribe nada. Y una base que ya sufrio el
+     * defecto se repara sola en la siguiente importacion: pide 2, tiene 1, escribe la
+     * que falta.
+     *
+     * Se cuentan solo filas `import_statement`. La pregunta es "cuantas lineas de
+     * este extracto ya escribi", y una captura de Telegram o una carga manual no son
+     * lineas de un extracto. La version anterior no filtraba, asi que una fila de
+     * otra fuente que cayera en la misma clave suprimia el asiento del banco — y lo
+     * suprimia en silencio, que es peor que tenerlo dos veces: si terminan siendo el
+     * mismo movimiento, el detector lo propone y queda visible y reversible.
+     *
+     * Esto sigue siendo una inferencia sobre filas indistinguibles. La identidad de
+     * verdad es el numero de operacion que el banco imprime en cada linea y que
+     * `StatementLineParser::readDescription()` hoy descarta. Con esa columna la
+     * idempotencia dejaria de deducirse; sin un extracto real a mano para confirmar
+     * que el numero esta en todas las lineas, no se diseña sobre eso todavia.
+     */
+    private function writtenCountFor(int $detailId, TransactionDataDTO $txData): int
+    {
+        return Transaction::query()
+            ->where('user_id', $this->userId)
+            ->where('detail_id', $detailId)
+            ->where('date_operation', $txData->date_operation)
+            ->where('amount', $txData->amount)
+            ->where('type_transaction', $txData->type_transaction)
+            ->where('source_type', SourceType::IMPORT_STATEMENT->value)
+            ->count();
+    }
+
+    /**
+     * The category the counterpart already carries, when the system just merged
+     * the two rows.
+     *
+     * Not thrift for its own sake. `CategorizationService::findCategory()` reaches
+     * `EmbeddingService::generate()` — a synchronous Gemini request, inside the
+     * open transaction — once per merchant it has no rule for, and a statement is
+     * hundreds of lines. The old matcher avoided that call on every row it paired;
+     * dropping it without replacement would have turned this fix into a slowdown
+     * measured in network round trips against a held connection.
+     *
+     * Only on a CONFIRMED pair. A pending pair is a question, and taking the
+     * category off a row the user has not yet agreed is the same movement would
+     * answer it quietly on their behalf.
+     */
+    private function inheritedCategory(?ReconciliationCandidate $record): ?int
+    {
+        if ($record?->status !== ReconciliationStatus::CONFIRMED) {
+            return null;
+        }
+
+        return Transaction::whereKey($record->candidate_transaction_id)->value('category_id');
     }
 }

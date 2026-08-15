@@ -15,16 +15,22 @@ declare(strict_types=1);
  */
 
 use App\Enums\ImportStatus;
+use App\Enums\ReconciliationStatus;
+use App\Enums\ResolvedBy;
+use App\Enums\SourceType;
 use App\Jobs\ProcessPdfImport;
+use App\Models\Category;
 use App\Models\Detail;
 use App\Models\FinancialEntity;
 use App\Models\Import;
+use App\Models\ReconciliationCandidate;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\CategorizationService;
 use App\Services\EmbeddingService;
 use App\Services\Imports\StatementLineParser;
 use App\Services\Imports\StatementTextExtractor;
+use App\Services\Reconciliation\DuplicateCandidateDetector;
 use App\Services\TransactionAnalyzer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -114,11 +120,15 @@ function pdfJobCategorizer(?callable $onFind = null): CategorizationService
 
 function pdfJobRun(ProcessPdfImport $job, StatementTextExtractor $extractor, ?CategorizationService $categorizer = null): void
 {
+    // El detector es el de verdad, no un doble: lo que el job tiene que hacer con
+    // un duplicado es lo que el detector decida, y un doble que siempre devuelve
+    // null dejaria pasar la version de este job que no lo llama en absoluto.
     $job->handle(
         $extractor,
         new StatementLineParser,
         new TransactionAnalyzer,
         $categorizer ?? pdfJobCategorizer(),
+        app(DuplicateCandidateDetector::class),
     );
 }
 
@@ -261,6 +271,153 @@ it('marca el import fallido cuando no puede leer el archivo', function () {
     expect(DB::transactionLevel())->toBe($nivelBase);
 });
 
+// -------------------------------------------------------- duplicados entre puertas
+
+/**
+ * Un movimiento que ya estaba en la base antes de importar el extracto.
+ *
+ * A las 14:30 del mismo dia a proposito: el banco asienta a medianoche y la
+ * persona pago a la tarde, asi que el par real nace con horas de diferencia. Ese
+ * hueco es justamente lo que impide decidir por cercania.
+ *
+ * No se llama `movement` porque `DuplicateCandidateDetectorTest` ya declara una
+ * funcion global con ese nombre y Pest carga todos los archivos en un proceso.
+ */
+function pdfJobMovement(User $user, SourceType $source, string $amount, string $at, ?int $categoryId = null): Transaction
+{
+    $detail = Detail::factory()->create(['user_id' => $user->id]);
+
+    return Transaction::create([
+        'user_id' => $user->id,
+        'detail_id' => $detail->id,
+        'category_id' => $categoryId,
+        'amount' => $amount,
+        'type_transaction' => 'expense',
+        'date_operation' => $at,
+        'source_type' => $source->value,
+    ]);
+}
+
+it('unifica la fila del extracto con el Yape que ya estaba', function () {
+    [$user, $import] = pdfJobFixture();
+
+    $yape = pdfJobMovement($user, SourceType::IMPORT_APP, '8.13', '2023-05-01 14:30:00');
+
+    pdfJobRun(new ProcessPdfImport($import->id, $user->id, 'files/x.pdf', 1, 2023, 6, null), pdfJobFakeExtractor());
+
+    $estado = Transaction::where('user_id', $user->id)
+        ->where('source_type', SourceType::IMPORT_STATEMENT->value)
+        ->where('amount', '8.13')
+        ->firstOrFail();
+
+    $record = ReconciliationCandidate::where('transaction_id', $estado->id)->firstOrFail();
+
+    // Lo unifica solo, pero lo deja escrito. Esa fila es la que hace que la
+    // decision se pueda ver en la pantalla de conciliacion y deshacer despues; el
+    // matcheo viejo movia el total sin dejar nada.
+    expect($record->status)->toBe(ReconciliationStatus::CONFIRMED)
+        ->and($record->resolved_by)->toBe(ResolvedBy::SYSTEM)
+        // Y en la direccion correcta: el extracto es el libro por el que la plata
+        // paso. El matcheo viejo hacia exactamente lo contrario.
+        ->and($yape->fresh()->matched_transaction_id)->toBe($estado->id)
+        ->and($estado->matched_transaction_id)->toBeNull();
+});
+
+it('pregunta cuando el movimiento ya habia entrado por una foto de Telegram', function () {
+    [$user, $import] = pdfJobFixture();
+
+    // Este es el caso que el matcheo viejo no veia: filtraba `import_app`, asi que
+    // una captura duplicaba en silencio contra el extracto.
+    $captura = pdfJobMovement($user, SourceType::CAPTURE, '8.13', '2023-05-01 14:30:00');
+
+    pdfJobRun(new ProcessPdfImport($import->id, $user->id, 'files/x.pdf', 1, 2023, 6, null), pdfJobFakeExtractor());
+
+    $estado = Transaction::where('user_id', $user->id)
+        ->where('source_type', SourceType::IMPORT_STATEMENT->value)
+        ->where('amount', '8.13')
+        ->firstOrFail();
+
+    $record = ReconciliationCandidate::where('transaction_id', $estado->id)->firstOrFail();
+
+    // Una foto contra un extracto no tiene medicion detras, asi que se pregunta. Y
+    // mientras la pregunta esta abierta los dos siguen contando: un total inflado
+    // que la interfaz marca es honesto, uno faltante no.
+    expect($record->status)->toBe(ReconciliationStatus::PENDING)
+        ->and($captura->fresh()->matched_transaction_id)->toBeNull()
+        ->and($estado->matched_transaction_id)->toBeNull();
+});
+
+it('no vuelve a preguntar al reimportar el mismo extracto', function () {
+    [$user, $import] = pdfJobFixture();
+
+    pdfJobMovement($user, SourceType::CAPTURE, '8.13', '2023-05-01 14:30:00');
+
+    $correr = fn () => pdfJobRun(
+        new ProcessPdfImport($import->id, $user->id, 'files/x.pdf', 1, 2023, 6, null),
+        pdfJobFakeExtractor(),
+    );
+
+    $correr();
+    $correr();
+
+    // Exportar de nuevo un periodo ya cargado es la forma normal de usar esto. La
+    // fila no se duplica y la sospecha tampoco: preguntar dos veces por el mismo
+    // par es pedirle a la persona que resuelva algo que ya resolvio.
+    expect(Transaction::where('user_id', $user->id)->where('source_type', SourceType::IMPORT_STATEMENT->value)->count())->toBe(2)
+        ->and(ReconciliationCandidate::where('user_id', $user->id)->count())->toBe(1);
+});
+
+it('hereda la categoria del movimiento con el que se unifico en vez de volver a categorizar', function () {
+    [$user, $import] = pdfJobFixture();
+
+    $categoria = Category::factory()->create(['user_id' => $user->id]);
+    pdfJobMovement($user, SourceType::IMPORT_APP, '8.13', '2023-05-01 14:30:00', $categoria->id);
+
+    $categorizados = [];
+    $categorizer = pdfJobCategorizer(function (Detail $detail) use (&$categorizados) {
+        $categorizados[] = $detail->description;
+    });
+
+    pdfJobRun(
+        new ProcessPdfImport($import->id, $user->id, 'files/x.pdf', 1, 2023, 6, null),
+        pdfJobFakeExtractor(),
+        $categorizer,
+    );
+
+    $estado = Transaction::where('user_id', $user->id)
+        ->where('source_type', SourceType::IMPORT_STATEMENT->value)
+        ->where('amount', '8.13')
+        ->firstOrFail();
+
+    // La otra fila es el MISMO movimiento, asi que su categoria no es una
+    // conjetura: es la respuesta, ya pagada. `findCategory()` sale a Gemini por
+    // cada comercio sin regla y un extracto son cientos de lineas — sobre los datos
+    // reales, tres de cada cuatro se unifican, asi que esto es la diferencia entre
+    // una llamada y cuatro.
+    expect($estado->category_id)->toBe($categoria->id)
+        ->and($categorizados)->not->toContain('PANA BODE a 060684')
+        // La otra linea del extracto no se unifico con nada y si tuvo que salir.
+        ->and($categorizados)->toContain('GRIFO PRIMAX');
+});
+
+it('marca los movimientos con el banco del extracto, no con el primero de la tabla', function () {
+    [$user, $import] = pdfJobFixture();
+
+    $otroBanco = FinancialEntity::factory()->create(['name' => 'Interbank']);
+
+    pdfJobRun(
+        new ProcessPdfImport($import->id, $user->id, 'files/x.pdf', $otroBanco->id, 2023, 6, null),
+        pdfJobFakeExtractor(),
+    );
+
+    // El job siempre recibio la entidad y siempre escribio 1. Mientras nadie leyera
+    // la columna era un dato sucio; ahora el detector decide con ella si dos filas
+    // son la misma plata, y un extracto de Interbank marcado como BCP se unificaria
+    // contra pagos de Yape que nunca lo tocaron.
+    expect(Transaction::where('user_id', $user->id)->pluck('financial_entity_id')->unique()->all())
+        ->toBe([$otroBanco->id]);
+});
+
 it('le pasa al extractor la ruta resuelta y la contrasena del job', function () {
     [$user, $import] = pdfJobFixture();
 
@@ -278,4 +435,106 @@ it('le pasa al extractor la ruta resuelta y la contrasena del job', function () 
 
     expect($rutaRecibida)->toEndWith('files/extracto.pdf')
         ->and($claveRecibida)->toBe('secreto');
+});
+
+// ------------------------------------------- el pago repetido dentro del dia
+
+/**
+ * El mismo comercio, el mismo monto, el mismo dia, DOS VECES. Es lo que imprime
+ * un extracto cuando la persona pago dos veces lo mismo, y como el PDF no trae
+ * hora, las dos lineas son indistinguibles entre si.
+ */
+function pdfJobRepeatedDayExtractor(): StatementTextExtractor
+{
+    return pdfJobFakeExtractor(fn (): string => implode("\n", [
+        'BANCO DE CREDITO DEL PERU - ESTADO DE CUENTA',
+        pdfJobStatementLine('12JUN', 'Pago YAPE a Marleny Lim', '12.00'),
+        pdfJobStatementLine('12JUN', 'Pago YAPE a Marleny Lim', '12.00'),
+    ]));
+}
+
+function pdfJobRunRepeatedDay(int $importId, int $userId): void
+{
+    pdfJobRun(
+        new ProcessPdfImport($importId, $userId, 'files/x.pdf', 1, 2026, 6, null),
+        pdfJobRepeatedDayExtractor(),
+    );
+}
+
+it('escribe las dos lineas de un pago repetido en el mismo dia', function () {
+    [$user, $import] = pdfJobFixture();
+
+    pdfJobRunRepeatedDay($import->id, $user->id);
+
+    // Dos, no una. `firstOrCreate` daba la segunda por ya importada porque coincidia
+    // en las cinco columnas de la clave, y la descartaba sin dejar rastro.
+    expect(Transaction::where('user_id', $user->id)->count())->toBe(2);
+});
+
+it('no vuelve a escribirlas al reimportar el mismo extracto', function () {
+    [$user, $import] = pdfJobFixture();
+
+    pdfJobRunRepeatedDay($import->id, $user->id);
+    pdfJobRunRepeatedDay($import->id, $user->id);
+
+    // La idempotencia es lo que el conteo tenia que conservar: el extracto pide 2,
+    // la base tiene 2, no se escribe nada.
+    expect(Transaction::where('user_id', $user->id)->count())->toBe(2);
+});
+
+it('completa la linea que una importacion anterior dejo sin escribir', function () {
+    [$user, $import] = pdfJobFixture();
+
+    // El estado que dejo el defecto en produccion: una sola de las dos lineas.
+    $detail = Detail::create([
+        'user_id' => $user->id,
+        'description' => 'Pago YAPE a Marleny Lim',
+        'operation_type' => 'YAPE',
+        'entity_clean' => 'Marleny Lim',
+    ]);
+
+    Transaction::create([
+        'user_id' => $user->id,
+        'detail_id' => $detail->id,
+        'date_operation' => '2026-06-12',
+        'amount' => 12.00,
+        'type_transaction' => 'expense',
+        'source_type' => SourceType::IMPORT_STATEMENT->value,
+        'financial_entity_id' => 1,
+    ]);
+
+    pdfJobRunRepeatedDay($import->id, $user->id);
+
+    // Pide 2, tiene 1, escribe la que falta. La base se repara sola.
+    expect(Transaction::where('user_id', $user->id)->count())->toBe(2);
+});
+
+it('no cuenta como linea del extracto una fila de otra fuente', function () {
+    [$user, $import] = pdfJobFixture();
+
+    $detail = Detail::create([
+        'user_id' => $user->id,
+        'description' => 'Pago YAPE a Marleny Lim',
+        'operation_type' => 'YAPE',
+        'entity_clean' => 'Marleny Lim',
+    ]);
+
+    // Una carga manual que cae exactamente en la misma clave. La version anterior no
+    // filtraba por fuente, asi que esta fila suprimia un asiento del banco en
+    // silencio.
+    Transaction::create([
+        'user_id' => $user->id,
+        'detail_id' => $detail->id,
+        'date_operation' => '2026-06-12',
+        'amount' => 12.00,
+        'type_transaction' => 'expense',
+        'source_type' => SourceType::MANUAL->value,
+        'financial_entity_id' => 1,
+    ]);
+
+    pdfJobRunRepeatedDay($import->id, $user->id);
+
+    expect(Transaction::where('user_id', $user->id)
+        ->where('source_type', SourceType::IMPORT_STATEMENT->value)
+        ->count())->toBe(2);
 });
