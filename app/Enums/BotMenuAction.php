@@ -52,6 +52,17 @@ enum BotMenuAction: string
      */
     case WHAT_CHANGED = 'm:changed';
 
+    /**
+     * How much of a typical month simply arrives, and how much is chosen.
+     * Answered from `SpendingRhythmService`.
+     *
+     * The only question here that looks at more than the current month, and the
+     * only one whose verdict is derived rather than read: no column records
+     * whether a category is a commitment, so it comes from how much the amount
+     * moves. See {@see \App\Enums\SpendingRhythm}.
+     */
+    case FIXED_OR_CHOSEN = 'm:fixed';
+
     /** The label the user reads on the button. */
     public function label(): string
     {
@@ -59,6 +70,7 @@ enum BotMenuAction: string
             self::HOW_AM_I_DOING => '¿Cómo voy?',
             self::HOW_MUCH_TODAY => '¿Cuánto puedo gastar hoy?',
             self::WHAT_CHANGED => '¿Qué cambió desde el mes pasado?',
+            self::FIXED_OR_CHOSEN => '¿Qué es fijo y qué decido yo?',
         };
     }
 

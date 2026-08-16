@@ -156,6 +156,41 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Fixed Versus Discretionary
+    |--------------------------------------------------------------------------
+    |
+    | The knobs `SpendingRhythmClassifier` receives, for the menu button that
+    | answers "¿qué es fijo y qué decido yo?".
+    |
+    | Nothing in the schema records whether a category is a commitment or a
+    | choice, so it is derived from how much the monthly total MOVES —
+    | `rhythm_variation_threshold` is the coefficient of variation at or below
+    | which a category counts as fixed. A ratio and not an amount: a S/ 1200 rent
+    | and a S/ 60 subscription are both steady, and any absolute spread would
+    | call the rent the more variable of the two purely for being larger.
+    |
+    | `rhythm_months` is how many COMPLETE months the window covers. The current
+    | month is always excluded — a partial month among whole ones reads as a drop
+    | in every category at once, and anything measuring variation would take that
+    | artefact for the real thing.
+    |
+    | `rhythm_min_months` is how long a category has to have existed before any
+    | verdict is allowed. Below it the answer is "todavía no sé", which is the
+    | point of the third state: guessing would file a two-month-old rent next to
+    | impulse spending.
+    |
+    */
+
+    'rhythm_months' => (int) env('COACHING_RHYTHM_MONTHS', 6),
+
+    'rhythm_min_months' => (int) env('COACHING_RHYTHM_MIN_MONTHS', 3),
+
+    'rhythm_variation_threshold' => (float) env('COACHING_RHYTHM_VARIATION_THRESHOLD', 0.25),
+
+    'rhythm_max_categories' => (int) env('COACHING_RHYTHM_MAX_CATEGORIES', 5),
+
+    /*
+    |--------------------------------------------------------------------------
     | Reachable Channels
     |--------------------------------------------------------------------------
     |

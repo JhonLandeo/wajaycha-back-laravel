@@ -80,6 +80,30 @@ final class MonthCursor
     }
 
     /**
+     * The first instants of the `$count` **complete** months before this one,
+     * oldest first.
+     *
+     * Complete is the load-bearing word. The current month is deliberately absent:
+     * it is a partial month, and a partial month included in a series of whole
+     * ones is not a small figure, it is a wrong one. Every category would look
+     * like it dropped this month, and anything reading the series for how much a
+     * category VARIES would read that artefact as variation and call a perfectly
+     * steady rent volatile.
+     *
+     * @return CarbonImmutable[]
+     */
+    public function completedMonthStarts(int $count): array
+    {
+        $starts = [];
+
+        for ($back = $count; $back >= 1; $back--) {
+            $starts[] = $this->periodMonth->subMonthsNoOverflow($back);
+        }
+
+        return $starts;
+    }
+
+    /**
      * The cursor for the month containing `$now`.
      *
      * Takes the instant rather than calling `now()` so this stays a value object:
