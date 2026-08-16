@@ -175,6 +175,29 @@ final class TransactionRepository implements TransactionRepositoryContract
             ->first();
     }
 
+    public function expenseByCategoryBetween(int $userId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): array
+    {
+        // Rule 02 Violation Fix: Explicit columns instead of SELECT *
+        //
+        // LEFT JOIN, nunca INNER: una fila sin categoria tiene que sobrevivir. Un
+        // INNER la descartaria en silencio y el total de la comparacion quedaria
+        // mas chico que el mes real, que es la forma menos visible de mentir.
+        return DB::table('v_unified_transactions as ut')
+            ->leftJoin('categories as c', 'c.id', '=', 'ut.category_id')
+            ->select(
+                'ut.category_id',
+                'c.name as category_name',
+                DB::raw('SUM(ut.amount) as total')
+            )
+            ->where('ut.user_id', $userId)
+            ->where('ut.type_transaction', 'expense')
+            ->where('ut.date_operation', '>=', $startsAt)
+            ->where('ut.date_operation', '<', $endsAt)
+            ->groupBy('ut.category_id', 'c.name')
+            ->get()
+            ->all();
+    }
+
     public function reassignTags(int $fromTransactionId, int $toTransactionId): void
     {
         DB::table('transaction_tag')

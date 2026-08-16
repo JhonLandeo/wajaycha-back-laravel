@@ -130,6 +130,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Month-Over-Month Comparison
+    |--------------------------------------------------------------------------
+    |
+    | The knobs `MonthOverMonthComparator` receives, for the menu button that
+    | answers "¿qué cambió desde el mes pasado?". Like every other decider in the
+    | subsystem it never reads config() itself — the service passes these in.
+    |
+    | `shift_min_amount` is the floor in soles below which a category's movement
+    | is not reported. Every category drifts a little every month; without a floor
+    | the answer is a wall of two-sol movements with the one real finding buried
+    | in it. It is an absolute amount and not a percentage on purpose: S/ 2
+    | becoming S/ 20 is "+900%", reads like an emergency, and is eighteen soles.
+    |
+    | `shift_max_categories` caps how many survive the ranking. Smaller than
+    | `digest_max_categories` because these lines carry two figures and a
+    | direction, not one short row, and because this answer is a Pareto reading —
+    | the point is the handful that explain most of the change.
+    |
+    */
+
+    'shift_min_amount' => (float) env('COACHING_SHIFT_MIN_AMOUNT', 20.0),
+
+    'shift_max_categories' => (int) env('COACHING_SHIFT_MAX_CATEGORIES', 5),
+
+    /*
+    |--------------------------------------------------------------------------
     | Reachable Channels
     |--------------------------------------------------------------------------
     |

@@ -62,6 +62,25 @@ interface TransactionRepositoryContract
     public function largestExpenseForCategoryMonth(int $userId, int $categoryId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): ?object;
 
     /**
+     * Expense totals per category inside a half-open date interval:
+     * `date_operation >= $startsAt AND date_operation < $endsAt`.
+     *
+     * Reads `v_unified_transactions` like the two methods above, and for the
+     * reason that matters most here: the view keeps only rows with
+     * `matched_transaction_id IS NULL`, so a movement that arrived through both
+     * Yape and the bank statement is counted once. Reading `transactions`
+     * directly would make a month look larger than it was, and comparing two
+     * months of that produces a change that never happened.
+     *
+     * A row with a null `category_id` survives, named by the caller. The
+     * categoriser does not always have an answer, and dropping those rows would
+     * silently shrink the total this comparison is built on.
+     *
+     * @return array<int, object{category_id: int|null, category_name: string|null, total: float}>
+     */
+    public function expenseByCategoryBetween(int $userId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): array;
+
+    /**
      * Move every tag attached to one transaction onto another.
      *
      * Used when a PDF statement line is matched to a Yape movement already in the

@@ -11,6 +11,7 @@ use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 
@@ -63,6 +64,20 @@ function menuOverBudgetCategoryFor(User $user): Category
     ]);
 
     return $category;
+}
+
+function menuExpense(User $user, Category $category, float $amount, string $date): void
+{
+    $detail = Detail::factory()->create(['user_id' => $user->id]);
+
+    Transaction::factory()->create([
+        'user_id' => $user->id,
+        'detail_id' => $detail->id,
+        'category_id' => $category->id,
+        'type_transaction' => 'expense',
+        'amount' => $amount,
+        'date_operation' => $date,
+    ]);
 }
 
 /** The last outbound sendMessage payload, or null when none was sent. */
@@ -182,6 +197,7 @@ it('offers the keyboard when the menu is opened by command', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     $payload = lastSentMessage();
@@ -200,6 +216,7 @@ it('answers the pressed button with the budget board', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('Delivery')->toContain('Ya pasaste');
@@ -220,6 +237,7 @@ it('answers even while the morning digest is switched off', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('Delivery');
@@ -237,6 +255,7 @@ it('says everything is fine rather than staying silent', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('Vas bien');
@@ -253,6 +272,7 @@ it('does not claim everything is fine while coaching is switched off', function 
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])->not->toContain('Vas bien');
@@ -273,6 +293,7 @@ it('answers how much can be spent today with a daily figure', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])
@@ -302,6 +323,7 @@ it('answers how much can be spent today with no transactions at all', function (
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('Transporte');
@@ -315,6 +337,7 @@ it('does not stay silent about the daily figure when there is no budget', functi
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('No tenés presupuestos mensuales');
@@ -337,11 +360,121 @@ it('does not claim a daily figure while coaching is switched off', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])
         ->toContain('no puedo revisar')
         ->not->toContain('Comida');
+});
+
+/**
+ * The end-to-end shape of the comparison: this month against the same stretch of
+ * the last one. `Carbon::setTestNow` pins the day so the two windows are known,
+ * which is the only way to assert a figure that otherwise moves daily.
+ */
+it('answers what changed with a month-over-month comparison', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-16 12:00:00', 'America/Lima'));
+
+    $user = menuLinkedUser();
+    $delivery = Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'name' => 'Delivery',
+    ]);
+
+    menuExpense($user, $delivery, 120.0, '2026-05-05 10:00:00');
+    menuExpense($user, $delivery, 340.0, '2026-06-05 10:00:00');
+
+    (new ProcessTelegramMenu(menuChat(), 'cbq-1', BotMenuAction::WHAT_CHANGED->value))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
+    );
+
+    expect(lastSentMessage()['text'])
+        ->toContain('los primeros 16 días del mes pasado')
+        ->toContain('gastaste S/ 220.00 más')
+        ->toContain('Delivery');
+
+    Carbon::setTestNow();
+});
+
+/**
+ * The window that makes the comparison honest. Spending from the back half of last
+ * month falls outside the comparable stretch and must not count — including it
+ * would answer "gastaste menos" on the strength of days this month has not lived
+ * yet.
+ */
+it('ignores last month spending past the comparable day', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-10 12:00:00', 'America/Lima'));
+
+    $user = menuLinkedUser();
+    $delivery = Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'name' => 'Delivery',
+    ]);
+
+    menuExpense($user, $delivery, 100.0, '2026-05-03 10:00:00');
+    menuExpense($user, $delivery, 900.0, '2026-05-25 10:00:00');
+    menuExpense($user, $delivery, 100.0, '2026-06-03 10:00:00');
+
+    (new ProcessTelegramMenu(menuChat(), 'cbq-1', BotMenuAction::WHAT_CHANGED->value))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
+    );
+
+    expect(lastSentMessage()['text'])->toContain('gastaste exactamente lo mismo');
+
+    Carbon::setTestNow();
+});
+
+/**
+ * The one question in the menu that needs no budget, which is what makes it the
+ * answer for the majority who never set one.
+ */
+it('answers what changed without any budget configured', function () {
+    $user = menuLinkedUser();
+    $category = Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 0,
+        'name' => 'Delivery',
+    ]);
+
+    menuExpense($user, $category, 250.0, now()->toDateTimeString());
+
+    (new ProcessTelegramMenu(menuChat(), 'cbq-1', BotMenuAction::WHAT_CHANGED->value))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
+    );
+
+    expect(lastSentMessage()['text'])->toContain('No tengo gastos del mes pasado');
+});
+
+it('does not claim a comparison while coaching is switched off', function () {
+    config()->set('coaching.enabled', false);
+
+    menuLinkedUser();
+
+    (new ProcessTelegramMenu(menuChat(), 'cbq-1', BotMenuAction::WHAT_CHANGED->value))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
+    );
+
+    expect(lastSentMessage()['text'])->toContain('no puedo revisar');
 });
 
 /**
@@ -356,6 +489,7 @@ it('offers every action as a button', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['reply_markup']['inline_keyboard'])
@@ -374,6 +508,7 @@ it('reopens the menu when an unknown action arrives', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['reply_markup']['inline_keyboard'])->not->toBeEmpty();
@@ -385,6 +520,7 @@ it('tells an unlinked sender to link before anything else', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('no está vinculada');
@@ -410,6 +546,7 @@ it('closes the callback query before answering', function () {
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
         app(App\Services\Coaching\DailyAllowanceService::class),
+        app(App\Services\Coaching\MonthOverMonthService::class),
     );
 
     expect($calls[0])->toBe('answer');

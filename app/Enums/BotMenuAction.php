@@ -42,12 +42,23 @@ enum BotMenuAction: string
      */
     case HOW_MUCH_TODAY = 'm:today';
 
+    /**
+     * What moved between this month so far and the same stretch of the last one.
+     * Answered from `MonthOverMonthService`.
+     *
+     * The only question here that needs no budget. The other two are silent for a
+     * user who never set one, and that user is the majority — this one works from
+     * spending alone, which is the only thing everybody has.
+     */
+    case WHAT_CHANGED = 'm:changed';
+
     /** The label the user reads on the button. */
     public function label(): string
     {
         return match ($this) {
             self::HOW_AM_I_DOING => '¿Cómo voy?',
             self::HOW_MUCH_TODAY => '¿Cuánto puedo gastar hoy?',
+            self::WHAT_CHANGED => '¿Qué cambió desde el mes pasado?',
         };
     }
 

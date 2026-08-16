@@ -41,6 +41,45 @@ final class MonthCursor
     }
 
     /**
+     * Exclusive end of month-to-date: the start of tomorrow.
+     *
+     * `startsAt`/`endsAt` bound the whole month, which is what a budget is
+     * measured against. This bounds what has actually happened so far, which is
+     * the only window a comparison against another month can honestly use.
+     */
+    public function monthToDateEndsAt(): CarbonImmutable
+    {
+        return $this->startsAt->addDays($this->day);
+    }
+
+    /** First instant of the previous month. */
+    public function previousMonthStartsAt(): CarbonImmutable
+    {
+        return $this->periodMonth->subMonthNoOverflow();
+    }
+
+    /**
+     * How many days of the previous month a fair comparison can cover.
+     *
+     * The same number as today's day-of-month, except when the previous month was
+     * shorter than that: on 30 March there is no 30th of February to stop at, so
+     * the window closes at 28 and the two spans stop being equal. Clamping is
+     * unavoidable — the fact worth surfacing is that it happened, which is why
+     * this is a public figure the message can compare against `day` rather than a
+     * detail buried in the date arithmetic.
+     */
+    public function previousDaysCompared(): int
+    {
+        return min($this->day, $this->previousMonthStartsAt()->daysInMonth);
+    }
+
+    /** Exclusive end of the previous month's comparable window. */
+    public function previousMonthToDateEndsAt(): CarbonImmutable
+    {
+        return $this->previousMonthStartsAt()->addDays($this->previousDaysCompared());
+    }
+
+    /**
      * The cursor for the month containing `$now`.
      *
      * Takes the instant rather than calling `now()` so this stays a value object:

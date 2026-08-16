@@ -10,6 +10,7 @@ use App\Services\Capture\ChannelIdentityResolver;
 use App\Services\Capture\TelegramChannel;
 use App\Services\Coaching\BudgetDigestService;
 use App\Services\Coaching\DailyAllowanceService;
+use App\Services\Coaching\MonthOverMonthService;
 use App\Support\Redact;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -67,6 +68,7 @@ class ProcessTelegramMenu implements ShouldQueue
         ChannelIdentityResolver $identities,
         BudgetDigestService $digest,
         DailyAllowanceService $allowance,
+        MonthOverMonthService $changes,
     ): void {
         // Cerrar el callback va primero y pase lo que pase. Es lo unico que apaga
         // el indicador girando en el cliente, y el usuario lo nota mucho antes que
@@ -107,7 +109,7 @@ class ProcessTelegramMenu implements ShouldQueue
             return;
         }
 
-        $telegram->reply($this->chatId, $this->answer($action, $user, $digest, $allowance));
+        $telegram->reply($this->chatId, $this->answer($action, $user, $digest, $allowance, $changes));
     }
 
     private function answer(
@@ -115,10 +117,12 @@ class ProcessTelegramMenu implements ShouldQueue
         User $user,
         BudgetDigestService $digest,
         DailyAllowanceService $allowance,
+        MonthOverMonthService $changes,
     ): string {
         return match ($action) {
             BotMenuAction::HOW_AM_I_DOING => $this->howAmIDoing($user, $digest),
             BotMenuAction::HOW_MUCH_TODAY => $allowance->composeOnDemand($user) ?? $this->unavailable(),
+            BotMenuAction::WHAT_CHANGED => $changes->composeOnDemand($user) ?? $this->unavailable(),
         };
     }
 
