@@ -67,6 +67,7 @@ class FinancialCoachingService
         private readonly PaceEvaluator $evaluator,
         private readonly BlindnessDetector $blindnessDetector,
         private readonly SpokenObservationLedger $ledger,
+        private readonly EvaluatedCategoryLedger $evaluations,
         private readonly CoachingMessageComposer $composer,
         private readonly ChannelIdentityResolver $identities,
         private readonly CaptureChannelRegistry $channels,
@@ -87,13 +88,31 @@ class FinancialCoachingService
             return false;
         }
 
-        $evaluation = $this->evaluateScope($user, $scope);
+        $cursor = $this->cursor();
+        $thresholds = $this->thresholds();
+        $snapshots = $this->snapshotsFor($user, $cursor);
+
+        // El registro va ANTES de cualquier salida temprana, y ese orden es el
+        // arreglo entero: el mes que termina en silencio es justamente el que hay
+        // que poder distinguir de un mes que nadie miro. Registrar despues de
+        // decidir hablar solo anotaria los meses malos, que es lo que
+        // coaching_observations ya hacia.
+        if ($scope->isSweep) {
+            $this->evaluations->record(
+                $user->id,
+                $cursor,
+                $snapshots,
+                $this->allObservations($snapshots, $cursor, $thresholds),
+            );
+        }
+
+        $evaluation = $this->evaluateScope($user, $scope, $snapshots, $cursor, $thresholds);
 
         if ($evaluation === null) {
             return false;
         }
 
-        [$survivors, $blindness, $cursor] = $evaluation;
+        [$survivors, $blindness] = $evaluation;
         $entryPoint = $scope->isSweep ? 'sweep' : 'capture';
 
         $claimedObservations = [];
@@ -175,13 +194,18 @@ class FinancialCoachingService
             return null;
         }
 
-        $evaluation = $this->evaluateScope($user, $scope);
+        $cursor = $this->cursor();
+        $thresholds = $this->thresholds();
+
+        // Sin registrar: un preview que escribe deja de ser un preview. Es la
+        // misma razon por la que no reclama (design.md §12, paso 2 del rollout).
+        $evaluation = $this->evaluateScope($user, $scope, $this->snapshotsFor($user, $cursor), $cursor, $thresholds);
 
         if ($evaluation === null) {
             return null;
         }
 
-        [$survivors, $blindness, $cursor] = $evaluation;
+        [$survivors, $blindness] = $evaluation;
 
         $withCauses = array_map(
             fn (PaceObservation $observation): PaceObservation => $this->withCause(
@@ -200,22 +224,67 @@ class FinancialCoachingService
     }
 
     /**
-     * Snapshot -> evaluate -> ladder, shared by `speak()` and `preview()`.
-     * Returns null when there is nothing worth claiming or composing.
+     * The month's evaluable universe: expense categories with spending, budgeted
+     * or not. Lifted out of `evaluateScope()` so `speak()` can hand the same
+     * array to both the recording step and the deciding one — the alternative
+     * was running `get_monthly_category_budget_report` twice per user per night
+     * to record something the sweep had already computed.
      *
-     * @return array{0: PaceObservation[], 1: ?BlindnessObservation, 2: MonthCursor}|null
+     * @return CategoryMonthSnapshot[]
      */
-    private function evaluateScope(User $user, CoachingScope $scope): ?array
+    private function snapshotsFor(User $user, MonthCursor $cursor): array
     {
-        $cursor = $this->cursor();
-        $thresholds = $this->thresholds();
-
-        $snapshots = $this->categories->expenseBudgetSnapshotsForMonth(
+        return $this->categories->expenseBudgetSnapshotsForMonth(
             $user->id,
             $cursor->periodMonth->month,
             $cursor->periodMonth->year,
         );
+    }
 
+    /**
+     * Every band the month reached, with the message cap lifted.
+     *
+     * `thresholds()->maxObservations` exists to bound how much the coach SAYS;
+     * applying it here would bound what gets RECORDED, and a fourth category that
+     * went over budget did so whether or not the message had room for it.
+     *
+     * The cap is lifted rather than raised: `COACHING_MAX_OBSERVATIONS=0` is a
+     * documented kill dial for the message, and it must not also blank the
+     * ledger. Recording is not speaking.
+     *
+     * @param  CategoryMonthSnapshot[]  $snapshots
+     * @return PaceObservation[]
+     */
+    private function allObservations(array $snapshots, MonthCursor $cursor, PaceThresholds $thresholds): array
+    {
+        if ($snapshots === []) {
+            return [];
+        }
+
+        return $this->evaluator->evaluate($snapshots, $cursor, new PaceThresholds(
+            minDayForProjection: $thresholds->minDayForProjection,
+            overrunMargin: $thresholds->overrunMargin,
+            lumpyShare: $thresholds->lumpyShare,
+            maxObservations: count($snapshots),
+            envelopeConsumedShare: $thresholds->envelopeConsumedShare,
+            envelopeMinMonthsRemaining: $thresholds->envelopeMinMonthsRemaining,
+        ));
+    }
+
+    /**
+     * Evaluate -> ladder, shared by `speak()` and `preview()`. Returns null when
+     * there is nothing worth claiming or composing.
+     *
+     * @param  CategoryMonthSnapshot[]  $snapshots
+     * @return array{0: PaceObservation[], 1: ?BlindnessObservation}|null
+     */
+    private function evaluateScope(
+        User $user,
+        CoachingScope $scope,
+        array $snapshots,
+        MonthCursor $cursor,
+        PaceThresholds $thresholds,
+    ): ?array {
         $candidates = $scope->isSweep
             ? $this->evaluator->evaluate($snapshots, $cursor, $thresholds)
             : $this->evaluateCaptureScope($scope, $snapshots, $cursor, $thresholds);
@@ -243,7 +312,7 @@ class FinancialCoachingService
             return null;
         }
 
-        return [$survivors, $blindness, $cursor];
+        return [$survivors, $blindness];
     }
 
     /**
