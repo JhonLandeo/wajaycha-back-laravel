@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Capture;
 
+use App\Enums\BotCommand;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessTelegramCapture;
 use App\Jobs\ProcessTelegramMenu;
@@ -160,7 +161,16 @@ class TelegramWebhookController extends Controller
             // que no sea un comando se manda a Gemini como si fuera un gasto, asi
             // que un `/menu` que llegara ahi se cobraria como una lectura y se
             // contestaria como un comprobante ilegible.
-            if (trim($message['text']) === ProcessTelegramMenu::COMMAND) {
+            //
+            // `/start` pelado entra por la misma puerta, y ahi esta el arreglo: no
+            // empieza con `'/start '` (con espacio), asi que no era un intento de
+            // vinculacion y caia en el parseo de texto. Un usuario ya vinculado que
+            // aprieta el boton START que Telegram le pone en grande recibia, a cambio
+            // de una lectura de Gemini, que su saludo no parece un movimiento con
+            // monto. Ahora recibe el menu, que es lo que ese boton deberia haber
+            // hecho siempre. `/start <token>` sigue yendo a captura: `opensMenu()`
+            // compara el texto entero, nunca el prefijo.
+            if (BotCommand::opensMenu($message['text'])) {
                 ProcessTelegramMenu::dispatch($chatId);
 
                 return;

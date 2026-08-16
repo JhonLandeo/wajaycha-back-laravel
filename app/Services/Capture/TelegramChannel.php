@@ -148,6 +148,59 @@ class TelegramChannel implements CaptureChannel
     }
 
     /**
+     * Publishes the bot's command list, so Telegram renders it.
+     *
+     * This is what makes the menu findable. Everything else in this class answers
+     * someone who already started a conversation; `setMyCommands` is the only call
+     * that changes what the client shows before anyone types — the `/` list and the
+     * labelled Menu button beside the input field.
+     *
+     * It replaces the whole list rather than appending, so it is idempotent and
+     * safe to run on every deploy. Removing a case from {@see \App\Enums\BotCommand}
+     * and re-running is how a command is retired.
+     *
+     * Unlike every other method here it **reports** its failure instead of
+     * swallowing it. The others are called from a queued job answering a user, where
+     * failing loudly means either a retry that duplicates a message or a job that
+     * dies with the sender hearing nothing. This one is called from a console
+     * command with an operator watching the exit code, and a registration that
+     * silently did not happen is a menu nobody can find — the exact failure this
+     * method exists to prevent.
+     *
+     * Sent through the write profile. `setMyCommands` is idempotent and could
+     * afford the read profile's extra retry, but nothing here is waiting on it: a
+     * human sees the result and runs it again. Keeping "writes go through
+     * `telegram_send`" true without exceptions is worth more than one retry.
+     *
+     * @param  array<int, array<string, string>>  $commands  See {@see \App\Enums\BotCommand::registration()}.
+     * @return bool Whether Telegram accepted the list.
+     */
+    public function registerCommands(array $commands): bool
+    {
+        $token = $this->botToken();
+
+        try {
+            $response = OutboundHttp::to('telegram_send')->post(
+                "https://api.telegram.org/bot{$token}/setMyCommands",
+                ['commands' => $commands],
+            );
+        } catch (ConnectionException $e) {
+            Log::error('❌ Telegram: no se pudo contactar a la API para publicar los comandos. '
+                .Redact::secrets($e->getMessage()));
+
+            return false;
+        }
+
+        if (! $response->successful()) {
+            Log::error('❌ Telegram: rechazó la lista de comandos. '.$response->body());
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * The one place an outbound `sendMessage` is built.
      *
      * Both {@see reply()} and {@see replyWithKeyboard()} owe the same two

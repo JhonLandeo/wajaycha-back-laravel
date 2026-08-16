@@ -34,20 +34,16 @@ use Throwable;
  * menu is a Telegram feature until a second channel can express the same thing,
  * and pretending otherwise would put a keyboard behind an interface that cannot
  * carry one.
+ *
+ * Which texts arrive here is decided by {@see \App\Enums\BotCommand::opensMenu()},
+ * not by a constant on this class. The same enum is what
+ * {@see \App\Console\Commands\RegisterTelegramCommands} publishes to Telegram, so
+ * the commands the client advertises and the commands this job answers are read
+ * from one list and cannot drift apart.
  */
 class ProcessTelegramMenu implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
-    /**
-     * The text command that opens the menu.
-     *
-     * Public because the controller has to recognise it before dispatching:
-     * every other text message is a capture attempt and goes to Gemini, so a
-     * command that reached the capture pipeline would be billed as a receipt and
-     * answered as an unreadable one.
-     */
-    public const COMMAND = '/menu';
 
     /**
      * @param  string|null  $callbackQueryId  present when a button was pressed,

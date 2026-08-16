@@ -110,6 +110,47 @@ it('still sends ordinary text to the capture pipeline', function () {
 });
 
 /**
+ * The most pressed button in the product: Telegram renders a full-width START on
+ * the first open of any chat. Bare `/start` does not match
+ * `ProcessTelegramCapture::LINK_PREFIX` (`'/start '`, with the space), so it used
+ * to reach the text parser — a Gemini reading, billed, answering a greeting with
+ * "eso no parece un movimiento con monto".
+ */
+it('routes a bare /start to the menu instead of the text parser', function () {
+    Bus::fake();
+
+    $this->withHeader('X-Telegram-Bot-Api-Secret-Token', 'test-secret')
+        ->postJson('/api/telegram/webhook', [
+            'update_id' => 10,
+            'message' => ['chat' => ['id' => menuChat()], 'text' => '/start'],
+        ])
+        ->assertOk();
+
+    Bus::assertDispatched(ProcessTelegramMenu::class);
+    Bus::assertNotDispatched(ProcessTelegramCapture::class);
+});
+
+/**
+ * The other half of that branch, and the one worth a case of its own: linking is
+ * the only thing `/start` carried before this change, and `ProcessTelegramMenu`
+ * has no redeemer. Routing this one to the menu would leave no path to connect an
+ * account at all.
+ */
+it('still routes /start with a link token to the capture pipeline', function () {
+    Bus::fake();
+
+    $this->withHeader('X-Telegram-Bot-Api-Secret-Token', 'test-secret')
+        ->postJson('/api/telegram/webhook', [
+            'update_id' => 11,
+            'message' => ['chat' => ['id' => menuChat()], 'text' => '/start abc123'],
+        ])
+        ->assertOk();
+
+    Bus::assertDispatched(ProcessTelegramCapture::class);
+    Bus::assertNotDispatched(ProcessTelegramMenu::class);
+});
+
+/**
  * A pressed button arrives as `callback_query`, with no `message` at the top
  * level. Before it was recognised it fell through to the unsupported branch and
  * the bot answered its own button with "no puedo leer ese tipo de mensaje".
