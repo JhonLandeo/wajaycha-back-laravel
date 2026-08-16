@@ -75,6 +75,35 @@ interface CategoryRepositoryContract
     public function expenseBudgetSnapshotsForMonth(int $userId, int $month, int $year): array;
 
     /**
+     * Leaf **expense** categories that HAVE a budget, whether or not they were
+     * spent on this month.
+     *
+     * The complement of {@see expenseBudgetSnapshotsForMonth()}, and the two
+     * filters are opposites on purpose: that one keeps categories with spend and
+     * lets an unbudgeted one through, because it feeds pace and blindness. This
+     * one keeps categories with a budget and lets an untouched one through,
+     * because it feeds the daily allowance — and a budgeted category nobody has
+     * spent on yet is not an edge case there, it is the category with the most
+     * room left. Dropping it would understate what the user can spend, which is
+     * the one direction this figure must never be wrong in.
+     *
+     * `spent` comes from `get_monthly_category_budget_report`, the same function
+     * and the same argument order as the other two callers, so no reading of this
+     * repository can disagree with the report the SPA shows.
+     *
+     * `largestExpenseAmount` is left at zero and `spentInYear` unfetched: both
+     * exist for pace decisions this question does not make, and querying for them
+     * would be two round trips bought for figures nobody reads.
+     *
+     * @return CategoryMonthSnapshot[]
+     *
+     * @throws TooManyCategoriesException on the same cap, for the same reason: a
+     *                                    truncated category list produces a daily allowance that is
+     *                                    confidently too small, with nothing to show it was truncated.
+     */
+    public function budgetedExpenseSnapshotsForMonth(int $userId, int $month, int $year): array;
+
+    /**
      * Budget-versus-spend rows for a month, as the monthly summary needs them.
      *
      * The third caller of `get_monthly_category_budget_report`, and the last one that

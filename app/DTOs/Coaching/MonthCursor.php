@@ -26,6 +26,21 @@ final class MonthCursor
     ) {}
 
     /**
+     * Days left in the month, **today included**.
+     *
+     * The inclusion is the whole method. On the 31st of a 31-day month a person
+     * still has today to spend, so the answer is 1 and not 0 — and 0 is not merely
+     * a worse answer, it is a division by zero in every caller that turns a
+     * remaining budget into a daily figure. Written here rather than at the call
+     * site because this class already exists to keep one declaration of the
+     * calendar, and an off-by-one derived twice is an off-by-one in one of them.
+     */
+    public function daysLeft(): int
+    {
+        return $this->daysInMonth - $this->day + 1;
+    }
+
+    /**
      * The cursor for the month containing `$now`.
      *
      * Takes the instant rather than calling `now()` so this stays a value object:

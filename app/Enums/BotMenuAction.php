@@ -31,11 +31,23 @@ enum BotMenuAction: string
      */
     case HOW_AM_I_DOING = 'm:how';
 
+    /**
+     * What is left of every monthly budget, divided by the days left in the month.
+     * Answered from `DailyAllowanceService`.
+     *
+     * The question that reads a budget forwards instead of backwards. Everything
+     * else this bot says is about spending that already happened, which can only
+     * ever be a verdict; this one lands before the decision, which is the only
+     * moment a figure can still change it.
+     */
+    case HOW_MUCH_TODAY = 'm:today';
+
     /** The label the user reads on the button. */
     public function label(): string
     {
         return match ($this) {
             self::HOW_AM_I_DOING => '¿Cómo voy?',
+            self::HOW_MUCH_TODAY => '¿Cuánto puedo gastar hoy?',
         };
     }
 

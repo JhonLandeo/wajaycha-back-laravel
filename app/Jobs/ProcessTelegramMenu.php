@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Capture\ChannelIdentityResolver;
 use App\Services\Capture\TelegramChannel;
 use App\Services\Coaching\BudgetDigestService;
+use App\Services\Coaching\DailyAllowanceService;
 use App\Support\Redact;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -65,6 +66,7 @@ class ProcessTelegramMenu implements ShouldQueue
         TelegramChannel $telegram,
         ChannelIdentityResolver $identities,
         BudgetDigestService $digest,
+        DailyAllowanceService $allowance,
     ): void {
         // Cerrar el callback va primero y pase lo que pase. Es lo unico que apaga
         // el indicador girando en el cliente, y el usuario lo nota mucho antes que
@@ -105,14 +107,32 @@ class ProcessTelegramMenu implements ShouldQueue
             return;
         }
 
-        $telegram->reply($this->chatId, $this->answer($action, $user, $digest));
+        $telegram->reply($this->chatId, $this->answer($action, $user, $digest, $allowance));
     }
 
-    private function answer(BotMenuAction $action, User $user, BudgetDigestService $digest): string
-    {
+    private function answer(
+        BotMenuAction $action,
+        User $user,
+        BudgetDigestService $digest,
+        DailyAllowanceService $allowance,
+    ): string {
         return match ($action) {
             BotMenuAction::HOW_AM_I_DOING => $this->howAmIDoing($user, $digest),
+            BotMenuAction::HOW_MUCH_TODAY => $allowance->composeOnDemand($user) ?? $this->unavailable(),
         };
+    }
+
+    /**
+     * What is said when the kill switch is off.
+     *
+     * Not "vas bien" and not "no tenés presupuestos": nobody looked. The same
+     * distinction `coaching_evaluations` exists to record — "no cruzaste nada" and
+     * "no te miré" are different facts, and a bot that reports the second as the
+     * first is lying about the only thing it is for.
+     */
+    private function unavailable(): string
+    {
+        return 'Ahora mismo no puedo revisar tus presupuestos. Probá más tarde.';
     }
 
     /**
@@ -132,10 +152,7 @@ class ProcessTelegramMenu implements ShouldQueue
         }
 
         if (! (bool) config('coaching.enabled')) {
-            // No se dice "vas bien": el subsistema esta apagado, asi que nadie
-            // miro. Es la misma distincion que coaching_evaluations existe para
-            // registrar — "no cruzaste nada" y "no te mire" no son la misma frase.
-            return 'Ahora mismo no puedo revisar tus presupuestos. Probá más tarde.';
+            return $this->unavailable();
         }
 
         return 'Ningún presupuesto pasado ni en camino a pasarse. Vas bien.';

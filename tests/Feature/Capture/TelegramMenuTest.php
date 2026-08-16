@@ -181,6 +181,7 @@ it('offers the keyboard when the menu is opened by command', function () {
         app(App\Services\Capture\TelegramChannel::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
     );
 
     $payload = lastSentMessage();
@@ -198,6 +199,7 @@ it('answers the pressed button with the budget board', function () {
         app(App\Services\Capture\TelegramChannel::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('Delivery')->toContain('Ya pasaste');
@@ -217,6 +219,7 @@ it('answers even while the morning digest is switched off', function () {
         app(App\Services\Capture\TelegramChannel::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('Delivery');
@@ -233,6 +236,7 @@ it('says everything is fine rather than staying silent', function () {
         app(App\Services\Capture\TelegramChannel::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('Vas bien');
@@ -248,9 +252,114 @@ it('does not claim everything is fine while coaching is switched off', function 
         app(App\Services\Capture\TelegramChannel::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
     );
 
     expect(lastSentMessage()['text'])->not->toContain('Vas bien');
+});
+
+it('answers how much can be spent today with a daily figure', function () {
+    $user = menuLinkedUser();
+
+    Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 600.0,
+        'name' => 'Comida',
+    ]);
+
+    (new ProcessTelegramMenu(menuChat(), 'cbq-1', BotMenuAction::HOW_MUCH_TODAY->value))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+    );
+
+    expect(lastSentMessage()['text'])
+        ->toContain('Comida')
+        ->toContain('por día')
+        ->toContain('Podés gastar hoy');
+});
+
+/**
+ * The button answers even for a user who has never been coached, because the
+ * question is about a budget rather than about spending. The digest button would
+ * be silent here — there is nothing over and nothing heading over — and that is
+ * precisely the difference between the two answers.
+ */
+it('answers how much can be spent today with no transactions at all', function () {
+    $user = menuLinkedUser();
+
+    Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 300.0,
+        'name' => 'Transporte',
+    ]);
+
+    (new ProcessTelegramMenu(menuChat(), 'cbq-1', BotMenuAction::HOW_MUCH_TODAY->value))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+    );
+
+    expect(lastSentMessage()['text'])->toContain('Transporte');
+});
+
+it('does not stay silent about the daily figure when there is no budget', function () {
+    menuLinkedUser();
+
+    (new ProcessTelegramMenu(menuChat(), 'cbq-1', BotMenuAction::HOW_MUCH_TODAY->value))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+    );
+
+    expect(lastSentMessage()['text'])->toContain('No tenés presupuestos mensuales');
+});
+
+it('does not claim a daily figure while coaching is switched off', function () {
+    config()->set('coaching.enabled', false);
+
+    $user = menuLinkedUser();
+
+    Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 600.0,
+        'name' => 'Comida',
+    ]);
+
+    (new ProcessTelegramMenu(menuChat(), 'cbq-1', BotMenuAction::HOW_MUCH_TODAY->value))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+    );
+
+    expect(lastSentMessage()['text'])
+        ->toContain('no puedo revisar')
+        ->not->toContain('Comida');
+});
+
+/**
+ * The keyboard has to grow with the enum. A case added without a button is an
+ * answer nobody can reach.
+ */
+it('offers every action as a button', function () {
+    menuLinkedUser();
+
+    (new ProcessTelegramMenu(menuChat()))->handle(
+        app(App\Services\Capture\TelegramChannel::class),
+        app(App\Services\Capture\ChannelIdentityResolver::class),
+        app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
+    );
+
+    expect(lastSentMessage()['reply_markup']['inline_keyboard'])
+        ->toHaveCount(count(BotMenuAction::cases()));
 });
 
 /**
@@ -264,6 +373,7 @@ it('reopens the menu when an unknown action arrives', function () {
         app(App\Services\Capture\TelegramChannel::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
     );
 
     expect(lastSentMessage()['reply_markup']['inline_keyboard'])->not->toBeEmpty();
@@ -274,6 +384,7 @@ it('tells an unlinked sender to link before anything else', function () {
         app(App\Services\Capture\TelegramChannel::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
     );
 
     expect(lastSentMessage()['text'])->toContain('no está vinculada');
@@ -298,6 +409,7 @@ it('closes the callback query before answering', function () {
         app(App\Services\Capture\TelegramChannel::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Coaching\BudgetDigestService::class),
+        app(App\Services\Coaching\DailyAllowanceService::class),
     );
 
     expect($calls[0])->toBe('answer');

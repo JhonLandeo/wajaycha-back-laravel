@@ -135,31 +135,8 @@ final class CategoryRepository implements CategoryRepositoryContract
 
     public function expenseBudgetSnapshotsForMonth(int $userId, int $month, int $year): array
     {
-        $maxCategories = (int) config('coaching.max_categories');
-
-        // Rule 02 Violation Fix: Explicit columns instead of SELECT *
-        $rows = DB::select(
-            'SELECT id, name, monthly_budget, spent, available_budget, percentage_spent, rule_quantity, total_records
-             FROM get_monthly_category_budget_report(?, ?, ?, ?, ?, ?)',
-            [1, $maxCategories, $userId, $month, $year, null]
-        );
-
-        $totalRecords = empty($rows) ? 0 : (int) $rows[0]->total_records;
-
-        if ($totalRecords > $maxCategories) {
-            throw TooManyCategoriesException::forUser($userId, $totalRecords, $maxCategories);
-        }
-
-        // The function returns neither a `type` nor a `budget_period` column
-        // (design.md D2 item 2). One query carries both: the keys are the expense
-        // category ids the intersection needs, the values are the budget unit the
-        // evaluator needs.
-        /** @var array<int, string> $periodByCategory */
-        $periodByCategory = Category::query()
-            ->where('user_id', $userId)
-            ->where('type', 'expense')
-            ->pluck('budget_period', 'id')
-            ->all();
+        $rows = $this->budgetReportRows($userId, $month, $year);
+        $periodByCategory = $this->budgetPeriodByExpenseCategory($userId);
 
         $survivingRows = array_values(array_filter(
             $rows,
@@ -198,6 +175,88 @@ final class CategoryRepository implements CategoryRepositoryContract
             ),
             $survivingRows
         );
+    }
+
+    public function budgetedExpenseSnapshotsForMonth(int $userId, int $month, int $year): array
+    {
+        $rows = $this->budgetReportRows($userId, $month, $year);
+        $periodByCategory = $this->budgetPeriodByExpenseCategory($userId);
+
+        // La unica diferencia con el metodo de arriba, y es la que importa: se
+        // filtra por PRESUPUESTO, no por gasto. Una categoria presupuestada y sin
+        // tocar es justamente la que tiene el margen entero disponible.
+        $budgetedRows = array_values(array_filter(
+            $rows,
+            fn (object $row): bool => isset($periodByCategory[(int) $row->id]) && (float) $row->monthly_budget > 0.0
+        ));
+
+        return array_map(
+            fn (object $row): CategoryMonthSnapshot => new CategoryMonthSnapshot(
+                categoryId: (int) $row->id,
+                name: (string) $row->name,
+                type: 'expense',
+                monthlyBudget: (float) $row->monthly_budget,
+                spent: (float) $row->spent,
+                largestExpenseAmount: 0.0,
+                budgetPeriod: BudgetPeriod::fromColumn($periodByCategory[(int) $row->id] ?? null),
+            ),
+            $budgetedRows
+        );
+    }
+
+    /**
+     * The budget report for a month, capped, with the cap enforced.
+     *
+     * Extracted when a second coaching reading needed the same rows under the same
+     * cap. Sharing it is not tidiness: the cap is a correctness rule — coaching a
+     * truncated category list produces confidently wrong output with nothing to
+     * show it was truncated — and a rule copied into two methods is a rule that
+     * only holds in whichever one was edited last.
+     *
+     * Rule 02: explicit columns, never `SELECT *`. The function takes
+     * (p_page, p_per_page, p_user_id, p_month, p_year, p_search).
+     *
+     * @return array<int, \stdClass>
+     *
+     * @throws TooManyCategoriesException
+     */
+    private function budgetReportRows(int $userId, int $month, int $year): array
+    {
+        $maxCategories = (int) config('coaching.max_categories');
+
+        $rows = DB::select(
+            'SELECT id, name, monthly_budget, spent, available_budget, percentage_spent, rule_quantity, total_records
+             FROM get_monthly_category_budget_report(?, ?, ?, ?, ?, ?)',
+            [1, $maxCategories, $userId, $month, $year, null]
+        );
+
+        $totalRecords = empty($rows) ? 0 : (int) $rows[0]->total_records;
+
+        if ($totalRecords > $maxCategories) {
+            throw TooManyCategoriesException::forUser($userId, $totalRecords, $maxCategories);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Budget unit per **expense** category, keyed by id.
+     *
+     * `get_monthly_category_budget_report` returns neither a `type` nor a
+     * `budget_period` column (design.md D2 item 2), so one query carries both
+     * answers: a key present at all means the category is an expense, and its
+     * value is the unit its amount is denominated in.
+     *
+     * @return array<int, string>
+     */
+    private function budgetPeriodByExpenseCategory(int $userId): array
+    {
+        /** @var array<int, string> */
+        return Category::query()
+            ->where('user_id', $userId)
+            ->where('type', 'expense')
+            ->pluck('budget_period', 'id')
+            ->all();
     }
 
     /**
