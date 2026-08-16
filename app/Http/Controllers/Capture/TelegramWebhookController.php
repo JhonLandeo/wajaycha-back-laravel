@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Capture;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessTelegramCapture;
+use App\Jobs\ProcessTelegramMenu;
 use App\Services\Capture\ChannelLinkTokenRedeemer;
 use App\Services\Capture\ChannelUpdateDeduplicator;
 use App\Services\Capture\TelegramChannel;
@@ -116,6 +117,16 @@ class TelegramWebhookController extends Controller
     /** @param array<string, mixed> $update */
     private function dispatchUpdate(array $update, TelegramChannel $telegram): void
     {
+        // Un boton no llega como mensaje sino como callback_query, con su propio
+        // sobre y su propio chat. Va antes que todo lo demas porque el update no
+        // trae `message` en el nivel de arriba y caeria en "tipo no soportado",
+        // contestandole al usuario que no entiende su propio boton.
+        if (isset($update['callback_query']) && is_array($update['callback_query'])) {
+            $this->dispatchCallback($update['callback_query']);
+
+            return;
+        }
+
         $message = $update['message'] ?? null;
         $chatId = isset($message['chat']['id']) ? (string) $message['chat']['id'] : null;
 
@@ -145,6 +156,16 @@ class TelegramWebhookController extends Controller
         }
 
         if (isset($message['text']) && is_string($message['text'])) {
+            // El menu se separa antes de la captura, no dentro de ella. Todo texto
+            // que no sea un comando se manda a Gemini como si fuera un gasto, asi
+            // que un `/menu` que llegara ahi se cobraria como una lectura y se
+            // contestaria como un comprobante ilegible.
+            if (trim($message['text']) === ProcessTelegramMenu::COMMAND) {
+                ProcessTelegramMenu::dispatch($chatId);
+
+                return;
+            }
+
             ProcessTelegramCapture::dispatch($chatId, $this->withHashedLinkToken($message['text']));
 
             return;
@@ -156,6 +177,41 @@ class TelegramWebhookController extends Controller
         // lo cual el silencio se lee como que el bot esta caido.
         Log::info('ℹ️ Telegram: tipo de mensaje no soportado del chat '.Redact::id($chatId).'.');
         ProcessTelegramCapture::dispatch($chatId, null, null, true);
+    }
+
+    /**
+     * Hands a pressed button to the menu job.
+     *
+     * The chat id is read from `callback_query.message.chat.id` — the chat the
+     * button is sitting in — and not from `callback_query.from.id`. They are the
+     * same value in a private chat, which is the only place this bot operates, but
+     * they answer different questions: `from` is who tapped, `message.chat` is
+     * where the answer belongs. Using `from` would work today and quietly send the
+     * reply to the wrong place the day the bot is ever added to a group.
+     *
+     * `callback_query.id` is carried through because Telegram spins an indicator
+     * on the button until `answerCallbackQuery` closes it. A callback with no id
+     * is not something Telegram sends; if one arrives, the answer is still worth
+     * sending, so the job takes null rather than dropping the press.
+     *
+     * @param  array<string, mixed>  $callback
+     */
+    private function dispatchCallback(array $callback): void
+    {
+        $chatId = isset($callback['message']['chat']['id'])
+            ? (string) $callback['message']['chat']['id']
+            : null;
+
+        if ($chatId === null) {
+            Log::info('ℹ️ Telegram: callback sin chat utilizable, se ignora.');
+
+            return;
+        }
+
+        $callbackQueryId = isset($callback['id']) ? (string) $callback['id'] : null;
+        $data = isset($callback['data']) && is_string($callback['data']) ? $callback['data'] : null;
+
+        ProcessTelegramMenu::dispatch($chatId, $callbackQueryId, $data);
     }
 
     /**

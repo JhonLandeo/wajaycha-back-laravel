@@ -101,6 +101,28 @@ it('el job declara su propio timeout en vez de heredar el del supervisor', funct
         ->and((new ProcessTelegramCapture('1', 'texto'))->timeout)->toBeGreaterThan($supervisor);
 });
 
+/**
+ * El menu no declara timeout propio, y eso es una afirmacion sobre su
+ * presupuesto, no un olvido: cierra el callback y manda una respuesta, dos
+ * llamadas al mismo perfil de escritura y nada mas. Entra en el default del
+ * supervisor con margen.
+ *
+ * Lo que este caso custodia es el dia que deje de entrar. Subir `retries` en
+ * `telegram_send` multiplica las dos llamadas a la vez, y sin este guard el job
+ * simplemente moriria a mitad: el usuario se queda sin respuesta y con el boton
+ * girando, que es la forma mas silenciosa posible de romperlo.
+ */
+it('el presupuesto del job de menu entra en el worker sin declarar timeout propio', function () {
+    $supervisor = (int) config('horizon.defaults.supervisor-1.timeout');
+
+    $presupuesto = OutboundHttp::worstCaseSecondsFor('telegram_send') * 2;
+
+    expect($presupuesto)->toBeLessThan(
+        $supervisor,
+        'la ruta del menu ya no entra en el worker: ProcessTelegramMenu tiene que declarar su propio timeout',
+    );
+});
+
 it('ningun perfil solo agota por si mismo el worker del supervisor', function () {
     $supervisor = (int) config('horizon.defaults.supervisor-1.timeout');
 

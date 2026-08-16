@@ -79,6 +79,35 @@ final class BudgetDigestService
             return null;
         }
 
+        return $this->board($user);
+    }
+
+    /**
+     * The same board, composed because someone asked for it.
+     *
+     * `digest_enabled` is deliberately NOT consulted here, and that is the point
+     * of the method existing. That switch governs whether the bot may start a
+     * conversation every morning without being asked — the one feature in this
+     * subsystem that talks to people on its own, which is why it ships off. None
+     * of that reasoning survives when the user presses a button: they asked, so
+     * there is no unsolicited message to withhold, and answering "the morning
+     * digest is disabled" to a direct question would be a non-sequitur.
+     *
+     * `coaching.enabled` still applies. It is the subsystem's kill switch, and a
+     * rollback that leaves one entry point still talking is not a rollback.
+     */
+    public function composeOnDemand(User $user): ?string
+    {
+        if (! (bool) config('coaching.enabled')) {
+            return null;
+        }
+
+        return $this->board($user);
+    }
+
+    /** @return string|null null when no category is over, heading over, or depleting an envelope. */
+    private function board(User $user): ?string
+    {
         $cursor = MonthCursor::forInstant(CarbonImmutable::now((string) config('app.timezone')));
 
         $snapshots = $this->categories->expenseBudgetSnapshotsForMonth(

@@ -83,15 +83,88 @@ class TelegramChannel implements CaptureChannel
 
     public function reply(string $externalId, string $text): void
     {
+        $this->send([
+            'chat_id' => $externalId,
+            'text' => $text,
+        ]);
+    }
+
+    /**
+     * The same reply, with buttons attached.
+     *
+     * Deliberately NOT part of the {@see CaptureChannel} port. The port has three
+     * methods because only three responsibilities are genuinely per-channel, and
+     * buttons are not one of them — WhatsApp expresses the same intent through
+     * Meta-approved interactive templates, on completely different terms. Widening
+     * the interface would force a shape onto a channel that does not have it, and
+     * would let a caller pass a Telegram keyboard to an adapter that cannot honour
+     * it. Whoever wants buttons asks Telegram for them, by name.
+     *
+     * `$keyboard` is Telegram's `inline_keyboard`: rows of buttons, each carrying
+     * a `callback_data` of at most 64 bytes. See {@see \App\Enums\BotMenuAction}.
+     *
+     * @param  array<int, array<int, array<string, string>>>  $keyboard
+     */
+    public function replyWithKeyboard(string $externalId, string $text, array $keyboard): void
+    {
+        $this->send([
+            'chat_id' => $externalId,
+            'text' => $text,
+            'reply_markup' => ['inline_keyboard' => $keyboard],
+        ]);
+    }
+
+    /**
+     * Closes a callback query.
+     *
+     * Not optional and not cosmetic: Telegram clients render a progress indicator
+     * on the tapped button until this call arrives, so skipping it leaves the
+     * button spinning forever in the user's chat. It is called even when the
+     * answer itself fails, which is why it takes no text — the real answer travels
+     * as a normal message.
+     */
+    public function answerCallback(string $callbackQueryId): void
+    {
+        $token = $this->botToken();
+
+        try {
+            $response = OutboundHttp::to('telegram_send')->post(
+                "https://api.telegram.org/bot{$token}/answerCallbackQuery",
+                ['callback_query_id' => $callbackQueryId],
+            );
+        } catch (ConnectionException $e) {
+            Log::error('❌ Telegram: no se pudo contactar a la API para cerrar el callback. '
+                .Redact::secrets($e->getMessage()));
+
+            return;
+        }
+
+        if (! $response->successful()) {
+            // Se registra y se sigue. El unico dano es el indicador girando en el
+            // cliente, y hacer fallar el job por eso volveria a mandar la respuesta
+            // entera al reintentar.
+            Log::error('❌ Telegram: no se pudo cerrar el callback. '.$response->body());
+        }
+    }
+
+    /**
+     * The one place an outbound `sendMessage` is built.
+     *
+     * Both {@see reply()} and {@see replyWithKeyboard()} owe the same two
+     * guarantees — a connection that never completes must not escape as an
+     * exception carrying the bot token in its URI, and a non-2xx must not fail the
+     * caller's job — and having written them twice is how they drift apart.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function send(array $payload): void
+    {
         $token = $this->botToken();
 
         // Perfil aparte del de lectura: sendMessage no es idempotente, asi que
         // reintenta una sola vez. El intercambio esta anotado en config/http.php.
         try {
-            $response = OutboundHttp::to('telegram_send')->post("https://api.telegram.org/bot{$token}/sendMessage", [
-                'chat_id' => $externalId,
-                'text' => $text,
-            ]);
+            $response = OutboundHttp::to('telegram_send')->post("https://api.telegram.org/bot{$token}/sendMessage", $payload);
         } catch (ConnectionException $e) {
             // Mismo contrato que el fallo por status, y por la misma razon. El
             // guard de abajo solo se alcanza cuando existe una respuesta, asi que
