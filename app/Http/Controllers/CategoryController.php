@@ -59,7 +59,8 @@ final class CategoryController extends Controller
         if (!$category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
-        return response()->json($category);
+
+        return response()->json($this->withParetoClassification($category));
     }
 
     /**
@@ -69,7 +70,8 @@ final class CategoryController extends Controller
     {
         $dto = CategoryDataDTO::fromStoreRequest($request, (int) Auth::id());
         $category = $this->storeAction->execute($dto);
-        return response()->json($category, 201);
+
+        return response()->json($this->withParetoClassification($category), 201);
     }
 
     /**
@@ -85,7 +87,7 @@ final class CategoryController extends Controller
         $dto = CategoryDataDTO::fromUpdateRequest($request, (int) Auth::id());
         $updatedCategory = $this->updateAction->execute($category, $dto);
 
-        return response()->json($updatedCategory);
+        return response()->json($this->withParetoClassification($updatedCategory));
     }
 
     /**
@@ -122,18 +124,37 @@ final class CategoryController extends Controller
             'pareto_classification_id' => 'sometimes|nullable|exists:pareto_classifications,id',
         ]);
 
-        // Wrap in a DTO to reuse UpdateCategoryAction logic while keeping decoupling
+        // Wrap in a DTO to reuse UpdateCategoryAction logic while keeping decoupling.
+        // `parent_id` is deliberately left unset: this endpoint changes a band and
+        // nothing else, and the DTO only reparents when the caller says so.
         $dto = new CategoryDataDTO(
             name: $category->name,
             type: $category->type,
             monthly_budget: (float) $category->monthly_budget,
             user_id: (int) $category->user_id,
-            parent_id: $category->parent_id,
             pareto_classification_id: $request->pareto_classification_id ? (int) $request->pareto_classification_id : null
         );
 
-        $this->updateAction->execute($category, $dto);
+        $updated = $this->updateAction->execute($category, $dto);
 
-        return response()->json($category->fresh());
+        return response()->json($this->withParetoClassification($updated));
+    }
+
+    /**
+     * A category as the SPA reads it: the row plus the band it is in.
+     *
+     * `categories.pareto_classification_id` was dropped when the link moved to
+     * `category_pareto_assignments`, and every response that serialises a bare
+     * `Category` lost the field with it. The clients never stopped sending it back on
+     * save, so the write path kept working and only the read looked broken — an edit
+     * form that opens with no band selected on a category that has one.
+     *
+     * @return array<string, mixed>
+     */
+    private function withParetoClassification(Category $category): array
+    {
+        return $category->toArray() + [
+            'pareto_classification_id' => $this->repository->paretoClassificationIdFor((int) $category->id),
+        ];
     }
 }

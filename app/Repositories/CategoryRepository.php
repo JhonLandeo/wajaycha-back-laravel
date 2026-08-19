@@ -118,6 +118,15 @@ final class CategoryRepository implements CategoryRepositoryContract
             ->delete();
     }
 
+    public function paretoClassificationIdFor(int $categoryId): ?int
+    {
+        $assignment = DB::table('category_pareto_assignments')
+            ->where('category_id', $categoryId)
+            ->value('pareto_classification_id');
+
+        return $assignment !== null ? (int) $assignment : null;
+    }
+
     /**
      * @return array<int, \stdClass>
      */

@@ -55,6 +55,19 @@ interface CategoryRepositoryContract
     public function clearParetoClassification(int $categoryId): void;
 
     /**
+     * The Pareto band a category is in right now, or null.
+     *
+     * The read half of {@see assignParetoClassification()}, and it exists because the
+     * write half had no counterpart. `categories.pareto_classification_id` was dropped
+     * when the link moved to `category_pareto_assignments`, so a plain `Category` no
+     * longer carries the band anywhere — `GET /api/categories/{id}` answered without
+     * the field, the SPA's edit form opened with the Pareto select empty, and its own
+     * validation then refused to save an expense until the user re-picked a band the
+     * system already knew.
+     */
+    public function paretoClassificationIdFor(int $categoryId): ?int;
+
+    /**
      * Leaf **expense** categories with spend this month, shaped for `PaceEvaluator`
      * (design.md D2, §5.1). Wraps `get_monthly_category_budget_report`, the same
      * function the SPA reads, so `spent` never disagrees with the report.

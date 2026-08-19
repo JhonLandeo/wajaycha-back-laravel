@@ -22,8 +22,15 @@ final class UpdateCategoryAction
                 'name' => $dto->name,
                 'type' => $dto->type,
                 'monthly_budget' => $dto->monthly_budget,
-                'parent_id' => $dto->parent_id,
             ];
+
+            // Same reason as `budget_period` below, different mechanism: null is a
+            // real parent value ("root"), so absence has to be signalled separately.
+            // The category form sends no parent field, so writing `$dto->parent_id`
+            // unconditionally turned every subcategory into a root one on save.
+            if ($dto->reparents) {
+                $data['parent_id'] = $dto->parent_id;
+            }
 
             // Omitted, never defaulted: a client that does not know the column
             // exists must not reset a yearly envelope back to monthly by saving

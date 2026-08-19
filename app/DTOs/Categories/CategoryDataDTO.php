@@ -24,6 +24,14 @@ final class CategoryDataDTO
      * StoreCategoryAction reads it as 'monthly' (a new row needs a value),
      * UpdateCategoryAction omits the column entirely (an existing row keeps its
      * own).
+     *
+     * `parent_id` needs the same distinction and cannot borrow the same trick,
+     * because null is a legitimate value there — it means "a root category", not
+     * "unspecified". So the intent travels in `$reparents`: false leaves the
+     * column alone, true writes `$parent_id` whatever it is. Without it, an update
+     * that never mentioned a parent read as `parent_id = null` and quietly promoted
+     * every subcategory to a root one, on every save, from a form that has no
+     * parent field at all.
      */
     public function __construct(
         public readonly string $name,
@@ -33,6 +41,7 @@ final class CategoryDataDTO
         public readonly ?int $parent_id = null,
         public readonly ?int $pareto_classification_id = null,
         public readonly ?BudgetPeriod $budget_period = null,
+        public readonly bool $reparents = false,
     ) {
     }
 
@@ -43,11 +52,12 @@ final class CategoryDataDTO
             type: (string) $request->validated('type'),
             monthly_budget: (float) $request->validated('monthly_budget'),
             user_id: $userId,
-            parent_id: $request->validated('parent_id') ? (int) $request->validated('parent_id') : null,
+            parent_id: $request->validated('parent_id') !== null ? (int) $request->validated('parent_id') : null,
             pareto_classification_id: $request->validated('pareto_classification_id') ? (int) $request->validated('pareto_classification_id') : null,
             budget_period: $request->validated('budget_period') !== null
                 ? BudgetPeriod::from((string) $request->validated('budget_period'))
                 : null,
+            reparents: $request->has('parent_id'),
         );
     }
 
@@ -58,11 +68,12 @@ final class CategoryDataDTO
             type: (string) ($request->validated('type') ?? ''),
             monthly_budget: (float) ($request->validated('monthly_budget') ?? 0),
             user_id: $userId,
-            parent_id: $request->validated('parent_id') ? (int) $request->validated('parent_id') : null,
+            parent_id: $request->validated('parent_id') !== null ? (int) $request->validated('parent_id') : null,
             pareto_classification_id: $request->validated('pareto_classification_id') ? (int) $request->validated('pareto_classification_id') : null,
             budget_period: $request->validated('budget_period') !== null
                 ? BudgetPeriod::from((string) $request->validated('budget_period'))
                 : null,
+            reparents: $request->has('parent_id'),
         );
     }
 }

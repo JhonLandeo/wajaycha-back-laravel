@@ -130,3 +130,82 @@ it('responde 404 al actualizar la categoria de otro usuario', function () {
         'monthly_budget' => 0,
     ], $headers)->assertStatus(404);
 });
+
+// ---------------------------------------------------------------------- read
+
+it('devuelve la clasificacion pareto vigente al consultar la categoria', function () {
+    [$user, $headers] = categoryOwner();
+    $pareto = ParetoClassification::factory()->create(['user_id' => $user->id]);
+    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
+
+    DB::table('category_pareto_assignments')->insert([
+        'category_id' => $category->id,
+        'pareto_classification_id' => $pareto->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->getJson("/api/categories/{$category->id}", $headers)
+        ->assertOk()
+        ->assertJsonPath('pareto_classification_id', $pareto->id);
+});
+
+it('devuelve null cuando la categoria no esta en ninguna banda', function () {
+    [$user, $headers] = categoryOwner();
+    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'income']);
+
+    $this->getJson("/api/categories/{$category->id}", $headers)
+        ->assertOk()
+        ->assertJsonPath('pareto_classification_id', null);
+});
+
+// ----------------------------------------------------------------- parent_id
+
+it('conserva el padre cuando la actualizacion no menciona parent_id', function () {
+    [$user, $headers] = categoryOwner();
+    $parent = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
+    $child = Category::factory()->asChild($parent->id)->create([
+        'user_id' => $user->id,
+        'type' => 'income',
+    ]);
+
+    $this->putJson("/api/categories/{$child->id}", [
+        'name' => 'Renombrada',
+        'type' => 'income',
+        'monthly_budget' => 0,
+    ], $headers)->assertOk();
+
+    expect($child->fresh()->parent_id)->toBe($parent->id);
+});
+
+it('mueve la categoria a raiz cuando la actualizacion manda parent_id null', function () {
+    [$user, $headers] = categoryOwner();
+    $parent = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
+    $child = Category::factory()->asChild($parent->id)->create([
+        'user_id' => $user->id,
+        'type' => 'income',
+    ]);
+
+    $this->putJson("/api/categories/{$child->id}", [
+        'name' => 'Promovida',
+        'type' => 'income',
+        'monthly_budget' => 0,
+        'parent_id' => null,
+    ], $headers)->assertOk();
+
+    expect($child->fresh()->parent_id)->toBeNull();
+});
+
+it('rechaza un parent_id que pertenece a otro usuario', function () {
+    [$user, $headers] = categoryOwner();
+    $stranger = User::factory()->create();
+    $foreignParent = Category::factory()->create(['user_id' => $stranger->id, 'type' => 'expense']);
+    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'income']);
+
+    $this->putJson("/api/categories/{$category->id}", [
+        'name' => 'Adoptada',
+        'type' => 'income',
+        'monthly_budget' => 0,
+        'parent_id' => $foreignParent->id,
+    ], $headers)->assertStatus(422);
+});
