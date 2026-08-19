@@ -71,13 +71,20 @@ non-trivial query.
 
 `database/migrations/` defines PostgreSQL functions that carry Financial Analysis
 logic — `fn_get_top_five_data`, `create_function_summary_by_day`,
-`exclude_income_from_pareto` and others, invoked from controllers via
+`get_monthly_category_budget_report` and others, invoked from controllers via
 `DB::select()`.
 
 **Do not add to them.** [ADR-0009](../docs/decisions/0009-coach-narrates-does-not-advise.md)
 records why: a stored procedure can return 82% but cannot return *why* 82%
 matters, and the Financial Coaching subdomain needs the reason, not the number.
 Moving these rules into PHP is an open blocker, not a preference.
+
+**The Pareto report already left**, on 2026-08-19, and is the worked example to
+copy rather than a special case. `get_pareto_monthly_report` was dropped;
+`App\Services\Pareto\ParetoReportBuilder` holds the rules and touches neither a
+connection nor a model, `ParetoRepositoryContract` does the reading, and
+`BuildParetoReportAction` wires the two. The shape is the one `PaceEvaluator`
+already uses: values in, decisions out, unit-testable without a database.
 
 ## Warnings
 

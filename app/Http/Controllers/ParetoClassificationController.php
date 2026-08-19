@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Actions\Pareto\BuildParetoReportAction;
 use App\Actions\Pareto\StoreParetoAction;
 use App\Actions\Pareto\UpdateParetoAction;
 use App\DTOs\Pareto\ParetoClassificationDTO;
@@ -20,7 +21,8 @@ final class ParetoClassificationController extends Controller
     public function __construct(
         private readonly ParetoRepositoryContract $repository,
         private readonly StoreParetoAction $storeAction,
-        private readonly UpdateParetoAction $updateAction
+        private readonly UpdateParetoAction $updateAction,
+        private readonly BuildParetoReportAction $reportAction
     ) {
     }
 
@@ -35,7 +37,7 @@ final class ParetoClassificationController extends Controller
         $year = $request->input('year') ? (int) $request->input('year') : null;
         $userId = (int) Auth::id();
 
-        $paginator = $this->repository->getMonthlyReport($userId, $month, $year, $page, $perPage);
+        $paginator = $this->reportAction->execute($userId, $month, $year, $page, $perPage);
 
         return response()->json($paginator);
     }
