@@ -21,6 +21,12 @@ namespace App\DTOs\Pareto;
  *
  * The envelopes still travel in `$categories`, each with its own year-window
  * consumption, because they still belong to the band — health is a need.
+ *
+ * `$totalIncome`, `$totalExpense` and `$totalBudgeted` describe the whole report,
+ * not this band, and are repeated on every row. That is a duplication the payload
+ * shape already carried for the first two; `$totalBudgeted` follows it rather than
+ * introducing an envelope object, because the client reads the response as a bare
+ * paginated list of bands and re-nesting it would break a deployed frontend.
  */
 final class ParetoBandReport
 {
@@ -37,6 +43,17 @@ final class ParetoBandReport
         public readonly array $categories,
         public readonly float $totalIncome,
         public readonly float $totalExpense,
+        /**
+         * Every budgeted category of the user, banded or not, expressed in the
+         * selected window.
+         *
+         * It is the figure `$actualPercentage` is a share OF, and publishing it is
+         * the point: a band reading 57.97% is 57.97% of what the user typed, not of
+         * what they earn. Against `$totalIncome` the two numbers finally answer
+         * "how much of what comes in is spoken for", which a 50/30/20 split is a
+         * split of and the report could not state until now.
+         */
+        public readonly float $totalBudgeted,
     ) {}
 
     public function availableBudget(): float
@@ -73,6 +90,7 @@ final class ParetoBandReport
             ),
             'total_income' => $this->totalIncome,
             'total_expense' => $this->totalExpense,
+            'total_budgeted' => $this->totalBudgeted,
         ];
     }
 }

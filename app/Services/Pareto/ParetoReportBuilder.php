@@ -63,6 +63,13 @@ final class ParetoReportBuilder
             }
         }
 
+        // Scaled by the window for the same reason `budgetFor()` scales a rhythm
+        // category: `monthlyWeight()` speaks in months, `$totals->income` speaks in
+        // whatever period was filtered, and the two are only comparable in one unit.
+        // A yearly envelope keeps its twelfth here — this is the DISTRIBUTION figure,
+        // and over twelve months the twelfths add back up to the whole envelope.
+        $totalBudgeted = round($totalWeight * $window->budgetMonths, 2);
+
         return array_map(
             fn (ParetoBandRow $band): ParetoBandReport => $this->reportFor(
                 $band,
@@ -71,7 +78,8 @@ final class ParetoReportBuilder
                 $spentInYear,
                 $window,
                 $totals,
-                $totalWeight
+                $totalWeight,
+                $totalBudgeted
             ),
             $bands
         );
@@ -89,7 +97,8 @@ final class ParetoReportBuilder
         array $spentInYear,
         ParetoWindow $window,
         ParetoWindowTotals $totals,
-        float $totalWeight
+        float $totalWeight,
+        float $totalBudgeted
     ): ParetoBandReport {
         $lines = $this->lines($categories, $spentInWindow, $spentInYear, $window);
 
@@ -117,6 +126,7 @@ final class ParetoReportBuilder
             categories: $lines,
             totalIncome: $totals->income,
             totalExpense: $totals->expense,
+            totalBudgeted: $totalBudgeted,
         );
     }
 

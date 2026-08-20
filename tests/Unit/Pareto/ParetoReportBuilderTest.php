@@ -45,7 +45,8 @@ function paretoBuild(
     array $categories,
     array $spentInWindow = [],
     array $spentInYear = [],
-    ?ParetoWindow $window = null
+    ?ParetoWindow $window = null,
+    ?ParetoWindowTotals $totals = null
 ): array {
     $reports = (new ParetoReportBuilder)->build(
         $bands,
@@ -53,7 +54,7 @@ function paretoBuild(
         $spentInWindow,
         $spentInYear,
         $window ?? paretoWindowOf(3, 2025),
-        new ParetoWindowTotals(0, 0)
+        $totals ?? new ParetoWindowTotals(0, 0)
     );
 
     return collect($reports)->keyBy('id')->all();
@@ -220,4 +221,64 @@ it('devuelve una banda vacia en vez de omitirla', function () {
     expect($report[1]->categories)->toBe([]);
     expect($report[1]->monthlyBudget)->toBe(0.0);
     expect($report[1]->toArray()['categories'])->toBe([]);
+});
+
+// ------------------------------------------------- lo que entra contra lo asignado
+
+it('suma en lo asignado las categorias que no estan en ninguna banda', function () {
+    $report = paretoBuild(
+        [paretoBand(1, 'Necesidades')],
+        [paretoLeaf(10, 'Comida', 400, 1), paretoLeaf(99, 'Sin banda', 600, null)]
+    );
+
+    // 1000, no 400. Una categoria fuera del Pareto sigue comprometiendo ingreso, y
+    // omitirla reportaria como libre una plata que ya tiene dueño.
+    expect($report[1]->totalBudgeted)->toBe(1000.0);
+});
+
+it('escala lo asignado a la ventana igual que al presupuesto de una categoria', function () {
+    $report = paretoBuild(
+        [paretoBand(1, 'Necesidades')],
+        [paretoLeaf(10, 'Comida', 400, 1)],
+        window: paretoWindowOf(null, 2025)
+    );
+
+    // Un año cerrado son doce meses de presupuesto contra doce de ingreso.
+    expect($report[1]->totalBudgeted)->toBe(4800.0);
+});
+
+it('cuenta el sobre anual a un doceavo en lo asignado del mes', function () {
+    $report = paretoBuild(
+        [paretoBand(1, 'Necesidades')],
+        [paretoLeaf(20, 'Salud', 1200, 1, BudgetPeriod::YEARLY)]
+    );
+
+    // 100, no 1200: contra un mes de ingreso, un sobre anual pesa su doceavo.
+    expect($report[1]->totalBudgeted)->toBe(100.0);
+});
+
+it('publica el ingreso junto a lo asignado para que el reparto sea calculable', function () {
+    $report = paretoBuild(
+        [paretoBand(1, 'Necesidades')],
+        [paretoLeaf(10, 'Comida', 400, 1)],
+        totals: new ParetoWindowTotals(1000.0, 250.0)
+    );
+
+    $row = $report[1]->toArray();
+
+    expect($row['total_income'])->toBe(1000.0);
+    expect($row['total_budgeted'])->toBe(400.0);
+    // El badge de la banda NO cambia de denominador: sigue siendo el reparto
+    // interno entre bandas, no una porcion del ingreso.
+    expect($row['actual_percentage'])->toBe(100.0);
+});
+
+it('no inventa un asignado cuando el usuario no presupuesto nada', function () {
+    $report = paretoBuild(
+        [paretoBand(1, 'Necesidades')],
+        [],
+        totals: new ParetoWindowTotals(1000.0, 0.0)
+    );
+
+    expect($report[1]->totalBudgeted)->toBe(0.0);
 });
