@@ -45,6 +45,29 @@ final class CaptureFixtures
         );
     }
 
+    /**
+     * A parse result on the OTHER side of the ledger: 800.00 received from a named
+     * payer.
+     *
+     * `origin` carries the counterparty and `destination` is left null, which is
+     * the shape both Gemini prompts produce for "me pagaron" / "Te yapeó" — the
+     * mirror of {@see validMovement()}. `RegisterCapturedTransactionAction` reads
+     * one or the other depending on `type`, so a fixture that filled both would
+     * hide a swap.
+     */
+    public static function receivedMovement(): ParsedReceiptDTO
+    {
+        return new ParsedReceiptDTO(
+            isValid: true,
+            amount: 800.00,
+            destination: null,
+            origin: 'Estudio Contable Vega',
+            dateOperation: now()->toIso8601String(),
+            type: 'income',
+            message: 'Honorarios',
+        );
+    }
+
     /** A parse result the pipeline rejects. */
     public static function unparseableMovement(): ParsedReceiptDTO
     {

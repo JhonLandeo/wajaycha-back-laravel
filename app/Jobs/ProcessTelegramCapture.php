@@ -116,7 +116,7 @@ class ProcessTelegramCapture implements ShouldQueue
 
         // 3. AVISAR CUANDO NO HAY NADA QUE PARSEAR
         if ($this->unsupported) {
-            $channel->reply($this->chatId, '❌ Todavía no puedo leer ese tipo de mensaje. Envíame una foto del comprobante o dime cuánto gastaste.');
+            $channel->reply($this->chatId, '❌ Todavía no puedo leer ese tipo de mensaje. Mándame una foto del comprobante, o escríbeme el movimiento: «gasté 30 en el taxi» o «me pagaron 800 del estudio».');
 
             return;
         }
@@ -151,7 +151,7 @@ class ProcessTelegramCapture implements ShouldQueue
         // una columna NOT NULL, el job explota y el usuario recibe el mensaje
         // generico de error en vez de este, que es el que corresponde.
         if (! $parsed->isValid || $parsed->amount === null) {
-            $channel->reply($this->chatId, '❌ Eso no parece un movimiento con monto. Envíame un comprobante o dime cuánto gastaste.');
+            $channel->reply($this->chatId, '❌ Eso no parece un movimiento con monto. Mándame un comprobante, o escríbeme lo que pasó: «gasté 30 en el taxi» o «me pagaron 800 del estudio».');
 
             return;
         }
@@ -236,7 +236,7 @@ class ProcessTelegramCapture implements ShouldQueue
         $hash = trim(substr((string) $this->text, strlen(self::LINK_PREFIX)));
 
         if ($redeemer->redeemHash($channel->key(), $this->chatId, $hash)) {
-            $channel->reply($this->chatId, '✅ Cuenta vinculada. Ya puedes enviarme tus comprobantes.');
+            $channel->reply($this->chatId, '✅ Cuenta vinculada. Mándame la foto de un comprobante, o escríbeme el movimiento. Registro las dos direcciones: «gasté 30 en el taxi» y también «me pagaron 800 del estudio».');
 
             return;
         }
@@ -253,7 +253,7 @@ class ProcessTelegramCapture implements ShouldQueue
         // SI hablan del token — inexistente, vencido, gastado — siguen colapsados
         // en la respuesta de abajo.
         if ($identities->resolve($channel->key(), $this->chatId) !== null) {
-            $channel->reply($this->chatId, '✅ Esta cuenta de Telegram ya está vinculada. No necesitas otro enlace: envíame un comprobante cuando quieras.');
+            $channel->reply($this->chatId, '✅ Esta cuenta de Telegram ya está vinculada. No necesitas otro enlace: mándame un comprobante, un gasto o un ingreso cuando quieras.');
 
             return;
         }

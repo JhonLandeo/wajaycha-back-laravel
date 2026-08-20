@@ -58,4 +58,19 @@ jobs:
           # 8. Sacar del modo mantenimiento COMO www-data
           sudo -u www-data php artisan up
           
+          # 9. Publicar la lista de comandos del bot.
+          #
+          # Va DESPUES de `artisan up` a proposito. La lista vive en el enum
+          # `BotCommand` y Telegram solo la conoce cuando alguien le llama a
+          # `setMyCommands`, asi que sin este paso una descripcion editada en el
+          # codigo nunca llega al cliente: el cambio esta desplegado y es
+          # invisible. Es idempotente, `setMyCommands` pisa la lista entera.
+          #
+          # Si falla, el paso se pone rojo y el operador se entera —el comando
+          # devuelve FAILURE a proposito, para que un deploy no mienta sobre
+          # haber publicado— pero la aplicacion ya esta arriba y sirviendo. Antes
+          # de `up`, una caida de Telegram dejaria el sitio en mantenimiento.
+          echo "Publicando la lista de comandos del bot..."
+          sudo -u www-data php artisan app:register-telegram-commands
+          
           echo "✅ ¡Despliegue completado exitosamente!"

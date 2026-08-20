@@ -312,3 +312,72 @@ it('rechaza un movimiento valido que vino sin monto, en vez de romper contra la 
     expect(Transaction::count())->toBe(0)
         ->and(lastTelegramReply())->toContain('no parece un movimiento con monto');
 });
+
+// ------------------------------------------------------------------- ingresos
+
+/**
+ * The income half of the capture channel.
+ *
+ * It was written months ago — `GeminiTextService` teaches Gemini that "me
+ * pagaron" is an `income`, `RegisterCapturedTransactionAction` persists the
+ * type, and the confirmation has its own wording — and until now not one test
+ * asserted it. The bot's own copy never mentioned it either, so nobody, the
+ * owner included, knew the channel took income at all.
+ */
+
+it('registra un ingreso con su tipo, no como gasto', function () {
+    $user = telegramSender();
+
+    runTelegramJob('123456789', 'me pagaron 800 del estudio', null, CaptureFixtures::receivedMovement());
+
+    $transaction = Transaction::sole();
+
+    expect($transaction->user_id)->toBe($user->id)
+        ->and($transaction->type_transaction)->toBe('income')
+        ->and((float) $transaction->amount)->toBe(800.00);
+});
+
+it('confirma un ingreso diciendo de quien se recibio, no a quien se pago', function () {
+    telegramSender();
+
+    runTelegramJob('123456789', 'me pagaron 800 del estudio', null, CaptureFixtures::receivedMovement());
+
+    expect(lastTelegramReply())->toContain('recibido de')
+        ->and(lastTelegramReply())->toContain('Estudio Contable Vega')
+        ->and(lastTelegramReply())->not->toContain('pagado a');
+});
+
+it('describe el ingreso por su origen y no lo llama Desconocido', function () {
+    telegramSender();
+
+    runTelegramJob('123456789', 'me pagaron 800', null, CaptureFixtures::receivedMovement());
+
+    // `origin`, no `destination`: leerlo del lado equivocado deja la descripcion
+    // vacia y la accion cae al relleno 'Desconocido WhatsApp', que agrupa todos
+    // los ingresos de todos los pagadores bajo un mismo Detail.
+    expect(Transaction::sole()->detail->description)->not->toContain('Desconocido');
+});
+
+it('no coachea un ingreso, que no tiene presupuesto que rebasar', function () {
+    telegramSender();
+
+    $coach = Mockery::mock(App\Services\Coaching\FinancialCoachingService::class);
+    $coach->shouldNotReceive('speak');
+    app()->instance(App\Services\Coaching\FinancialCoachingService::class, $coach);
+
+    runTelegramJob('123456789', 'me pagaron 800', null, CaptureFixtures::receivedMovement());
+
+    expect(Transaction::sole()->type_transaction)->toBe('income');
+});
+
+it('anuncia las dos direcciones al vincular la cuenta', function () {
+    $user = User::factory()->create();
+    $token = app(ChannelLinkTokenIssuer::class)->issue($user)->token;
+
+    runTelegramJob('123456789', '/start '.ChannelLinkTokenRedeemer::hash($token));
+
+    // El canal registra ingresos desde que existe y ninguna linea de copy lo
+    // decia, asi que nadie los mandaba. Este caso existe para que el mensaje de
+    // bienvenida no vuelva a hablar solo de gastos.
+    expect(lastTelegramReply())->toContain('me pagaron');
+});
