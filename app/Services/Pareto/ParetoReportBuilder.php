@@ -153,6 +153,7 @@ final class ParetoReportBuilder
             return [$a->isEnvelope(), -$a->budgetInWindow] <=> [$b->isEnvelope(), -$b->budgetInWindow];
         });
 
-        return array_values($lines);
+        // No array_values(): usort() reindexes in place, so $lines is already a list.
+        return $lines;
     }
 }
