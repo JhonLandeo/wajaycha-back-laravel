@@ -24,27 +24,40 @@ jobs:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USERNAME }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        # Sin esto el paso NO PUEDE ponerse rojo. El estado de la sesion SSH es
-        # el del ultimo comando, y el ultimo comando de abajo es un `echo` que
-        # nunca falla: una migracion que reventaba dejaba seguir el script,
-        # cacheaba la config, levantaba el sitio con codigo nuevo contra esquema
-        # viejo, y reportaba exito. Eso es exactamente la forma del incidente del
-        # 2026-08-19, pero silencioso.
-        #
-        # Va duplicado con el `set -e` del script a proposito. `script_stop` es
-        # la via documentada de la accion, `set -e` funciona igual si la accion
-        # cambia de implementacion; ninguno de los dos se puede probar sin
-        # romper produccion, y el costo de que el elegido no aplique es otro
-        # deploy verde que miente.
-        script_stop: true
+        # NO agregar `script_stop` aca. Se probo el 2026-08-22 y la accion lo
+        # rechaza —"Unexpected input(s) 'script_stop'"— porque ya no figura entre
+        # sus inputs validos. Un knob que la accion ignora es peor que ninguno:
+        # se lee como un guardian y no guarda nada.
         script: |
+          # Este paso NO PODIA ponerse rojo. El estado de una sesion SSH es el de
+          # su ultimo comando, y el ultimo comando de abajo es un `echo`, que
+          # nunca falla. Una migracion que reventaba dejaba seguir el script:
+          # cacheaba la config, recargaba FPM, levantaba el sitio con codigo
+          # nuevo contra esquema viejo, y reportaba exito. Esa es exactamente la
+          # forma del incidente del 2026-08-19 —el `NaN` de Pareto— pero sin
+          # nada que mirar.
+          #
+          # `set -e` es la primera capa. No es la unica, y la razon es concreta:
+          # la accion ya elimino un input sin aviso, y este deploy no puede
+          # apoyarse en una semantica que nadie puede comprobar sin romper
+          # produccion. `run` verifica el codigo de salida a mano y hace `exit 1`
+          # explicito. Eso la sesion SSH lo propaga siempre, con `set -e` o sin
+          # el, y se puede afirmar leyendolo.
           set -e
 
-          cd ${{ secrets.PROJECT_PATH }}
+          run() {
+            echo "→ $*"
+            if ! "$@"; then
+              echo "::error::Deploy abortado, fallo: $*"
+              exit 1
+            fi
+          }
+
+          cd "${{ secrets.PROJECT_PATH }}" || exit 1
 
           # 1. Arreglar la propiedad de los archivos
-          sudo chown -R www-data:www-data .
-          
+          run sudo chown -R www-data:www-data .
+
           # 2. Poner en modo mantenimiento COMO www-data
           #
           # A partir de aca, cualquier comando que falle CORTA el script y deja
@@ -52,34 +65,34 @@ jobs:
           # es la mitad cara del trato: un sitio en mantenimiento se ve, un
           # esquema desalineado sirviendo trafico no.
           #
-          # El `|| true` de esta linea sigue siendo intencional: `down` falla si
-          # ya estaba abajo, y eso no es un motivo para abortar un deploy.
+          # Esta linea es la unica excepcion y sigue siendo intencional: `down`
+          # falla si el sitio ya estaba abajo, y eso no aborta nada.
           sudo -u www-data php artisan down || true
-          
+
           # 3. Obtener el código más reciente COMO www-data
-          sudo -u www-data git pull
-          
+          run sudo -u www-data git pull
+
           # 4. Instalar dependencias COMO www-data
-          sudo -u www-data composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
-          
+          run sudo -u www-data composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+
           # 5. Ejecutar migraciones y cachés COMO www-data
-          sudo -u www-data php artisan migrate --force
-          sudo -u www-data php artisan optimize:clear
-          sudo -u www-data php artisan config:cache
-          sudo -u www-data php artisan route:cache
-          sudo -u www-data php artisan view:cache
-          
+          run sudo -u www-data php artisan migrate --force
+          run sudo -u www-data php artisan optimize:clear
+          run sudo -u www-data php artisan config:cache
+          run sudo -u www-data php artisan route:cache
+          run sudo -u www-data php artisan view:cache
+
           # 6. Recargar PHP-FPM (Zero Downtime)
           echo "Recargando PHP-FPM para aplicar los cambios (Zero Downtime)..."
           # CAMBIO: Usamos 'reload' en lugar de 'restart'
-          sudo systemctl reload php8.4-fpm
-          
+          run sudo systemctl reload php8.4-fpm
+
           # 7.  Reiniciar Horizon COMO www-data
           echo "Reiniciando los workers de Horizon..."
-          sudo -u www-data php artisan horizon:terminate
-          
+          run sudo -u www-data php artisan horizon:terminate
+
           # 8. Sacar del modo mantenimiento COMO www-data
-          sudo -u www-data php artisan up
+          run sudo -u www-data php artisan up
           
           # 9. Publicar la lista de comandos del bot.
           #
@@ -96,10 +109,10 @@ jobs:
           #
           # CORRECCION 2026-08-22: esa frase fue falsa desde que se escribio. El
           # `echo` de abajo le pisaba el codigo de salida y el paso terminaba
-          # verde igual. Recien es cierta ahora, con `set -e` y `script_stop`
-          # arriba. Se deja escrito porque el error no fue el comando: fue creer
-          # que un guardian existia sin comprobarlo.
+          # verde igual. Recien es cierta ahora, con `run`. Se deja escrito
+          # porque el error no fue el comando: fue dar por existente un guardian
+          # sin comprobarlo.
           echo "Publicando la lista de comandos del bot..."
-          sudo -u www-data php artisan app:register-telegram-commands
-          
+          run sudo -u www-data php artisan app:register-telegram-commands
+
           echo "✅ ¡Despliegue completado exitosamente!"
