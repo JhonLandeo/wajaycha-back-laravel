@@ -130,6 +130,24 @@ return [
         'meta' => [],
 
         /**
+         * Las claves publicas con las que Google firma sus ID token.
+         *
+         * Es el unico perfil que corre con un usuario esperando del otro lado:
+         * los demas viven adentro de un job encolado. Por eso el presupuesto es
+         * el mas chico del archivo — un login que tarda quince segundos ya se
+         * abandono, aunque despues termine bien.
+         *
+         * Un solo reintento y no dos: la respuesta se cachea una hora
+         * (GoogleIdTokenVerifier::CACHE_TTL_SECONDS), asi que esto se paga una
+         * vez por hora, no una vez por inicio de sesion.
+         */
+        'google_certs' => [
+            'timeout' => 5,
+            'connect_timeout' => 3,
+            'retries' => 1,
+        ],
+
+        /**
          * Envio de mensajes de WhatsApp. Mismo razonamiento que `telegram_send`
          * y por el mismo motivo: es una escritura sin clave de idempotencia, y
          * un reintento de mas le duplica la confirmacion al usuario.

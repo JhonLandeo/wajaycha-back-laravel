@@ -61,4 +61,18 @@ return [
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY'),
     ],
+
+    /*
+     * Google Sign-In. The client ID is not a secret — the browser sends it to
+     * Google in plain sight — but it is the audience every ID token is checked
+     * against, so a wrong value here rejects every login rather than leaking
+     * anything.
+     *
+     * It has to be read through config and never through `env()` at call time:
+     * the deploy runs `php artisan config:cache`, and after that `env()` outside
+     * of a config file returns null.
+     */
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+    ],
 ];

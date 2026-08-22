@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuthJWT\GoogleAuthController;
 use App\Http\Controllers\AuthJWT\JWTAuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CategoryRuleController;
@@ -27,6 +28,12 @@ Route::post('telegram/webhook', [\App\Http\Controllers\Capture\TelegramWebhookCo
 // diferentes y ninguna reemplaza a la otra.
 Route::post('register', [JWTAuthController::class, 'register'])->middleware('throttle:5,1');
 Route::post('login', [JWTAuthController::class, 'login'])->middleware('throttle:10,1');
+
+// Google Sign-In. Solo lleva el limite por IP y no el contador por cuenta de
+// LoginRequest, porque aca no hay nada que adivinar: una credencial invalida la
+// rechaza una firma, no un intento. Un contador por cuenta solo castigaria a
+// alguien cuyo navegador reintento.
+Route::post('auth/google', GoogleAuthController::class)->middleware('throttle:10,1');
 
 Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('logout', [JWTAuthController::class, 'logout']);
