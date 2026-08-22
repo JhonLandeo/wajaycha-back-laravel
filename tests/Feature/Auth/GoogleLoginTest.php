@@ -237,6 +237,27 @@ it('avisa que el servicio no esta disponible si Google no entrega sus claves', f
     ])->assertStatus(503);
 });
 
+it('no le cobra al usuario un error de programacion del servidor', function () {
+    // Pasó de verdad el 2026-08-22: `firebase/php-jwt` no estaba instalado en un
+    // contenedor y el verificador lanzó `Class "Firebase\\JWT\\JWT" not found`.
+    // Un `catch (Throwable)` se lo comió y contestó 401 "no pudimos validar tu
+    // cuenta de Google" — o sea, le echó la culpa a la cuenta de quien entraba.
+    // En produccion esa persona reintenta para siempre contra un servidor roto y
+    // nadie mira nunca un log, porque un 401 no despierta a ninguna alerta.
+    //
+    // Un `Error` es un bug nuestro. Tiene que salir como 500, llegar a Sentry, y
+    // no disfrazarse de credencial invalida.
+    Http::fake([
+        'https://www.googleapis.com/oauth2/v3/certs' => function (): never {
+            throw new Error('Class "Firebase\\JWT\\JWT" not found');
+        },
+    ]);
+
+    $this->postJson('/api/auth/google', [
+        'credential' => GoogleIdTokenFactory::token(),
+    ])->assertStatus(500);
+});
+
 it('no expone el identificador de Google en la respuesta', function () {
     fakeGoogleCerts();
 

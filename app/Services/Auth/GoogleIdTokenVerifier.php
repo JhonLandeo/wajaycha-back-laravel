@@ -7,11 +7,11 @@ namespace App\Services\Auth;
 use App\DTOs\Auth\GoogleIdentity;
 use App\Exceptions\Auth\GoogleIdentityException;
 use App\Support\OutboundHttp;
+use Exception;
 use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use Throwable;
 
 /**
  * Turns the credential the browser got from Google into a verified identity.
@@ -105,10 +105,16 @@ final class GoogleIdTokenVerifier
             return JWT::decode($credential, $this->keySet($keyId));
         } catch (GoogleIdentityException $e) {
             throw $e;
-        } catch (Throwable $e) {
+        } catch (Exception $e) {
             // Expired, tampered with, signed by a key that is not Google's — the
             // library does not distinguish them for us and neither should the
             // answer we give.
+            //
+            // `Exception` y NO `Throwable`: un `Error` —una clase que falta, un
+            // tipo que no cierra— es un bug nuestro, no un token falso, y
+            // tiene que llegar a Sentry como 500 en vez de convertirse en
+            // "no pudimos validar tu cuenta". Ver keyIdOf() para el incidente
+            // que lo enseño.
             throw GoogleIdentityException::invalidSignature($e->getMessage());
         }
     }
@@ -130,7 +136,13 @@ final class GoogleIdTokenVerifier
 
         try {
             $header = json_decode(JWT::urlsafeB64Decode($segments[0]), true, 512, JSON_THROW_ON_ERROR);
-        } catch (Throwable $e) {
+        } catch (Exception $e) {
+            // Esto decia `catch (Throwable $e)` y el 2026-08-22 se comio un
+            // `Class "Firebase\JWT\JWT" not found` —el paquete no estaba
+            // instalado en un contenedor— y lo reporto como 401 "no pudimos
+            // validar tu cuenta de Google". El usuario habria reintentado para
+            // siempre contra un servidor roto. Un `Error` no es culpa de quien
+            // llama y no se le puede contestar como si lo fuera.
             throw GoogleIdentityException::malformedCredential('unreadable header: '.$e->getMessage());
         }
 
@@ -173,7 +185,9 @@ final class GoogleIdTokenVerifier
                 // outbound call on the login path, and a call that skips that
                 // class is a call with no timeout and no retry policy.
                 $response = OutboundHttp::to('google_certs')->get(self::JWKS_URL);
-            } catch (Throwable $e) {
+            } catch (Exception $e) {
+                // Idem: una red caida es una Exception, un bug es un Error, y el
+                // segundo no se anuncia como "Google no responde".
                 throw GoogleIdentityException::keysUnavailable($e->getMessage());
             }
 
