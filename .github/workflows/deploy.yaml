@@ -24,13 +24,36 @@ jobs:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USERNAME }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
+        # Sin esto el paso NO PUEDE ponerse rojo. El estado de la sesion SSH es
+        # el del ultimo comando, y el ultimo comando de abajo es un `echo` que
+        # nunca falla: una migracion que reventaba dejaba seguir el script,
+        # cacheaba la config, levantaba el sitio con codigo nuevo contra esquema
+        # viejo, y reportaba exito. Eso es exactamente la forma del incidente del
+        # 2026-08-19, pero silencioso.
+        #
+        # Va duplicado con el `set -e` del script a proposito. `script_stop` es
+        # la via documentada de la accion, `set -e` funciona igual si la accion
+        # cambia de implementacion; ninguno de los dos se puede probar sin
+        # romper produccion, y el costo de que el elegido no aplique es otro
+        # deploy verde que miente.
+        script_stop: true
         script: |
+          set -e
+
           cd ${{ secrets.PROJECT_PATH }}
-          
+
           # 1. Arreglar la propiedad de los archivos
           sudo chown -R www-data:www-data .
           
           # 2. Poner en modo mantenimiento COMO www-data
+          #
+          # A partir de aca, cualquier comando que falle CORTA el script y deja
+          # el sitio en mantenimiento hasta que alguien lo mire. Es deliberado y
+          # es la mitad cara del trato: un sitio en mantenimiento se ve, un
+          # esquema desalineado sirviendo trafico no.
+          #
+          # El `|| true` de esta linea sigue siendo intencional: `down` falla si
+          # ya estaba abajo, y eso no es un motivo para abortar un deploy.
           sudo -u www-data php artisan down || true
           
           # 3. Obtener el código más reciente COMO www-data
@@ -70,6 +93,12 @@ jobs:
           # devuelve FAILURE a proposito, para que un deploy no mienta sobre
           # haber publicado— pero la aplicacion ya esta arriba y sirviendo. Antes
           # de `up`, una caida de Telegram dejaria el sitio en mantenimiento.
+          #
+          # CORRECCION 2026-08-22: esa frase fue falsa desde que se escribio. El
+          # `echo` de abajo le pisaba el codigo de salida y el paso terminaba
+          # verde igual. Recien es cierta ahora, con `set -e` y `script_stop`
+          # arriba. Se deja escrito porque el error no fue el comando: fue creer
+          # que un guardian existia sin comprobarlo.
           echo "Publicando la lista de comandos del bot..."
           sudo -u www-data php artisan app:register-telegram-commands
           
