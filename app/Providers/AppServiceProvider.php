@@ -114,6 +114,9 @@ class AppServiceProvider extends ServiceProvider
                 // it. Without it here the CORS header is computed from the
                 // 5173 fallback while artisan reports the injected value.
                 'FRONTEND_URL',
+                // Misma razon exacta: config/cors.php la lee y solo la request
+                // servida la necesita.
+                'FRONTEND_EXTRA_ORIGINS',
             ],
         )));
     }

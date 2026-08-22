@@ -56,6 +56,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | Donde vive la SPA. NO es `APP_URL`, que apunta a esta API.
+    |
+    | Esta clave no existia y `AppServiceProvider::boot()` ya la leia:
+    | `config('app.frontend_url')."/password-reset/$token..."` devolvia null
+    | concatenado, o sea un link relativo dentro de un mail — roto por
+    | definicion, porque un mail no tiene desde donde resolverlo. Nadie lo vio
+    | porque el link "¿Has olvidado tu contrasena?" del login es un `href="#"`
+    | y ese flujo nunca se ejercita.
+    |
+    | Es UNA sola URL, la canonica. Los origenes que ademas pueden llamar a la
+    | API son otra cosa y viven en `config/cors.php`.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

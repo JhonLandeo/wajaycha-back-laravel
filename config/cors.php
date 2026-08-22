@@ -19,15 +19,26 @@ return [
         'api/*',
         '/login',
         '/logout',
-        '/sanctum/csrf-cookie'
+        '/sanctum/csrf-cookie',
 
     ],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [env('FRONTEND_URL', 'http://localhost:5173')],
-
-    // 'allowed_origins' => ['https://testing.wajaycha.com'],
+    /*
+     * Antes era `[env('FRONTEND_URL', ...)]`: un solo origen, y por lo tanto
+     * ninguna forma de mudar la aplicacion de dominio sin una ventana en la que
+     * algo esta roto. Ver App\Support\FrontendOrigins para el porque de las dos
+     * variables.
+     *
+     * `FRONTEND_EXTRA_ORIGINS` acepta varios separados por coma y se vacia
+     * cuando la mudanza termina. Dejarlo lleno de dominios viejos es ampliar la
+     * superficie de la API sin que nadie lo haya decidido.
+     */
+    'allowed_origins' => App\Support\FrontendOrigins::allowed(
+        env('FRONTEND_URL', 'http://localhost:5173'),
+        env('FRONTEND_EXTRA_ORIGINS'),
+    ),
 
     'allowed_origins_patterns' => [],
 
