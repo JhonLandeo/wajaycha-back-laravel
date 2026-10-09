@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\DTOs\Prices\CanarySnapshot;
 use App\DTOs\Prices\CatalogueProduct;
 use App\DTOs\Prices\ObservationDraft;
 use App\DTOs\Prices\Quote;
@@ -202,5 +203,33 @@ final class PriceRepository implements PriceRepositoryContract
             ->where('source', $source)
             ->where('period_start', $periodStart->toDateString())
             ->exists();
+    }
+
+    public function canarySnapshot(string $source): CanarySnapshot
+    {
+        $run = PriceIngestionRun::query()
+            ->select(['id', 'status', 'rows_written'])
+            ->where('source', $source)
+            ->whereIn('status', [PriceRunStatus::Success, PriceRunStatus::Partial, PriceRunStatus::Failed])
+            ->orderByDesc('id')
+            ->first();
+
+        $newest = PriceObservation::query()
+            ->where('source', $source)
+            ->where('is_quarantined', false)
+            ->max('period_end');
+
+        $rows = $newest === null ? 0 : PriceObservation::query()
+            ->where('source', $source)
+            ->where('is_quarantined', false)
+            ->where('period_end', $newest)
+            ->count();
+
+        return new CanarySnapshot(
+            latestRunStatus: $run?->status,
+            latestRunRows: $run->rows_written ?? 0,
+            newestPeriodEnd: $newest === null ? null : CarbonImmutable::parse((string) $newest, 'America/Lima')->startOfDay(),
+            newestBatchRows: $rows,
+        );
     }
 }

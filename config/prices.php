@@ -98,6 +98,8 @@ return [
             'stale_days' => 4,
             'attribution' => null,
             'canary_min_rows' => 5,
+            // Idle by design on days EMMSA covers: the canary judges it only when it ran.
+            'fallback' => true,
             // The daily bulletin collection on gob.pe; month pages link one PDF per business day.
             'base_url' => 'https://www.gob.pe',
             'collection_path' => '/institucion/midagri/colecciones/335-reporte-de-ingreso-y-precios-en-el-gran-mercado-mayorista-de-lima',

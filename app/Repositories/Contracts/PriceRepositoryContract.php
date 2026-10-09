@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repositories\Contracts;
 
+use App\DTOs\Prices\CanarySnapshot;
 use App\DTOs\Prices\CatalogueProduct;
 use App\DTOs\Prices\ObservationDraft;
 use App\DTOs\Prices\Quote;
@@ -97,4 +98,11 @@ interface PriceRepositoryContract
 
     /** Whether the source already stored an observation of this product for this period start. */
     public function hasObservationOn(int $productId, string $source, CarbonImmutable $periodStart): bool;
+
+    /**
+     * What the canary reads for one source: its latest real run, its newest usable
+     * observation date and the usable rows on that date. Quarantined rows are not
+     * usable and never count.
+     */
+    public function canarySnapshot(string $source): CanarySnapshot;
 }

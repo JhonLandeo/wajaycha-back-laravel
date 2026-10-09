@@ -27,6 +27,7 @@ const PRICES_PURE_DECIDERS = [
     'AttributionFormatter.php',
     'WholesaleTrendCalculator.php',
     'CalendarDays.php',
+    'PriceCanaryEvaluator.php',
 ];
 
 /**
