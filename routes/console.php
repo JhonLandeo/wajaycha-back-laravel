@@ -26,3 +26,8 @@ Schedule::command(SendBudgetDigest::class)->dailyAt((string) config('coaching.di
 Schedule::command(SendSummaryTransactionByMonth::class)->monthlyOn(1, '08:00');
 Schedule::command(\App\Console\Commands\PruneChannelLinkTokens::class)->hourly();
 Schedule::command(\App\Console\Commands\PruneProcessedChannelUpdates::class)->daily();
+
+// Grocery prices: ingest, freshness canary and Sentry monitors for the four
+// price sources. The entries and their reasoning live in PriceSchedule so the
+// times and monitor slugs are testable.
+\App\Console\PriceSchedule::register();
