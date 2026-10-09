@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\Shopping;
 
+use App\DTOs\Prices\CeilingComparison;
+use App\DTOs\Prices\LinePrice;
+use App\DTOs\Prices\PlanEstimate;
+use App\DTOs\Prices\PriceAlternative;
+use App\DTOs\Prices\PriceContext;
+use App\DTOs\Prices\ResolvedPrice;
+use App\DTOs\Prices\ResolvedQuote;
 use App\DTOs\Shopping\ConsumptionHabitLine;
 use App\DTOs\Shopping\CoveredLine;
 use App\DTOs\Shopping\GroceryCeilingInput;
@@ -13,6 +20,10 @@ use App\DTOs\Shopping\PlanningWeek;
 use App\DTOs\Shopping\ShoppingListLine;
 use App\DTOs\Shopping\WeeklyShoppingPlan;
 use App\Enums\BudgetPeriod;
+use App\Services\Prices\AttributionFormatter;
+use App\Services\Prices\CostCalculator;
+use App\Services\Prices\PriceResolver;
+use App\Services\Prices\WholesaleTrendCalculator;
 use Carbon\CarbonImmutable;
 
 /**
@@ -22,6 +33,13 @@ use Carbon\CarbonImmutable;
  * calls no `now()`, and runs no `DB::` query — `BoundariesTest.php` enforces
  * every one of those.
  *
+ * Prices enter as an optional VALUE input (`PriceContext`) and are applied after
+ * the list is built and sorted, by pure collaborators (resolver, trend, cost).
+ * They annotate lines; they never add, drop, reorder or resize one (grocery-prices
+ * spec, q6). The collaborators default to plain instances so a bare
+ * `new ShoppingPlanService` still works — the container supplies a trend
+ * calculator configured from `prices.trend`.
+ *
  * `acquisition_source` never appears in this file. A gift subtracts from
  * availability exactly as a purchase does (design.md rule 6) — there is no
  * branch on the enum anywhere in the arithmetic, which is what makes "a gift
@@ -29,6 +47,12 @@ use Carbon\CarbonImmutable;
  */
 final class ShoppingPlanService
 {
+    public function __construct(
+        private readonly PriceResolver $resolver = new PriceResolver(new AttributionFormatter),
+        private readonly WholesaleTrendCalculator $trend = new WholesaleTrendCalculator,
+        private readonly CostCalculator $cost = new CostCalculator,
+    ) {}
+
     /**
      * `$lines`/`$covered` are derived from `(habits, pantry, week)` only,
      * and the ceiling reading from `(ceiling, week)` only — the two share
@@ -38,13 +62,19 @@ final class ShoppingPlanService
      * @param  ConsumptionHabitLine[]  $habits
      * @param  PantryStock[]  $pantry
      */
-    public function plan(array $habits, array $pantry, ?GroceryCeilingInput $ceiling, PlanningWeek $week): WeeklyShoppingPlan
+    public function plan(array $habits, array $pantry, ?GroceryCeilingInput $ceiling, PlanningWeek $week, ?PriceContext $prices = null): WeeklyShoppingPlan
     {
         [$lines, $covered] = $this->buildLines($habits, $pantry, $week->asOf);
 
         usort($lines, static fn (ShoppingListLine $a, ShoppingListLine $b): int => $a->productName <=> $b->productName);
 
         [$ceilingState, $ceilingResolution, $ceilingReading] = $this->resolveCeiling($ceiling, $week->asOf);
+
+        $estimate = null;
+        if ($prices !== null) {
+            [$lines, $lineCostsInCents] = $this->annotate($lines, $prices, $week->asOf);
+            $estimate = $this->estimate($lineCostsInCents, $ceilingReading);
+        }
 
         return new WeeklyShoppingPlan(
             week: $week,
@@ -53,6 +83,7 @@ final class ShoppingPlanService
             ceiling: $ceilingReading,
             ceilingState: $ceilingState,
             ceilingResolution: $ceilingResolution,
+            estimate: $estimate,
         );
     }
 
@@ -133,6 +164,118 @@ final class ShoppingPlanService
         }
 
         return [$lines, $covered];
+    }
+
+    /**
+     * Puts a price and a wholesale trend on every line, in place: same lines,
+     * same order, same quantities. Returns the annotated lines and each line's
+     * estimated cost in cents (null when the line is unknown), index-aligned.
+     *
+     * @param  array<int, ShoppingListLine>  $lines
+     * @return array{0: array<int, ShoppingListLine>, 1: array<int, int|null>}
+     */
+    private function annotate(array $lines, PriceContext $prices, CarbonImmutable $asOf): array
+    {
+        $annotated = [];
+        $costs = [];
+
+        foreach ($lines as $line) {
+            $resolved = $this->resolver->resolve($line->productId, $line->unit, $prices->quotes, $prices->policies, $asOf);
+            $costInCents = $resolved->chosen !== null
+                ? $this->cost->lineCostCents($line->toBuyQuantity, $resolved->chosen->quote->unitPrice)
+                : null;
+
+            $annotated[] = $line->withPrice(
+                $this->linePrice($resolved, $costInCents),
+                $this->trend->compute($line->productId, $prices->quotes, $prices->policies, $asOf),
+            );
+            $costs[] = $costInCents;
+        }
+
+        return [$annotated, $costs];
+    }
+
+    private function linePrice(ResolvedPrice $resolved, ?int $costInCents): LinePrice
+    {
+        $chosen = $resolved->chosen;
+        if ($chosen === null || $costInCents === null || $chosen->quote->periodStart === null || $chosen->quote->periodEnd === null) {
+            return LinePrice::unknown();
+        }
+
+        return new LinePrice(
+            state: $resolved->state,
+            unitPrice: $this->displayPrice($chosen),
+            estimatedCost: $this->cost->centsToAmount($costInCents),
+            basis: $chosen->quote->basis,
+            source: $chosen->quote->source,
+            sourceLabel: $chosen->sourceLabel,
+            periodStart: $chosen->quote->periodStart,
+            periodEnd: $chosen->quote->periodEnd,
+            attribution: $chosen->attribution,
+            alternatives: array_map(fn (ResolvedQuote $alternative): PriceAlternative => $this->alternative($alternative), $resolved->alternatives),
+        );
+    }
+
+    private function alternative(ResolvedQuote $alternative): PriceAlternative
+    {
+        // The resolver only keeps dated quotes, so both periods are present.
+        $quote = $alternative->quote;
+
+        return new PriceAlternative(
+            source: $quote->source,
+            sourceLabel: $alternative->sourceLabel,
+            unitPrice: $this->displayPrice($alternative),
+            state: $alternative->state,
+            basis: $quote->basis,
+            periodStart: $quote->periodStart ?? $quote->periodEnd ?? throw new \LogicException('A resolved quote is always dated.'),
+            periodEnd: $quote->periodEnd ?? throw new \LogicException('A resolved quote is always dated.'),
+            attribution: $alternative->attribution,
+        );
+    }
+
+    private function displayPrice(ResolvedQuote $resolved): float
+    {
+        return $this->cost->centsToAmount($this->cost->unitPriceToCents($resolved->quote->unitPrice));
+    }
+
+    /**
+     * Sums in cents. Empty list: 0. Lines but none priced: null — never 0. The
+     * ceiling comparison exists only for a `set` ceiling and a real total, and it
+     * is returned even when the estimate is partial (a lower bound).
+     *
+     * @param  array<int, int|null>  $lineCostsInCents
+     */
+    private function estimate(array $lineCostsInCents, ?GroceryCeilingReading $ceilingReading): PlanEstimate
+    {
+        $priced = array_values(array_filter($lineCostsInCents, static fn (?int $cents): bool => $cents !== null));
+        $pricedCount = count($priced);
+        $unpricedCount = count($lineCostsInCents) - $pricedCount;
+
+        $totalInCents = match (true) {
+            $lineCostsInCents === [] => 0,
+            $pricedCount === 0 => null,
+            default => array_sum($priced),
+        };
+
+        $comparison = null;
+        if ($ceilingReading !== null && $totalInCents !== null) {
+            $remainingInCents = $this->cost->amountToCents($ceilingReading->remaining);
+            $afterInCents = $remainingInCents - $totalInCents;
+
+            $comparison = new CeilingComparison(
+                remaining: $this->cost->centsToAmount($remainingInCents),
+                remainingAfterEstimate: $this->cost->centsToAmount($afterInCents),
+                wouldExceed: $afterInCents < 0,
+            );
+        }
+
+        return new PlanEstimate(
+            total: $totalInCents === null ? null : $this->cost->centsToAmount($totalInCents),
+            pricedLines: $pricedCount,
+            unpricedLines: $unpricedCount,
+            isPartial: $unpricedCount > 0,
+            ceilingComparison: $comparison,
+        );
     }
 
     /**

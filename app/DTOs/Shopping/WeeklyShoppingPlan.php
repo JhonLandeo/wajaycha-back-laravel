@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\DTOs\Shopping;
 
+use App\DTOs\Prices\PlanEstimate;
+
 /**
  * `ShoppingPlanService::plan()`'s whole output (design.md "Output"). Never
  * persisted — computed on every read (spec.md "Weekly list derivation").
@@ -26,6 +28,7 @@ final class WeeklyShoppingPlan
         public readonly ?GroceryCeilingReading $ceiling,
         public readonly string $ceilingState,
         public readonly ?string $ceilingResolution,
+        public readonly ?PlanEstimate $estimate = null,
     ) {}
 
     /**
@@ -52,6 +55,7 @@ final class WeeklyShoppingPlan
             'ceiling_state' => $this->ceilingState,
             'ceiling_resolution' => $this->ceilingResolution,
             'ceiling' => $this->ceiling?->toArray(),
+            'estimate' => $this->estimate?->toArray(),
         ];
     }
 }

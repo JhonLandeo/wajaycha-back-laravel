@@ -47,3 +47,13 @@ it('converts cents to a decimal amount and floats to cents without drifting', fu
         ->and($calc->amountToCents(19.99))->toBe(1999)
         ->and($calc->amountToCents(-10.0))->toBe(-1000);
 });
+
+it('rounds a stored unit price to two decimals for output, half up', function (string $unitPrice, int $cents) {
+    expect((new CostCalculator)->unitPriceToCents($unitPrice))->toBe($cents);
+})->with([
+    'plain' => ['8.9000', 890],
+    'four decimals rounded down' => ['4.3333', 433],
+    'half-cent rounds up' => ['7.9950', 800],
+    'just under the half' => ['7.9949', 799],
+    'sub-cent price' => ['0.0049', 0],
+]);

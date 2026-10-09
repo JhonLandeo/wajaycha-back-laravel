@@ -40,6 +40,15 @@ final class CostCalculator
         return intdiv($thousandths * $this->toTenThousandths($unitPrice) + self::HALF_CENT, self::UNITS_PER_CENT);
     }
 
+    /**
+     * A stored unit price shown at two decimals, half up, as cents. Output only:
+     * the cost itself is always computed from the exact stored value.
+     */
+    public function unitPriceToCents(string $unitPrice): int
+    {
+        return intdiv($this->toTenThousandths($unitPrice) + 50, 100);
+    }
+
     public function centsToAmount(int $cents): float
     {
         return round($cents / 100, 2);
