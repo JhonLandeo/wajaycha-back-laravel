@@ -7,6 +7,7 @@ namespace App\Repositories;
 use App\Enums\ReconciliationKind;
 use App\Enums\ReconciliationStatus;
 use App\Enums\ResolvedBy;
+use App\Enums\SourceType;
 use App\Models\ReconciliationCandidate;
 use App\Models\Transaction;
 use App\Repositories\Contracts\ReconciliationCandidateRepositoryContract;
@@ -103,7 +104,7 @@ class ReconciliationCandidateRepository implements ReconciliationCandidateReposi
             // descontar un movimiento que ya no esta en ningun total.
             ->whereNull('matched_transaction_id')
             ->whereNotExists($this->alreadyPairedWith($transaction))
-            ->whereNotExists($this->alreadySpokenFor());
+            ->whereNotExists($this->alreadySpokenFor($transaction));
     }
 
     public function open(Transaction $transaction, Transaction $candidate, array $resolution = []): ?ReconciliationCandidate
@@ -183,7 +184,8 @@ class ReconciliationCandidateRepository implements ReconciliationCandidateReposi
     }
 
     /**
-     * Excludes a row that already has a pair — resuelta o todavia en pregunta.
+     * Excludes a row that already has a pair — resuelta o todavia en pregunta —
+     * salvo el unico caso en que ese par no le impide nada: ser absorbida.
      *
      * PENDING estaba cubierto desde el principio: proponer dos veces la misma fila
      * deja que el usuario confirme las dos, y la segunda confirmacion apuntaria un
@@ -201,23 +203,43 @@ class ReconciliationCandidateRepository implements ReconciliationCandidateReposi
      * Los montos se comparan exactos, asi que un asiento es UN pago: absorbe un
      * duplicado y ni uno mas.
      *
+     * Pero excluir CUALQUIER par confirmado se llevaba puesto un caso legitimo. Un
+     * mismo pago llega por tres puertas: la captura en caja, el Excel de Yape, el
+     * extracto del BCP. Captura y Excel se unifican primero y el Excel queda como
+     * maestro; cuando llega el extracto, ese Excel figuraba ocupado, el extracto no
+     * encontraba pareja y el pago contaba dos veces. Lo que el Excel no puede es
+     * absorber un segundo duplicado — y aca no absorbe nada: lo absorben a el. Por
+     * eso un par CONFIRMADO deja pasar a la fila cuando la que se inspecciona la
+     * supera en autoridad (`SourceType::authority()`): `ReconciliationLinker::rank()`
+     * la va a convertir en satelite, y su par previo queda colgando de ella como una
+     * cadena — satelite, maestro, maestro — en la que nadie es maestro dos veces.
+     *
+     * Al reves no. Si la fila ya conciliada supera a la que llega, aceptarla la haria
+     * maestro de un segundo par, que es exactamente el asiento con dos pagos de arriba
+     * y lo que `unq_reconciliation_candidates_cross_source_master` rechaza.
+     *
      * REJECTED queda deliberadamente afuera. Que el usuario haya dicho "estos dos son
      * distintos" no inmoviliza a ninguno de los dos: cada uno sigue libre de ser el
      * duplicado de otra fila. Lo que no puede repetirse es ESE par, y de eso se ocupa
      * `alreadyPairedWith()`.
      */
-    private function alreadySpokenFor(): callable
+    private function alreadySpokenFor(Transaction $transaction): callable
     {
-        return function (QueryBuilder $query): void {
+        $absorbable = SourceType::fromColumn($transaction->source_type)->outranked();
+
+        return function (QueryBuilder $query) use ($absorbable): void {
             $query->select(DB::raw('1'))
                 ->from('reconciliation_candidates as rc_open')
-                ->whereIn('rc_open.status', [
-                    ReconciliationStatus::PENDING->value,
-                    ReconciliationStatus::CONFIRMED->value,
-                ])
                 ->where(function (QueryBuilder $side): void {
                     $side->whereColumn('rc_open.transaction_id', 'transactions.id')
                         ->orWhereColumn('rc_open.candidate_transaction_id', 'transactions.id');
+                })
+                ->where(function (QueryBuilder $blocking) use ($absorbable): void {
+                    $blocking->where('rc_open.status', ReconciliationStatus::PENDING->value)
+                        ->orWhere(function (QueryBuilder $confirmed) use ($absorbable): void {
+                            $confirmed->where('rc_open.status', ReconciliationStatus::CONFIRMED->value)
+                                ->whereNotIn('transactions.source_type', $absorbable);
+                        });
                 });
         };
     }

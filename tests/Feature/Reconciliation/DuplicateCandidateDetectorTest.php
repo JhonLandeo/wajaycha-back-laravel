@@ -464,6 +464,101 @@ it('no vuelve a preguntar por un par que el usuario ya descarto', function () {
         ->and(detector()->inspect($captura))->toBeNull();
 });
 
+// ------------------------------------------------------------ tres puertas
+
+it('une las tres puertas de un mismo pago y deja contando solo al extracto', function () {
+    $user = User::factory()->create();
+    [$bcp, $yape] = bcpConYape();
+
+    // La secuencia real: la foto por Telegram en caja, el Excel de Yape despues, el
+    // PDF del BCP al final. La captura y el Excel se unificaron solos, y el Excel
+    // quedo como MAESTRO de ese par. Por eso, al llegar el extracto, el Excel figuraba
+    // "ya ocupado" y el extracto se quedaba sin pareja: el pago contaba dos veces.
+    $captura = reconMovement($user, SourceType::CAPTURE, '33.90', '2026-09-27 13:09:59');
+    detector()->inspect($captura);
+
+    $excel = reconMovement($user, SourceType::IMPORT_APP, '33.90', '2026-09-27 13:10:05', wallet: $yape);
+    detector()->inspect($excel);
+
+    $extracto = reconMovement($user, SourceType::IMPORT_STATEMENT, '33.90', '2026-09-27 00:00:00', ledger: $bcp);
+    $record = detector()->inspect($extracto);
+
+    $contando = Transaction::whereIn('id', [$captura->id, $excel->id, $extracto->id])
+        ->whereNull('matched_transaction_id')
+        ->pluck('id')
+        ->all();
+
+    // La captura sigue colgando del Excel, que ahora cuelga del extracto: una cadena,
+    // y cada eslabon es exactamente el par que su registro dice.
+    expect($record?->status)->toBe(ReconciliationStatus::CONFIRMED)
+        ->and($record->master_transaction_id)->toBe($extracto->id)
+        ->and($contando)->toBe([$extracto->id])
+        ->and($excel->fresh()->matched_transaction_id)->toBe($extracto->id)
+        ->and($captura->fresh()->matched_transaction_id)->toBe($excel->id)
+        ->and(ReconciliationCandidate::where('status', ReconciliationStatus::PENDING)->count())->toBe(0);
+});
+
+it('no cuelga dos pagos de Yape de un unico asiento aunque cada uno ya haya absorbido su captura', function () {
+    $user = User::factory()->create();
+    [$bcp, $yape] = bcpConYape();
+
+    // Ser maestro de una captura ya no inmoviliza a una fila de Yape frente al
+    // extracto. Lo que NO puede pasar por eso es lo de siempre: que un asiento del
+    // banco explique dos pagos de S/ 5.
+    $fotoTarde = reconMovement($user, SourceType::CAPTURE, '5.00', WALLET_AFTERNOON);
+    $pagoTarde = reconMovement($user, SourceType::IMPORT_APP, '5.00', '2026-06-25 13:10:05', wallet: $yape);
+    detector()->inspect($pagoTarde);
+
+    $fotoNoche = reconMovement($user, SourceType::CAPTURE, '5.00', WALLET_EVENING);
+    $pagoNoche = reconMovement($user, SourceType::IMPORT_APP, '5.00', '2026-06-25 18:02:09', wallet: $yape);
+    detector()->inspect($pagoNoche);
+
+    $asiento = reconMovement($user, SourceType::IMPORT_STATEMENT, '5.00', STATEMENT_MIDNIGHT, ledger: $bcp);
+    detector()->inspect($asiento);
+
+    // Y entrando por la billetera, que es la direccion en la que el defecto original
+    // aparecio: el segundo pago no encuentra el asiento ya tomado.
+    expect(detector()->inspect($pagoNoche))->toBeNull()
+        ->and(Transaction::where('matched_transaction_id', $asiento->id)->count())->toBe(1)
+        ->and($fotoTarde->fresh()->matched_transaction_id)->toBe($pagoTarde->id)
+        ->and($fotoNoche->fresh()->matched_transaction_id)->toBe($pagoNoche->id);
+});
+
+it('no cuelga dos pagos de Yape del mismo dia de un unico asiento del banco', function () {
+    $user = User::factory()->create();
+    [$bcp, $yape] = bcpConYape();
+
+    // Un solo asiento y dos pagos de S/ 5: el asiento explica uno. El otro sigue
+    // contando — fue con saldo y nunca toco la tarjeta.
+    $unPago = reconMovement($user, SourceType::IMPORT_APP, '5.00', WALLET_AFTERNOON, 'income', wallet: $yape);
+    $otroPago = reconMovement($user, SourceType::IMPORT_APP, '5.00', WALLET_EVENING, 'income', wallet: $yape);
+    $asiento = reconMovement($user, SourceType::IMPORT_STATEMENT, '5.00', STATEMENT_MIDNIGHT, 'income', ledger: $bcp);
+
+    detector()->inspect($unPago);
+
+    expect(detector()->inspect($otroPago))->toBeNull()
+        ->and($unPago->fresh()->matched_transaction_id)->toBe($asiento->id)
+        ->and($otroPago->fresh()->matched_transaction_id)->toBeNull()
+        ->and(Transaction::where('matched_transaction_id', $asiento->id)->count())->toBe(1);
+});
+
+it('no le cuelga un segundo satelite al maestro de un par ya confirmado', function () {
+    $user = User::factory()->create();
+    [$bcp, $yape] = bcpConYape();
+
+    // El orden inverso: el extracto ya absorbio al Excel y la captura llega al final.
+    // Ser absorbido es lo unico que se le permite a un maestro; absorber otra vez
+    // violaria `unq_reconciliation_candidates_cross_source_master`.
+    $excel = reconMovement($user, SourceType::IMPORT_APP, '33.90', '2026-09-27 13:10:05', wallet: $yape);
+    $extracto = reconMovement($user, SourceType::IMPORT_STATEMENT, '33.90', '2026-09-27 00:00:00', ledger: $bcp);
+    detector()->inspect($extracto);
+
+    $captura = reconMovement($user, SourceType::CAPTURE, '33.90', '2026-09-27 13:09:59');
+
+    expect(detector()->inspect($captura))->toBeNull()
+        ->and(Transaction::where('matched_transaction_id', $extracto->id)->pluck('id')->all())->toBe([$excel->id]);
+});
+
 it('no deja una fila metida en dos pares abiertos a la vez', function () {
     $user = User::factory()->create();
 
