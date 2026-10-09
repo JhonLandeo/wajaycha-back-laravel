@@ -174,3 +174,45 @@ it('rechaza un perfil que no existe en vez de salir sin politica', function () {
     expect(fn () => OutboundHttp::to('perfil-que-no-existe'))
         ->toThrow(InvalidArgumentException::class);
 });
+
+// ------------------------------------------------------------- CA bundle
+
+/**
+ * A profile may pin the CA bundle it verifies against (the EMMSA server sends
+ * its leaf certificate without the intermediate). The option replaces the
+ * default trust store for that profile ONLY and never switches verification
+ * off.
+ */
+it('verifies a profile against its own CA bundle', function () {
+    $path = tempnam(sys_get_temp_dir(), 'ca');
+    config()->set('http.profiles.con-bundle', ['timeout' => 5, 'retries' => 0, 'ca_bundle' => $path]);
+
+    try {
+        expect(OutboundHttp::to('con-bundle')->getOptions()['verify'])->toBe($path);
+    } finally {
+        unlink($path);
+    }
+});
+
+it('leaves the default trust store alone when a profile names no bundle', function () {
+    config()->set('http.profiles.sin-bundle', ['timeout' => 5, 'retries' => 0]);
+
+    expect(OutboundHttp::to('sin-bundle')->getOptions())->not->toHaveKey('verify');
+});
+
+it('refuses to send when the configured bundle is missing instead of falling back to no verification', function () {
+    config()->set('http.profiles.bundle-ausente', ['timeout' => 5, 'retries' => 0, 'ca_bundle' => '/nonexistent/bundle.pem']);
+
+    expect(fn () => OutboundHttp::to('bundle-ausente'))->toThrow(InvalidArgumentException::class, 'bundle');
+});
+
+it('never configures a profile with verification switched off', function () {
+    /** @var array<string, array<string, mixed>> $profiles */
+    $profiles = config('http.profiles');
+
+    foreach ($profiles as $name => $profile) {
+        expect($profile['verify'] ?? true)->not->toBeFalse("el perfil {$name} desactiva la verificacion TLS");
+    }
+
+    expect(array_keys($profiles))->not->toBeEmpty();
+});

@@ -34,7 +34,7 @@ final class OutboundHttp
     {
         $config = self::configFor($profile);
 
-        return Http::timeout($config['timeout'])
+        $request = Http::timeout($config['timeout'])
             ->connectTimeout($config['connect_timeout'])
             ->retry(
                 $config['retries'] + 1,
@@ -50,6 +50,34 @@ final class OutboundHttp
                 // here; error handling is left exactly where it was.
                 throw: false,
             );
+
+        return self::withCaBundle($request, $profile, $config);
+    }
+
+    /**
+     * Pins the TLS trust store of a profile to its own CA bundle, when it names
+     * one. The bundle REPLACES the default store for that profile and nothing
+     * else changes: verification is never disabled, and a bundle that is not on
+     * disk is a programming error that fails here, instead of quietly falling
+     * back to a store that cannot verify the far side (or, worse, to no check).
+     *
+     * @param  array{timeout: int, connect_timeout: int, retries: int, retry_base_delay_ms: int, retry_max_delay_ms: int, ca_bundle?: string}  $config
+     */
+    private static function withCaBundle(PendingRequest $request, string $profile, array $config): PendingRequest
+    {
+        $bundle = $config['ca_bundle'] ?? null;
+
+        if ($bundle === null) {
+            return $request;
+        }
+
+        if (! is_file($bundle)) {
+            throw new \InvalidArgumentException(
+                "El perfil HTTP saliente '{$profile}' apunta a un bundle de CA que no existe: {$bundle}."
+            );
+        }
+
+        return $request->withOptions(['verify' => $bundle]);
     }
 
     /**
@@ -157,7 +185,7 @@ final class OutboundHttp
     }
 
     /**
-     * @return array{timeout: int, connect_timeout: int, retries: int, retry_base_delay_ms: int, retry_max_delay_ms: int}
+     * @return array{timeout: int, connect_timeout: int, retries: int, retry_base_delay_ms: int, retry_max_delay_ms: int, ca_bundle?: string}
      */
     private static function configFor(string $profile): array
     {
@@ -177,7 +205,7 @@ final class OutboundHttp
             );
         }
 
-        /** @var array{timeout: int, connect_timeout: int, retries: int, retry_base_delay_ms: int, retry_max_delay_ms: int} $merged */
+        /** @var array{timeout: int, connect_timeout: int, retries: int, retry_base_delay_ms: int, retry_max_delay_ms: int, ca_bundle?: string} $merged */
         $merged = array_merge($defaults, $overrides);
 
         return $merged;

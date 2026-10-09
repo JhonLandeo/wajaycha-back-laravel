@@ -182,6 +182,20 @@ return [
             'timeout' => 10,
             'retries' => 1,
         ],
+
+        /**
+         * EMMSA's old report endpoint (a POST that returns the day's wholesale
+         * table). The server sends its leaf certificate without the Let's
+         * Encrypt intermediate, so the default trust store cannot verify it;
+         * `ca_bundle` pins the six intermediates it can be issued by.
+         * Verification is never switched off. Renew the bundle before
+         * 2028-09-02.
+         */
+        'emmsa' => [
+            'timeout' => 20,
+            'retries' => 1,
+            'ca_bundle' => resource_path('certs/emmsa-chain.pem'),
+        ],
     ],
 
 ];
