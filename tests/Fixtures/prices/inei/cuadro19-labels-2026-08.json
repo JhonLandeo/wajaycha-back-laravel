@@ -1,0 +1,394 @@
+[
+    {
+        "label": "ACEITE VEGETAL (BOTELLA)",
+        "unit": "LITRO"
+    },
+    {
+        "label": "ESPINACA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "ACEITUNA DE BOTIJA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "FIDEOS PASTA CORTA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "AJÍ AMARILLO MOLIDO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "FIDEOS PASTA LARGA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "AJÍ VERDE ESCABECHE",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "FILETE DE ATÚN",
+        "unit": "LATA"
+    },
+    {
+        "label": "AJO ENTERO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "FRÉJOL CANARIO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "APIO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "FRÉJOL PANAMITO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "ARROZ A GRANEL CORRIENTE",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "GARBANZO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "ARROZ ENVASADO SUPERIOR",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "GALLETAS SALADAS (ENVASADA)",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "ARVEJA SECA PARTIDA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "GALLETAS DULCES (ENVASADA)",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "ARVEJA VERDE",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "GALLINA EVISCERADA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "AVENA A GRANEL",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "GASEOSA",
+        "unit": "BOT,MED,"
+    },
+    {
+        "label": "AZÚCAR BLANCA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "GRANADILLA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "AZÚCAR RUBIA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "HABA VERDE",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "BOFE DE RES",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "HARINA DE TRIGO SIN PREPARAR (ENV,)",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "BONITO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "HÍGADO DE RES",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "CAMOTE AMARILLO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "HOT DOG",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "CANELA ENTERA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "HUEVO A GRANEL",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "CARNE MOLIDA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "JAMONADA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "CARNE DE CARNERO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "JUREL",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "CEBOLLA CABEZA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "LECHE EVAPORADA",
+        "unit": "LATA G,"
+    },
+    {
+        "label": "CEBOLLA CHINA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "LECHE FRESCA PASTEURIZADA",
+        "unit": "LITRO"
+    },
+    {
+        "label": "CERDO CHULETA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "LENTEJA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "CERVEZA BLANCA",
+        "unit": "LITRO"
+    },
+    {
+        "label": "LIMÓN",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "CHOCLO CRIOLLO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "LISA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "CHOROS",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MAÍZ BLANCO CORRIENTE",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MAÍZ MORADO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PIERNA DE POLLO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MANDARINA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PIÑA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MANGO CRIOLLO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PLÁTANO DE LA ISLA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MANTEQUILLA ENVASADA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PLÁTANO DE SEDA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MANZANA CORRIENTE",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "POLLO EVISCERADO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MANZANA DELICIA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PORO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MARGARINA ENVASADA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "QUESO FRESCO DE VACA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MILANESA DE POLLO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "QUESO MANTECOSO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MONDONGO DE RES",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "QUINUA ENTERA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "MORÓN NACIONAL",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "RES BISTEC",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "NARANJA DE JUGO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "RES CHURRASCO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "NARANJA DE MESA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "SAL YODADA DE COCINA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "OLLUCO LARGO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "SANCOCHADO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PALLAR",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "SANDÍA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PALTA FUERTE",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "SAZONADOR EN SOBRE (A JINOM OTO)",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PAN DE YEMA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "TOCINO AHUMADO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PAN FRANCÉS",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "TOMATE ITALIANO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PAPA AMARILLA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "UVA BLANCA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PAPA BLANCA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "UVA NEGRA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PAPA HUAYRO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "VAINITA AMERICANA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PAPA SECA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "VERDURA PICADA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PAPAYA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "YUCA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PASAS A GRANEL",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "ZANAHORIA",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "PECHUGA DE POLLO",
+        "unit": "KILOGRAMO"
+    },
+    {
+        "label": "ZAPALLO MACRE",
+        "unit": "KILOGRAMO"
+    }
+]
