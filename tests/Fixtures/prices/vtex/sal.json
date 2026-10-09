@@ -1,0 +1,398 @@
+[
+ {
+  "productId": "100552606",
+  "productName": "Sal de Cocina BELL'S Bolsa 1Kg",
+  "items": [
+   {
+    "itemId": "10790766",
+    "name": "Sal de Cocina BELL'S Bolsa 1Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 1.9,
+       "ListPrice": 1.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 215
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "1543",
+  "productName": "Sal LOBOS Parillera Frasco 750Gr",
+  "items": [
+   {
+    "itemId": "1845",
+    "name": "Sal LOBOS Parillera Frasco 750Gr",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 11.5,
+       "ListPrice": 11.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 40
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101190097",
+  "productName": "Sal de Maras ORI Bolsa 500g",
+  "items": [
+   {
+    "itemId": "11566652",
+    "name": "Sal de Maras ORI Bolsa 500g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 10.5,
+       "ListPrice": 10.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 24
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "26696",
+  "productName": "Sal Marina EMSAL Cocina Bolsa 1Kg",
+  "items": [
+   {
+    "itemId": "26639",
+    "name": "Sal Marina EMSAL Cocina Bolsa 1Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 2.6,
+       "ListPrice": 2.6,
+       "IsAvailable": true,
+       "AvailableQuantity": 282
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "49155",
+  "productName": "Sal Rosada de Maras PERUVIAN Gruesa Bolsa 500g",
+  "items": [
+   {
+    "itemId": "49587",
+    "name": "Sal Rosada de Maras PERUVIAN Gruesa Bolsa 500g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 8.9,
+       "ListPrice": 8.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 87
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101971319",
+  "productName": "Sal Rosada de Maras MARAS GOURMET Ideal para Cocina Caja 600g",
+  "items": [
+   {
+    "itemId": "12316377",
+    "name": "Sal Rosada de Maras MARAS GOURMET Ideal para Cocina Caja 600g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 9.9,
+       "ListPrice": 9.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 72
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "49441",
+  "productName": "Sal de Maras ONZA Hierbas Mediterráneas Doypack 250g",
+  "items": [
+   {
+    "itemId": "49921",
+    "name": "Sal de Maras ONZA Hierbas Mediterráneas Doypack 250g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 6.0,
+       "ListPrice": 6.09,
+       "IsAvailable": true,
+       "AvailableQuantity": 25
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "19888",
+  "productName": "Sal de Maras Gruesa ONZA Doypack 500g",
+  "items": [
+   {
+    "itemId": "19835",
+    "name": "Sal de Maras Gruesa ONZA Doypack 500g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 8.8,
+       "ListPrice": 8.8,
+       "IsAvailable": true,
+       "AvailableQuantity": 44
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101682745",
+  "productName": "Sal de Maras Molida OLI21 Bolsa 1.25Kg",
+  "items": [
+   {
+    "itemId": "12067962",
+    "name": "Sal de Maras Molida OLI21 Bolsa 1.25Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 15.5,
+       "ListPrice": 15.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 63
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "31476",
+  "productName": "Sal de Mesa LOBOS Fina Frasco 500g",
+  "items": [
+   {
+    "itemId": "31790",
+    "name": "Sal de Mesa LOBOS Fina Frasco 500g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 5.29,
+       "ListPrice": 5.29,
+       "IsAvailable": true,
+       "AvailableQuantity": 33
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101270804",
+  "productName": "Sal de Maras ORI Molinillo Frasco 200g",
+  "items": [
+   {
+    "itemId": "11650092",
+    "name": "Sal de Maras ORI Molinillo Frasco 200g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 25.9,
+       "ListPrice": 25.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 27
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "49439",
+  "productName": "Sal de Maras ONZA Ají Panca Doypack 400g",
+  "items": [
+   {
+    "itemId": "49935",
+    "name": "Sal de Maras ONZA Ají Panca Doypack 400g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 8.7,
+       "ListPrice": 8.7,
+       "IsAvailable": true,
+       "AvailableQuantity": 14
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100552607",
+  "productName": "Sal de Mesa BELL'S Bolsa 1 Kg",
+  "items": [
+   {
+    "itemId": "10790767",
+    "name": "Sal de Mesa BELL'S Bolsa 1 Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 1.9,
+       "ListPrice": 1.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 199
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "19887",
+  "productName": "Sal de Maras Fina ONZA Doypack 500g",
+  "items": [
+   {
+    "itemId": "19842",
+    "name": "Sal de Maras Fina ONZA Doypack 500g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 6.0,
+       "ListPrice": 8.8,
+       "IsAvailable": true,
+       "AvailableQuantity": 201
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "41663",
+  "productName": "Sal de Maras Gruesa ONZA Molinillo Frasco 100g",
+  "items": [
+   {
+    "itemId": "41646",
+    "name": "Sal de Maras Gruesa ONZA Molinillo Frasco 100g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 18.2,
+       "ListPrice": 18.2,
+       "IsAvailable": true,
+       "AvailableQuantity": 19
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "28527",
+  "productName": "Sal Fina de Mesa EMSAL Frasco 125g",
+  "items": [
+   {
+    "itemId": "28470",
+    "name": "Sal Fina de Mesa EMSAL Frasco 125g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 5.4,
+       "ListPrice": 5.4,
+       "IsAvailable": true,
+       "AvailableQuantity": 106
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "1171",
+  "productName": "Sal BIOSAL Liviana en sodio Frasco 125g",
+  "items": [
+   {
+    "itemId": "1516",
+    "name": "Sal BIOSAL Liviana en sodio Frasco 125g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 4.1,
+       "ListPrice": 4.1,
+       "IsAvailable": true,
+       "AvailableQuantity": 39
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100762932",
+  "productName": "Sal de Maras GOURMET Especial Bolsa 500g",
+  "items": [
+   {
+    "itemId": "11033409",
+    "name": "Sal de Maras GOURMET Especial Bolsa 500g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 9.9,
+       "ListPrice": 9.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 44
+      }
+     }
+    ]
+   }
+  ]
+ }
+]

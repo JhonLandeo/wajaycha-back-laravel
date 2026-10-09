@@ -1,0 +1,398 @@
+[
+ {
+  "productId": "100682930",
+  "productName": "Huevos Pardos BELL'S Bandeja 30un",
+  "items": [
+   {
+    "itemId": "10936209",
+    "name": "Huevos Pardos BELL'S Bandeja 30un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 15.9,
+       "ListPrice": 17.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 927
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "3295",
+  "productName": "Huevos de Codorniz BELL'S Bandeja 18un",
+  "items": [
+   {
+    "itemId": "2976",
+    "name": "Huevos de Codorniz BELL'S Bandeja 18un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 6.9,
+       "ListPrice": 6.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 105
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "3294",
+  "productName": "Huevos de Codorniz BELL'S Bandeja 24un",
+  "items": [
+   {
+    "itemId": "2975",
+    "name": "Huevos de Codorniz BELL'S Bandeja 24un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 8.9,
+       "ListPrice": 8.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 172
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100990997",
+  "productName": "Huevos Pardos ARTISAN Bandeja 15un",
+  "items": [
+   {
+    "itemId": "11360063",
+    "name": "Huevos Pardos ARTISAN Bandeja 15un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 14.9,
+       "ListPrice": 15.8,
+       "IsAvailable": true,
+       "AvailableQuantity": 379
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "42055",
+  "productName": "Huevos Pardos LA CALERA Paquete 30un",
+  "items": [
+   {
+    "itemId": "42082",
+    "name": "Huevos Pardos LA CALERA Paquete 30un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 18.5,
+       "ListPrice": 19.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 988
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100989966",
+  "productName": "Huevos Pardos LA CALERA Bandeja 15un",
+  "items": [
+   {
+    "itemId": "11359040",
+    "name": "Huevos Pardos LA CALERA Bandeja 15un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 9.9,
+       "ListPrice": 9.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 280
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "3708",
+  "productName": "Huevos de Codorniz LA CALERA Paquete 18un",
+  "items": [
+   {
+    "itemId": "3612",
+    "name": "Huevos de Codorniz LA CALERA Paquete 18un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 7.5,
+       "ListPrice": 7.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 129
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "99922667",
+  "productName": "Huevos de Corral LA CALERA Paquete 30un",
+  "items": [
+   {
+    "itemId": "10012739",
+    "name": "Huevos de Corral LA CALERA Paquete 30un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 32.9,
+       "ListPrice": 32.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 7
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "3642",
+  "productName": "Huevos de Gallina BELL'S Pardos Bandeja 15un",
+  "items": [
+   {
+    "itemId": "2939",
+    "name": "Huevos de Gallina BELL'S Pardos Bandeja 15un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 9.4,
+       "ListPrice": 9.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 788
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "46398",
+  "productName": "Huevos Pardos GALLINAS LIBRES Bandeja 12un",
+  "items": [
+   {
+    "itemId": "46512",
+    "name": "Huevos Pardos GALLINAS LIBRES Bandeja 12un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 15.1,
+       "ListPrice": 15.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 277
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "52881",
+  "productName": "Huevos Pardos BELL'S Regulares Paquete 8un",
+  "items": [
+   {
+    "itemId": "54269",
+    "name": "Huevos Pardos BELL'S Regulares Paquete 8un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 6.49,
+       "ListPrice": 6.49,
+       "IsAvailable": true,
+       "AvailableQuantity": 79
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "28964",
+  "productName": "Huevos Blancos LA CALERA Paquete 15un",
+  "items": [
+   {
+    "itemId": "28884",
+    "name": "Huevos Blancos LA CALERA Paquete 15un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 10.5,
+       "ListPrice": 11.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 142
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "16842",
+  "productName": "Huevos de Gallina LA CALERA de Corral Paquete 12un",
+  "items": [
+   {
+    "itemId": "16725",
+    "name": "Huevos de Gallina LA CALERA de Corral Paquete 12un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 13.5,
+       "ListPrice": 14.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 460
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "3645",
+  "productName": "Huevos de Gallina LA CALERA Pardos Jumbo Bandeja 15un",
+  "items": [
+   {
+    "itemId": "2973",
+    "name": "Huevos de Gallina LA CALERA Pardos Jumbo Bandeja 15un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 12.9,
+       "ListPrice": 12.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 342
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "15201",
+  "productName": "Huevos LA CALERA Súper Jumbo Paquete 10un",
+  "items": [
+   {
+    "itemId": "15154",
+    "name": "Huevos LA CALERA Súper Jumbo Paquete 10un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 11.5,
+       "ListPrice": 11.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 53
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "102140248",
+  "productName": "Huevos Orgánicos Pardo LA CALERA Bandeja 12un",
+  "items": [
+   {
+    "itemId": "12444756",
+    "name": "Huevos Orgánicos Pardo LA CALERA Bandeja 12un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 17.5,
+       "ListPrice": 17.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 19
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100798203",
+  "productName": "Claras de Huevo ENKEL FOODS Tetrapack 500g",
+  "items": [
+   {
+    "itemId": "11073293",
+    "name": "Claras de Huevo ENKEL FOODS Tetrapack 500g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 19.9,
+       "ListPrice": 19.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 15
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "42056",
+  "productName": "Huevos Pardos BELL'S Paquete 30un",
+  "items": [
+   {
+    "itemId": "42061",
+    "name": "Huevos Pardos BELL'S Paquete 30un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 16.9,
+       "ListPrice": 16.9,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ }
+]

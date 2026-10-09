@@ -1,0 +1,156 @@
+[
+ {
+  "productId": "9384",
+  "productName": "Palta Hass x kg",
+  "items": [
+   {
+    "itemId": "10627",
+    "name": "Palta Hass x kg",
+    "measurementUnit": "kg",
+    "unitMultiplier": 0.3,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 7.99,
+       "ListPrice": 7.99,
+       "IsAvailable": true,
+       "AvailableQuantity": 45
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "11415",
+  "productName": "Palta Fuerte x kg",
+  "items": [
+   {
+    "itemId": "11947",
+    "name": "Palta Fuerte x kg",
+    "measurementUnit": "kg",
+    "unitMultiplier": 0.4,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 10.87,
+       "ListPrice": 10.99,
+       "IsAvailable": true,
+       "AvailableQuantity": 235
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "28466",
+  "productName": "Palta Hass Madura LA CASERITA Bandeja 500g aprox.",
+  "items": [
+   {
+    "itemId": "28410",
+    "name": "Palta Hass Madura LA CASERITA Bandeja 500g aprox.",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 8.9,
+       "ListPrice": 8.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 51
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101656484",
+  "productName": "Palta Hass Madura BELL'S Paquete 3und",
+  "items": [
+   {
+    "itemId": "12041813",
+    "name": "Palta Hass Madura BELL'S Paquete 3und",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 6.79,
+       "ListPrice": 6.79,
+       "IsAvailable": true,
+       "AvailableQuantity": 35
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "99986743",
+  "productName": "Palta Fuerte BELL'S Pack 2 und.",
+  "items": [
+   {
+    "itemId": "10077498",
+    "name": "Palta Fuerte BELL'S Pack 2 und.",
+    "measurementUnit": "kg",
+    "unitMultiplier": 0.7,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 13.99,
+       "ListPrice": 13.99,
+       "IsAvailable": true,
+       "AvailableQuantity": 114
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "46528",
+  "productName": "Palta Fuerte x kg",
+  "items": [
+   {
+    "itemId": "47258",
+    "name": "Palta Fuerte x kg",
+    "measurementUnit": "kg",
+    "unitMultiplier": 0.35,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 10.99,
+       "ListPrice": 10.99,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "40230",
+  "productName": "Palta Fuerte x kg",
+  "items": [
+   {
+    "itemId": "40221",
+    "name": "Palta Fuerte x kg",
+    "measurementUnit": "kg",
+    "unitMultiplier": 0.35,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 7.79,
+       "ListPrice": 7.79,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ }
+]

@@ -201,7 +201,7 @@ return [
                 'category_path' => '/431/432/',
                 'term' => 'arroz',
                 'must_match' => ['/arroz/iu'],
-                'must_not_match' => ['/olla|arrocera|integral|instant|sushi|basmati|jazm|rellen|con leche|chaufa|pre ?cocido|canasta/iu'],
+                'must_not_match' => ['/olla|arrocera|integral|instant|sushi|basmati|jazm|rellen|con leche|chaufa|pre ?cocido|canasta|arborio|carnaroli|jap[oó]nic|sticky|risott|glaseado|glutinoso|pack/iu'],
                 'assume_single' => false,
             ],
             'inei' => ['label' => 'ARROZ A GRANEL CORRIENTE', 'unit' => 'KILOGRAMO'],
@@ -222,7 +222,10 @@ return [
             'plazavea' => [
                 'category_path' => '/431/524/525/',
                 'term' => 'sal',
-                'must_match' => ['/sal (de cocina|de mesa|fina de mesa|marina|yodada)/iu'],
+                // Table salt sold in a bag. Shakers of 125 g inflate the per-kg
+                // median (S/ 43/kg against S/ 2/kg for the 1 kg bag), so the bag
+                // is part of the match rather than a size filter.
+                'must_match' => ['/sal (de cocina|de mesa|marina|yodada)/iu', '/bolsa/iu'],
                 'must_not_match' => ['/pimienta|himalaya|rosada|maras|parrill|biosal|sodio|saborizante|molinillo|gourmet|sobre|light/iu'],
                 'assume_single' => false,
             ],
@@ -311,7 +314,7 @@ return [
                 'category_path' => '/845/839/',
                 'term' => 'huevos',
                 'must_match' => ['/huevo/iu'],
-                'must_not_match' => ['/codorniz|pascua|chocolate|liquido|l[ií]quido|cocido|duro/iu'],
+                'must_not_match' => ['/codorniz|pascua|chocolate|liquido|l[ií]quido|cocido|duro|clara|yema/iu'],
                 'assume_single' => false,
             ],
             'inei' => ['label' => 'HUEVO A GRANEL', 'unit' => 'KILOGRAMO'],

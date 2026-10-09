@@ -1,0 +1,46 @@
+[
+ {
+  "productId": "100495401",
+  "productName": "Pan Francés x und.",
+  "items": [
+   {
+    "itemId": "10712551",
+    "name": "Pan Francés x und.",
+    "measurementUnit": "kg",
+    "unitMultiplier": 0.08,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 7.9,
+       "ListPrice": 7.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 99895
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "9918",
+  "productName": "Pan Francés x und.",
+  "items": [
+   {
+    "itemId": "10728",
+    "name": "Pan Francés x und.",
+    "measurementUnit": "kg",
+    "unitMultiplier": 0.08,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 7.9,
+       "ListPrice": 7.9,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ }
+]

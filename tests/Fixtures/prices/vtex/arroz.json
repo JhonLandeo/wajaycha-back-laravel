@@ -1,0 +1,442 @@
+[
+ {
+  "productId": "512",
+  "productName": "Arroz Extra COSTEÑO Bolsa 750g",
+  "items": [
+   {
+    "itemId": "618",
+    "name": "Arroz Extra COSTEÑO Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 4.5,
+       "ListPrice": 4.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 592
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "13331",
+  "productName": "Arroz Superior BELL'S Bolsa 5Kg",
+  "items": [
+   {
+    "itemId": "13331",
+    "name": "Arroz Superior BELL'S Bolsa 5Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 16.9,
+       "ListPrice": 16.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 43
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "99926508",
+  "productName": "Arroz Integral VALLENORTE Bolsa 750g",
+  "items": [
+   {
+    "itemId": "10016683",
+    "name": "Arroz Integral VALLENORTE Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 5.6,
+       "ListPrice": 5.6,
+       "IsAvailable": true,
+       "AvailableQuantity": 77
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "520",
+  "productName": "Arroz Parbolizado COSTEÑO Bolsa 750g",
+  "items": [
+   {
+    "itemId": "577",
+    "name": "Arroz Parbolizado COSTEÑO Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 5.6,
+       "ListPrice": 5.6,
+       "IsAvailable": true,
+       "AvailableQuantity": 70
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "99959713",
+  "productName": "Arroz Arborio SCOTTI Caja 1Kg",
+  "items": [
+   {
+    "itemId": "10053649",
+    "name": "Arroz Arborio SCOTTI Caja 1Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 40.9,
+       "ListPrice": 40.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 31
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "28310",
+  "productName": "Arroz Extra FARAON Bolsa 750g",
+  "items": [
+   {
+    "itemId": "28252",
+    "name": "Arroz Extra FARAON Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 3.5,
+       "ListPrice": 4.4,
+       "IsAvailable": true,
+       "AvailableQuantity": 231
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "24048",
+  "productName": "Arroz Superior PAISANA Bolsa 5Kg",
+  "items": [
+   {
+    "itemId": "24010",
+    "name": "Arroz Superior PAISANA Bolsa 5Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 18.5,
+       "ListPrice": 19.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 54
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "24970",
+  "productName": "Arroz Extra PAISANA Bolsa 5Kg",
+  "items": [
+   {
+    "itemId": "24925",
+    "name": "Arroz Extra PAISANA Bolsa 5Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 20.5,
+       "ListPrice": 21.3,
+       "IsAvailable": true,
+       "AvailableQuantity": 74
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "823",
+  "productName": "Arroz Arborio COSTEÑO Bolsa 750g",
+  "items": [
+   {
+    "itemId": "576",
+    "name": "Arroz Arborio COSTEÑO Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 11.9,
+       "ListPrice": 11.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 28
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "561",
+  "productName": "Arroz Extra BELL'S Bolsa 5Kg",
+  "items": [
+   {
+    "itemId": "561",
+    "name": "Arroz Extra BELL'S Bolsa 5Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 16.5,
+       "ListPrice": 17.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 469
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "13669",
+  "productName": "Arroz Superior BELL'S Bolsa 750g",
+  "items": [
+   {
+    "itemId": "13370",
+    "name": "Arroz Superior BELL'S Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 2.9,
+       "ListPrice": 2.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 162
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "738",
+  "productName": "Arroz Extra BELL'S Bolsa 750g",
+  "items": [
+   {
+    "itemId": "910",
+    "name": "Arroz Extra BELL'S Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 3.5,
+       "ListPrice": 3.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 118
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "651",
+  "productName": "Arroz Integral BELL'S Bolsa 750g",
+  "items": [
+   {
+    "itemId": "802",
+    "name": "Arroz Integral BELL'S Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 3.8,
+       "ListPrice": 3.8,
+       "IsAvailable": true,
+       "AvailableQuantity": 217
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101020353",
+  "productName": "Arroz Extra BELL'S Saco 10Kg",
+  "items": [
+   {
+    "itemId": "11388950",
+    "name": "Arroz Extra BELL'S Saco 10Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 34.5,
+       "ListPrice": 34.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 87
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "24967",
+  "productName": "Arroz Superior PAISANA Bolsa 1Kg",
+  "items": [
+   {
+    "itemId": "24920",
+    "name": "Arroz Superior PAISANA Bolsa 1Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 4.3,
+       "ListPrice": 4.3,
+       "IsAvailable": true,
+       "AvailableQuantity": 48
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "102366925",
+  "productName": "Pack Arroz Extra COSTEÑO Bolsa 5Kg + Arroz Añejo Extra COSTEÑO Bolsa 750g",
+  "items": [
+   {
+    "itemId": "12615585",
+    "name": "Pack Arroz Extra COSTEÑO Bolsa 5Kg + Arroz Añejo Extra COSTEÑO Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 22.9,
+       "ListPrice": 29.3,
+       "IsAvailable": true,
+       "AvailableQuantity": 97
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "836",
+  "productName": "Arroz Extra COSTEÑO Bolsa 5Kg",
+  "items": [
+   {
+    "itemId": "565",
+    "name": "Arroz Extra COSTEÑO Bolsa 5Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 23.9,
+       "ListPrice": 25.0,
+       "IsAvailable": true,
+       "AvailableQuantity": 303
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "567",
+  "productName": "Arroz Integral COSTEÑO Bolsa 750g",
+  "items": [
+   {
+    "itemId": "655",
+    "name": "Arroz Integral COSTEÑO Bolsa 750g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 6.5,
+       "ListPrice": 6.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 71
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "23282",
+  "productName": "Arroz Integral BELL'S Bolsa 5Kg",
+  "items": [
+   {
+    "itemId": "23235",
+    "name": "Arroz Integral BELL'S Bolsa 5Kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 22.9,
+       "ListPrice": 23.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 59
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101789099",
+  "productName": "Arroz Japónico BARCIDDA Bolsa 500g",
+  "items": [
+   {
+    "itemId": "12158669",
+    "name": "Arroz Japónico BARCIDDA Bolsa 500g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 5.9,
+       "ListPrice": 5.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 24
+      }
+     }
+    ]
+   }
+  ]
+ }
+]

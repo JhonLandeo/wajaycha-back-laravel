@@ -1,0 +1,134 @@
+[
+ {
+  "productId": "101021451",
+  "productName": "Leche Evaporada Entera GLORIA Lata 390g Paquete 6un",
+  "items": [
+   {
+    "itemId": "11390023",
+    "name": "Leche Evaporada Entera GLORIA Lata 390g Paquete 6un",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 21.9,
+       "ListPrice": 23.3,
+       "IsAvailable": true,
+       "AvailableQuantity": 277
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101952063",
+  "productName": "Leche Evaporada DANLAC Golden Milk Botella 900ml",
+  "items": [
+   {
+    "itemId": "12300857",
+    "name": "Leche Evaporada DANLAC Golden Milk Botella 900ml",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 11.99,
+       "ListPrice": 11.99,
+       "IsAvailable": true,
+       "AvailableQuantity": 10
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "99934953",
+  "productName": "Leche Entera Evaporada BELL'S Lata 410g",
+  "items": [
+   {
+    "itemId": "10026189",
+    "name": "Leche Entera Evaporada BELL'S Lata 410g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 4.0,
+       "ListPrice": 4.0,
+       "IsAvailable": true,
+       "AvailableQuantity": 233
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100085371",
+  "productName": "Shake Capuccino UHT GLORIA Botella 320ml",
+  "items": [
+   {
+    "itemId": "10173974",
+    "name": "Shake Capuccino UHT GLORIA Botella 320ml",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 3.0,
+       "ListPrice": 3.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 474
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100085372",
+  "productName": "Shake Mocaccino UHT GLORIA Botella 320ml",
+  "items": [
+   {
+    "itemId": "10173975",
+    "name": "Shake Mocaccino UHT GLORIA Botella 320ml",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 3.0,
+       "ListPrice": 3.5,
+       "IsAvailable": true,
+       "AvailableQuantity": 293
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "99922534",
+  "productName": "Leche Light Evaporada BELL'S Lata 410g",
+  "items": [
+   {
+    "itemId": "10012600",
+    "name": "Leche Light Evaporada BELL'S Lata 410g",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 4.0,
+       "ListPrice": 4.0,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ }
+]

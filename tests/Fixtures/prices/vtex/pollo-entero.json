@@ -1,0 +1,134 @@
+[
+ {
+  "productId": "76951",
+  "productName": "Pollo Entero Sabor Leña REDONDOS 1kg",
+  "items": [
+   {
+    "itemId": "80425",
+    "name": "Pollo Entero Sabor Leña REDONDOS 1kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 13.5,
+       "ListPrice": 16.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 21
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "9253",
+  "productName": "Pollo Entero Fresco con Menudencia x kg",
+  "items": [
+   {
+    "itemId": "9357",
+    "name": "Pollo Entero Fresco con Menudencia x kg",
+    "measurementUnit": "kg",
+    "unitMultiplier": 2.2,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 8.9,
+       "ListPrice": 8.9,
+       "IsAvailable": true,
+       "AvailableQuantity": 99515
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100820008",
+  "productName": "Pollo Entero PERDIX Bolsa 1.4kg",
+  "items": [
+   {
+    "itemId": "11115835",
+    "name": "Pollo Entero PERDIX Bolsa 1.4kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 15.2,
+       "ListPrice": 15.2,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101288696",
+  "productName": "Pollo Entero PERDIX Bolsa 1.5kg",
+  "items": [
+   {
+    "itemId": "11671087",
+    "name": "Pollo Entero PERDIX Bolsa 1.5kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 15.9,
+       "ListPrice": 15.9,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "100542291",
+  "productName": "Pollo Entero PERDIX Bolsa 1.4kg",
+  "items": [
+   {
+    "itemId": "10777861",
+    "name": "Pollo Entero PERDIX Bolsa 1.4kg",
+    "measurementUnit": "un",
+    "unitMultiplier": 1.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 13.9,
+       "ListPrice": 13.9,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "productId": "101189614",
+  "productName": "Pollo Entero Fresco SAN FERNANDO x kg",
+  "items": [
+   {
+    "itemId": "11566169",
+    "name": "Pollo Entero Fresco SAN FERNANDO x kg",
+    "measurementUnit": "kg",
+    "unitMultiplier": 2.0,
+    "sellers": [
+     {
+      "commertialOffer": {
+       "Price": 7.9,
+       "ListPrice": 7.9,
+       "IsAvailable": false,
+       "AvailableQuantity": 0
+      }
+     }
+    ]
+   }
+  ]
+ }
+]
