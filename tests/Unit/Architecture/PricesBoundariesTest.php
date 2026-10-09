@@ -75,6 +75,41 @@ it('keeps the price deciders free of clocks, databases and models', function () 
         ->and($offenders)->toBe([]);
 });
 
+/**
+ * Parsers and the normalizer are pure too, but there are many and more arrive
+ * with every source, so the rule covers every file in their directories. The
+ * count assertion guards the loop against scanning nothing.
+ */
+it('keeps every parser and the normalizer free of clocks, databases, models and config', function () {
+    $root = dirname(__DIR__, 3).'/app/Services/Prices';
+    $scanned = 0;
+    $offenders = [];
+
+    foreach (Finder::create()->files()->in([$root.'/Parsers', $root.'/Normalization'])->name('*.php') as $file) {
+        $scanned++;
+        $source = pricesSourceWithoutComments($file->getRealPath());
+
+        $forbidden = [
+            '/\bnow\s*\(/' => 'now()',
+            '/\b(?:Carbon|CarbonImmutable|Date)::(?:now|today)\b/' => 'a static clock read',
+            '/\bDB::/' => 'the DB facade',
+            '/\bApp\\\\Models\\\\/' => 'an Eloquent model',
+            '/\bconfig\s*\(/' => 'config()',
+            '/\bHttp::|OutboundHttp/' => 'an HTTP client',
+            '/\bStorage::/' => 'the filesystem',
+        ];
+
+        foreach ($forbidden as $pattern => $label) {
+            if (preg_match($pattern, $source) === 1) {
+                $offenders[] = $file->getFilename().' uses '.$label;
+            }
+        }
+    }
+
+    expect($scanned)->toBeGreaterThanOrEqual(5)
+        ->and($offenders)->toBe([]);
+});
+
 it('catches an impure decider — the scan itself is not vacuous', function () {
     $dirty = 'final class Dirty { public function f(): void { $x = now(); DB::table("t"); } }';
     $clean = 'final class Clean { public function f(int $x): int { return $x + 1; } }';
