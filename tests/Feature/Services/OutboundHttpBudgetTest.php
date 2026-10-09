@@ -18,6 +18,7 @@ declare(strict_types=1);
  * them, so the guard survives the next edit to either side.
  */
 
+use App\Jobs\IngestPriceUnit;
 use App\Jobs\ProcessTelegramCapture;
 use App\Support\OutboundHttp;
 
@@ -135,4 +136,38 @@ it('ningun perfil solo agota por si mismo el worker del supervisor', function ()
         expect(OutboundHttp::worstCaseSecondsFor((string) $perfil))
             ->toBeLessThan($supervisor, "el perfil {$perfil} solo ya no entra en el worker");
     }
+});
+
+// ---------------------------------------------------------- price ingestion
+
+/**
+ * The outbound calls one price job can make, per source, in order. INEI and
+ * GMML each read a collection page, an edition page and the PDF on `gob_pe`;
+ * Plaza Vea and EMMSA make one request.
+ *
+ * @return array<string, string[]>
+ */
+function priceJobProfiles(): array
+{
+    return [
+        'inei' => ['gob_pe', 'gob_pe', 'gob_pe'],
+        'gmml' => ['gob_pe', 'gob_pe', 'gob_pe'],
+    ];
+}
+
+it('el timeout del job de precios cubre las llamadas de cada fuente', function (string $source) {
+    $presupuesto = array_sum(array_map(
+        fn (string $profile): int => OutboundHttp::worstCaseSecondsFor($profile),
+        priceJobProfiles()[$source],
+    ));
+
+    // Y deja holgura para leer el PDF (unos 10 s medidos para INEI).
+    expect((new IngestPriceUnit($source, 'all', '2026-10-08'))->timeout)->toBeGreaterThanOrEqual($presupuesto + 30);
+})->with(array_keys(priceJobProfiles()));
+
+it('el job de precios nunca se reintenta y su timeout queda por debajo del retry_after de la cola', function () {
+    $job = new IngestPriceUnit('inei', 'all', '2026-10-08');
+
+    expect($job->tries)->toBe(1)
+        ->and($job->timeout)->toBeLessThan((int) config('queue.connections.redis.retry_after'));
 });

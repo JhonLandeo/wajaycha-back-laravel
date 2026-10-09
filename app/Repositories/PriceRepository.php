@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\DTOs\Prices\CatalogueProduct;
 use App\DTOs\Prices\ObservationDraft;
 use App\DTOs\Prices\Quote;
 use App\Enums\PriceRunStatus;
 use App\Models\PriceIngestionRun;
 use App\Models\PriceObservation;
+use App\Models\Product;
 use App\Repositories\Contracts\PriceRepositoryContract;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -121,5 +123,66 @@ final class PriceRepository implements PriceRepositoryContract
             'error' => $error,
             'details' => $details,
         ]);
+    }
+
+    public function startRun(string $source, string $unitKey): PriceIngestionRun
+    {
+        /** @var PriceIngestionRun */
+        return PriceIngestionRun::query()->create([
+            'source' => $source,
+            'unit_key' => $unitKey,
+            'status' => PriceRunStatus::Running,
+            'started_at' => CarbonImmutable::now(),
+            'rows_written' => 0,
+            'rows_rejected' => 0,
+        ]);
+    }
+
+    public function finishRun(
+        PriceIngestionRun $run,
+        PriceRunStatus $status,
+        int $rowsWritten = 0,
+        int $rowsRejected = 0,
+        ?string $error = null,
+        ?array $details = null,
+    ): PriceIngestionRun {
+        $run->update([
+            'status' => $status,
+            'finished_at' => CarbonImmutable::now(),
+            'rows_written' => $rowsWritten,
+            'rows_rejected' => $rowsRejected,
+            'error' => $error,
+            'details' => $details,
+        ]);
+
+        return $run;
+    }
+
+    public function productsBySlug(array $slugs): array
+    {
+        if ($slugs === []) {
+            return [];
+        }
+
+        $products = [];
+
+        foreach (Product::query()
+            ->select(['id', 'slug', 'unit'])
+            ->whereNull('user_id')
+            ->where('is_active', true)
+            ->whereIn('slug', $slugs)
+            ->get() as $product) {
+            $products[$product->slug] = new CatalogueProduct($product->id, $product->slug, $product->unit);
+        }
+
+        return $products;
+    }
+
+    public function hasObservationWithRef(string $source, string $sourceRef): bool
+    {
+        return PriceObservation::query()
+            ->where('source', $source)
+            ->where('source_ref', $sourceRef)
+            ->exists();
     }
 }

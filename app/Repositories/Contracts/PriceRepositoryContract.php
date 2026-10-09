@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repositories\Contracts;
 
+use App\DTOs\Prices\CatalogueProduct;
 use App\DTOs\Prices\ObservationDraft;
 use App\DTOs\Prices\Quote;
 use App\Enums\PriceRunStatus;
@@ -54,4 +55,37 @@ interface PriceRepositoryContract
         ?string $error = null,
         ?array $details = null,
     ): PriceIngestionRun;
+
+    /**
+     * Opens a run-log row in `running` state for one unit of work; pair it with
+     * {@see self::finishRun()}.
+     */
+    public function startRun(string $source, string $unitKey): PriceIngestionRun;
+
+    /**
+     * Closes a run opened by {@see self::startRun()}. `$details` must never
+     * contain prices.
+     *
+     * @param  array<string, mixed>|null  $details
+     */
+    public function finishRun(
+        PriceIngestionRun $run,
+        PriceRunStatus $status,
+        int $rowsWritten = 0,
+        int $rowsRejected = 0,
+        ?string $error = null,
+        ?array $details = null,
+    ): PriceIngestionRun;
+
+    /**
+     * The seeded (global, active) catalogue products with these slugs, keyed by
+     * slug. A slug the catalogue does not have is simply absent.
+     *
+     * @param  string[]  $slugs
+     * @return array<string, CatalogueProduct>
+     */
+    public function productsBySlug(array $slugs): array;
+
+    /** Whether the source already stored a row carrying this `source_ref`. */
+    public function hasObservationWithRef(string $source, string $sourceRef): bool;
 }

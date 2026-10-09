@@ -10,6 +10,7 @@ use App\Enums\PriceRunStatus;
 use App\Models\PriceIngestionRun;
 use App\Models\PriceObservation;
 use App\Models\Product;
+use App\Models\User;
 use App\Repositories\Contracts\PriceRepositoryContract;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -233,4 +234,56 @@ it('records a finished run row without any price in it', function () {
         ->and($stored->started_at)->not->toBeNull()
         ->and($stored->finished_at)->not->toBeNull()
         ->and($stored->error)->toBeNull();
+});
+
+// ------------------------------------------------------------ run lifecycle
+
+it('opens a run as running and closes it with its outcome', function () {
+    $run = priceRepository()->startRun('inei', 'all');
+
+    expect($run->status)->toBe(PriceRunStatus::Running)
+        ->and($run->started_at)->not->toBeNull()
+        ->and($run->finished_at)->toBeNull();
+
+    $closed = priceRepository()->finishRun($run, PriceRunStatus::Partial, 33, 1, null, ['edition' => '8596356']);
+
+    expect(PriceIngestionRun::query()->count())->toBe(1)
+        ->and($closed->fresh()->status)->toBe(PriceRunStatus::Partial)
+        ->and($closed->fresh()->finished_at)->not->toBeNull()
+        ->and($closed->fresh()->rows_written)->toBe(33)
+        ->and($closed->fresh()->rows_rejected)->toBe(1)
+        ->and($closed->fresh()->details)->toBe(['edition' => '8596356']);
+});
+
+it('records the error of a failed run', function () {
+    $run = priceRepository()->startRun('plazavea', 'palta');
+
+    priceRepository()->finishRun($run, PriceRunStatus::Failed, error: 'HTTP 500');
+
+    expect($run->fresh()->status)->toBe(PriceRunStatus::Failed)->and($run->fresh()->error)->toBe('HTTP 500');
+});
+
+// ------------------------------------------------------- catalogue lookup
+
+it('finds seeded catalogue products by slug and never a private or inactive one', function () {
+    $papa = Product::factory()->create(['user_id' => null, 'slug' => 'papa-blanca', 'unit' => 'kg']);
+    Product::factory()->create(['user_id' => null, 'slug' => 'palta', 'unit' => 'unidad', 'is_active' => false]);
+    Product::factory()->ownedBy(User::factory()->create()->id)->create(['unit' => 'kg']);
+
+    $found = priceRepository()->productsBySlug(['papa-blanca', 'palta', 'yuca']);
+
+    expect(array_keys($found))->toBe(['papa-blanca'])
+        ->and($found['papa-blanca']->id)->toBe($papa->id)
+        ->and($found['papa-blanca']->unit)->toBe('kg')
+        ->and(priceRepository()->productsBySlug([]))->toBe([]);
+});
+
+// ------------------------------------------------------ edition bookkeeping
+
+it('knows whether a source already stored a reference', function () {
+    PriceObservation::factory()->create(['source' => 'inei', 'source_ref' => '8596356']);
+
+    expect(priceRepository()->hasObservationWithRef('inei', '8596356'))->toBeTrue()
+        ->and(priceRepository()->hasObservationWithRef('inei', '1'))->toBeFalse()
+        ->and(priceRepository()->hasObservationWithRef('plazavea', '8596356'))->toBeFalse();
 });

@@ -155,6 +155,22 @@ return [
         'meta_send' => [
             'retries' => 1,
         ],
+
+        /**
+         * gob.pe, the portal that publishes the INEI monthly bulletin and the
+         * GMML daily wholesale bulletin: a collection page, an edition page and
+         * the PDF itself. Read-only and idempotent; one retry, because the next
+         * scheduled run is the real retry.
+         *
+         * `IngestPriceUnit::$timeout` is set from THREE of these (INEI and GMML
+         * each make three calls) plus the PDF parse, and `OutboundHttpBudgetTest`
+         * derives the sum from this block. Raising a number here without the job
+         * fails the suite on purpose.
+         */
+        'gob_pe' => [
+            'timeout' => 15,
+            'retries' => 1,
+        ],
     ],
 
 ];

@@ -77,6 +77,13 @@ class AppServiceProvider extends ServiceProvider
             )
         );
 
+        // The PDF library sits behind a seam so the adapters can be tested
+        // without committing a PDF.
+        $this->app->bind(
+            \App\Services\Prices\Sources\PdfPageReader::class,
+            \App\Services\Prices\Sources\SmalotPdfPageReader::class
+        );
+
         // Capture channels are resolved by key, so adding an adapter is a registration
         // here rather than an edit to every caller.
         $this->app->singleton(

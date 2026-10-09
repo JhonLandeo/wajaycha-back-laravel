@@ -71,6 +71,9 @@ return [
             'canary_min_rows' => 25,
             // |latest / previous month - 1| above this quarantines the row.
             'max_mom_change' => 0.6,
+            // The monthly bulletin collection on gob.pe; editions are links on it.
+            'base_url' => 'https://www.gob.pe',
+            'collection_path' => '/institucion/inei/colecciones/6630-indicadores-de-precios-de-la-economia',
         ],
 
         'emmsa' => [
