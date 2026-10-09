@@ -171,6 +171,17 @@ return [
             'timeout' => 15,
             'retries' => 1,
         ],
+
+        /**
+         * Plaza Vea's public catalogue search (VTEX). One GET per product from a
+         * queued job, spaced by the command; idempotent. One retry only: the
+         * job is one of about forty and the next scheduled run is the real
+         * retry, so a slow store must not hold a worker for minutes.
+         */
+        'vtex' => [
+            'timeout' => 10,
+            'retries' => 1,
+        ],
     ],
 
 ];

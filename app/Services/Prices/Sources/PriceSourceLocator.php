@@ -16,6 +16,7 @@ final class PriceSourceLocator
     /** @var array<string, class-string<PriceSource>> */
     private const ADAPTERS = [
         'inei' => IneiSource::class,
+        'plazavea' => PlazaVeaSource::class,
     ];
 
     public function __construct(private readonly Container $container) {}

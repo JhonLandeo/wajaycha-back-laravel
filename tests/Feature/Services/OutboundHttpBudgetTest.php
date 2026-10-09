@@ -152,6 +152,7 @@ function priceJobProfiles(): array
     return [
         'inei' => ['gob_pe', 'gob_pe', 'gob_pe'],
         'gmml' => ['gob_pe', 'gob_pe', 'gob_pe'],
+        'plazavea' => ['vtex'],
     ];
 }
 
