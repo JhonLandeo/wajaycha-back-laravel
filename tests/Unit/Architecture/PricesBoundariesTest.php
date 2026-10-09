@@ -25,6 +25,8 @@ const PRICES_PURE_DECIDERS = [
     'PriceResolver.php',
     'CostCalculator.php',
     'AttributionFormatter.php',
+    'WholesaleTrendCalculator.php',
+    'CalendarDays.php',
 ];
 
 /**
