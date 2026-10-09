@@ -13,6 +13,14 @@ use Illuminate\Support\Facades\Auth;
  * spec.md "Weekly list derivation". Thin: reads nothing itself, decides
  * nothing itself — `BuildWeeklyPlanAction` wires the read, `ShoppingPlanService`
  * decides (design.md D1).
+ *
+ * Response contract for prices (grocery-prices): each line carries `price`
+ * (`null` only when no price context could be built, otherwise `fresh`, `stale`
+ * or `unknown` with source, attribution and period) and `wholesale_trend`; the
+ * plan carries `estimate`. `price.estimated_cost` is PROPORTIONAL to
+ * `to_buy_quantity` (round half up to cents) — it is not rounded up to whole
+ * packs — and `estimate.total` sums only the priced lines, so a partial estimate
+ * is a lower bound.
  */
 final class WeeklyPlanController extends Controller
 {

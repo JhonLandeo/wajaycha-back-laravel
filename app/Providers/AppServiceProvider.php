@@ -65,6 +65,18 @@ class AppServiceProvider extends ServiceProvider
             \App\Repositories\PriceRepository::class
         );
 
+        // The trend thresholds are configuration (prices.trend); the calculator
+        // itself is pure and takes them as constructor values.
+        $this->app->bind(
+            \App\Services\Prices\WholesaleTrendCalculator::class,
+            fn ($app) => new \App\Services\Prices\WholesaleTrendCalculator(
+                maxAgeDays: (int) config('prices.trend.max_age_days'),
+                windowMinDays: (int) config('prices.trend.window_min_days'),
+                windowMaxDays: (int) config('prices.trend.window_max_days'),
+                flatEpsilonPct: (float) config('prices.trend.flat_epsilon_pct'),
+            )
+        );
+
         // Capture channels are resolved by key, so adding an adapter is a registration
         // here rather than an edit to every caller.
         $this->app->singleton(

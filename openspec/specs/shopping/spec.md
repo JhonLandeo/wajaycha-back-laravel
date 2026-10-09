@@ -119,3 +119,9 @@ by id. `products` SHALL stay global. *(QA-4)*
 
 Seasonality, live prices, writing a `Transaction`, receipt basket lines, unit conversion,
 non-food products — per the proposal's scope boundary.
+
+> **Note (grocery-prices, in progress).** "Live prices" no longer belongs in this list:
+> the weekly plan now annotates each line with a price and the plan with an estimate
+> (`price`, `wholesale_trend`, `estimate`; cost is proportional to the quantity still
+> needed, not pack-rounded). The formal requirement changes are merged into this spec
+> when the `grocery-prices` change is archived; the other items stay out of scope.
