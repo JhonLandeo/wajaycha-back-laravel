@@ -423,13 +423,13 @@ phases:
     engram_topic_keys:
       apply-progress: sdd/grocery-planning/apply-progress
   verify:
-    status: pending
+    status: complete # PASS WITH WARNINGS, 0 CRITICAL (sdd/grocery-planning/verify-report, obs #327); WARNINGS 1-2 resolved, see archive report
     depends_on: [apply]
   archive:
-    status: pending
+    status: complete # archived 2026-10-08 to openspec/changes/archive/2026-10-08-grocery-planning/ (archive report: sdd/grocery-planning/archive-report)
     depends_on: [verify]
 
-next_recommended: [verify] # all five slices landed; definition-of-done checklist complete
+next_recommended: [] # change archived 2026-10-08; follow-up: prices change (new SDD change, explore first), frontend screens, configurable weekly window
 
 execution_mode: interactive
 delivery_strategy: ask-on-risk
@@ -578,7 +578,10 @@ open_questions:
   - id: q1
     question: Which week does "weekly" mean?
     assumed: Monday-to-Sunday local week, not a rolling 7 days, because the shop is a fixed weekly event.
-    status: assumed # not yet put to the owner
+    status: CONFIRMED by owner 2026-10-08
+    decision: |
+      Monday-to-Sunday in America/Lima, confirmed. The owner wants the week to be user-configurable
+      (for example Monday-to-Saturday); that is deferred to phase 2 by owner decision.
   - id: q2
     question: Is the seeded products catalogue curated by us or built by the user?
     assumed: We seed roughly 40 Peruvian staples so the first list is possible without typing; the user may add their own.
@@ -592,7 +595,10 @@ open_questions:
   - id: q3
     question: Can the user add a product the catalogue lacks?
     assumed: Yes. Otherwise the catalogue becomes a ceiling on the product.
-    status: assumed # not yet put to the owner, but implied by the q2 decision
+    status: CONFIRMED by owner 2026-10-08
+    decision: |
+      Yes. Users may add products outside the seeded catalogue; such rows are private to the user
+      (products.user_id, see design D3).
   - id: q4
     question: Does an expired pantry item still subtract from the list?
     assumed: No. Past expires_on it stops counting as available, but the row is kept rather than deleted.
@@ -605,7 +611,13 @@ open_questions:
   - id: q5
     question: Does the list show money at all, or only quantities?
     assumed: Quantities plus the remaining ceiling. Per-line cost needs prices, which is phase 3.
-    status: assumed # not yet put to the owner
+    status: OVERRIDDEN by owner 2026-10-08
+    decision: |
+      The owner overrode the assumption: the list must carry per-product PRICES, not phase 3.
+      This is NOT delivered by grocery-planning. It requires a new SDD change (explore first).
+      Candidate price sources recorded in Engram: MIDAGRI SISAP wholesale (obs #307, fragile HTML
+      scrape over http) and VTEX supermarket APIs (obs #307, terms of service unread). The SIEA
+      calendar gives seasonality only, no prices (obs #306).
   - id: q6
     question: When the ceiling is already exceeded, does the list change?
     assumed: No. It states the overspend and still shows what is needed; suppressing needed food to protect a budget line is the wrong default.
@@ -619,7 +631,11 @@ open_questions:
   - id: q7
     question: Is one pinned category per user enough?
     assumed: Yes for phase 1. Splitting groceries across two categories is a phase-2 question.
-    status: assumed # not yet put to the owner
+    status: CONFIRMED by owner 2026-10-08
+    decision: |
+      One category per user, confirmed. The owner wants the budget category selectable per user with
+      Supermercado as the default; this is already implemented (lazy resolve of the Supermercado
+      category, and PUT shopping/grocery-budget-link accepts any category_id).
 
 rollback: |
   All four migrations are purely additive — no existing column, constraint or row is modified.
