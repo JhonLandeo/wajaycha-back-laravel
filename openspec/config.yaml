@@ -32,8 +32,7 @@ context_sources:
     - ../docs/decisions/0005-opportunistic-hexagonal-refactor.md
     - ../docs/decisions/0006-whatsapp-cloud-api-dedicated-number.md
   repo_rules:
-    - .agents/rules/01-laravel-core.md
-    - .agents/rules/02-database-dba.md
+    - CLAUDE.md
 
 # Ranked ADD drivers from ../docs/quality/quality-attributes.md.
 # Highest-priority driver wins any tradeoff conflict.
@@ -60,6 +59,10 @@ subdomains:
     kind: supporting
   - name: Access
     kind: generic
+  - name: Financial Coaching
+    kind: core
+  - name: Shopping
+    kind: supporting
 
 strict_tdd: true # marker: .agents/skills/generador_tdd.md + Pest runner present
 
@@ -103,7 +106,7 @@ rules:
     - Keep modules logical. No physical folder restructuring.
     - ADR-0005 — opportunistic refactor only: refactor a module only when it is already being touched for another reason. No standalone refactoring changes.
     - Include a sequence diagram for any multi-hop flow (import -> job -> service -> AI -> persistence).
-    - Document new PostgreSQL objects (indexes, extensions, SQL functions) per .agents/rules/02-database-dba.md.
+    - Document new PostgreSQL objects (indexes, extensions, SQL functions) per CLAUDE.md.
   tasks:
     - Group by phase, use hierarchical numbering.
     - Every behavioral task pairs an RED test task with the implementation task (strict TDD).
@@ -111,7 +114,7 @@ rules:
     - Forecast the 400-line review budget explicitly.
   apply:
     guidelines:
-      - Follow .agents/rules/01-laravel-core.md and .agents/rules/02-database-dba.md.
+      - Follow CLAUDE.md.
       - Follow existing patterns in app/Actions, app/Services, app/Repositories.
       - Code, comments and artifacts in English; user-facing Spanish copy stays Spanish.
       - Never read or reference ../wajaycha-nest/ (abandoned, ADR-0001).

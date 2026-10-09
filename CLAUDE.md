@@ -42,9 +42,15 @@ always `id`; foreign keys `[singular_table]_id`. Booleans read as predicates:
 
 **Index and constraint prefixes:** `idx_[table]_[column]`, `unq_[table]_[column]`,
 `fk_[table]_[column]`. The first two are in real use (12 and 6 occurrences).
-**No migration uses `fk_`** — foreign keys currently take Laravel's generated
-names. Either follow the convention on new work or drop it from this file; it
-should not sit here describing something that is not happening.
+**`fk_` names a composite foreign key**, not a single-column one: four
+constraints already use it —
+`fk_transactions_detail_id`, `fk_transactions_category_id`,
+`fk_categorization_rules_detail_id`, `fk_categorization_rules_category_id`
+(`database/migrations/2026_08_11_100000_enforce_cross_user_ownership.php:111,117,128,134`).
+Single-column FKs still take Laravel's `foreignId()->constrained()` generated
+name — naming those explicitly would mean dropping and re-adding constraints
+the Schema builder writes for free. New composite FKs adopt `fk_`
+(design.md D9).
 
 **Money is `numeric(15,2)` or `decimal`. Never `float`, `real` or `double
 precision`.** No migration violates this today; keep it that way — floating point
