@@ -17,6 +17,8 @@ final class PriceSourceLocator
     private const ADAPTERS = [
         'inei' => IneiSource::class,
         'plazavea' => PlazaVeaSource::class,
+        'emmsa' => EmmsaSource::class,
+        'gmml' => GmmlSource::class,
     ];
 
     public function __construct(private readonly Container $container) {}

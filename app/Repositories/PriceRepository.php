@@ -185,4 +185,22 @@ final class PriceRepository implements PriceRepositoryContract
             ->where('source_ref', $sourceRef)
             ->exists();
     }
+
+    public function hasCompletedRunForDay(string $source, string $day): bool
+    {
+        return PriceIngestionRun::query()
+            ->where('source', $source)
+            ->whereIn('status', [PriceRunStatus::Success, PriceRunStatus::Partial])
+            ->where('details->day', $day)
+            ->exists();
+    }
+
+    public function hasObservationOn(int $productId, string $source, CarbonImmutable $periodStart): bool
+    {
+        return PriceObservation::query()
+            ->where('product_id', $productId)
+            ->where('source', $source)
+            ->where('period_start', $periodStart->toDateString())
+            ->exists();
+    }
 }

@@ -88,4 +88,13 @@ interface PriceRepositoryContract
 
     /** Whether the source already stored a row carrying this `source_ref`. */
     public function hasObservationWithRef(string $source, string $sourceRef): bool;
+
+    /**
+     * Whether the source has a `success` or `partial` run whose `details.day` is
+     * this date (Y-m-d): the day is covered, whatever the run wrote.
+     */
+    public function hasCompletedRunForDay(string $source, string $day): bool;
+
+    /** Whether the source already stored an observation of this product for this period start. */
+    public function hasObservationOn(int $productId, string $source, CarbonImmutable $periodStart): bool;
 }

@@ -85,6 +85,8 @@ return [
             'stale_days' => 4,
             'attribution' => null,
             'canary_min_rows' => 8,
+            // The old report endpoint: POST form, answers an HTML table.
+            'url' => 'https://old.emmsa.com.pe/emmsa_spv/app/reportes/ajax/rpt07_gettable_new_web.php',
         ],
 
         'gmml' => [
@@ -96,6 +98,9 @@ return [
             'stale_days' => 4,
             'attribution' => null,
             'canary_min_rows' => 5,
+            // The daily bulletin collection on gob.pe; month pages link one PDF per business day.
+            'base_url' => 'https://www.gob.pe',
+            'collection_path' => '/institucion/midagri/colecciones/335-reporte-de-ingreso-y-precios-en-el-gran-mercado-mayorista-de-lima',
         ],
 
     ],

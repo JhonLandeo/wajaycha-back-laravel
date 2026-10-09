@@ -287,3 +287,39 @@ it('knows whether a source already stored a reference', function () {
         ->and(priceRepository()->hasObservationWithRef('inei', '1'))->toBeFalse()
         ->and(priceRepository()->hasObservationWithRef('plazavea', '8596356'))->toBeFalse();
 });
+
+// ------------------------------------------------------ wholesale day cover
+
+it('knows a day is covered only by a success or partial run of that source for that day', function () {
+    foreach ([PriceRunStatus::Success, PriceRunStatus::Partial] as $status) {
+        PriceIngestionRun::query()->delete();
+        PriceIngestionRun::factory()->create(['source' => 'emmsa', 'status' => $status, 'details' => ['day' => '2026-10-07']]);
+
+        expect(priceRepository()->hasCompletedRunForDay('emmsa', '2026-10-07'))->toBeTrue();
+    }
+
+    PriceIngestionRun::query()->delete();
+    PriceIngestionRun::factory()->create(['source' => 'emmsa', 'status' => PriceRunStatus::Failed, 'details' => ['day' => '2026-10-07']]);
+    PriceIngestionRun::factory()->create(['source' => 'emmsa', 'status' => PriceRunStatus::Running, 'details' => ['day' => '2026-10-07']]);
+    PriceIngestionRun::factory()->create(['source' => 'emmsa', 'status' => PriceRunStatus::Success, 'details' => ['day' => '2026-10-06']]);
+    PriceIngestionRun::factory()->create(['source' => 'gmml', 'status' => PriceRunStatus::Success, 'details' => ['day' => '2026-10-07']]);
+    PriceIngestionRun::factory()->create(['source' => 'emmsa', 'status' => PriceRunStatus::Success, 'details' => null]);
+
+    expect(priceRepository()->hasCompletedRunForDay('emmsa', '2026-10-07'))->toBeFalse()
+        ->and(priceRepository()->hasCompletedRunForDay('emmsa', '2026-10-06'))->toBeTrue()
+        ->and(priceRepository()->hasCompletedRunForDay('gmml', '2026-10-07'))->toBeTrue();
+});
+
+it('knows whether a source already has an observation of a product for a day', function () {
+    $product = Product::factory()->create();
+    PriceObservation::factory()->wholesale()->create([
+        'product_id' => $product->id,
+        'period_start' => '2026-10-07',
+        'period_end' => '2026-10-07',
+    ]);
+
+    expect(priceRepository()->hasObservationOn($product->id, 'emmsa', CarbonImmutable::parse('2026-10-07')))->toBeTrue()
+        ->and(priceRepository()->hasObservationOn($product->id, 'emmsa', CarbonImmutable::parse('2026-10-06')))->toBeFalse()
+        ->and(priceRepository()->hasObservationOn($product->id, 'gmml', CarbonImmutable::parse('2026-10-07')))->toBeFalse()
+        ->and(priceRepository()->hasObservationOn($product->id + 1, 'emmsa', CarbonImmutable::parse('2026-10-07')))->toBeFalse();
+});
