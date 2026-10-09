@@ -12,8 +12,10 @@
  */
 
 use App\Models\Category;
+use App\Models\ConsumptionHabit;
 use App\Models\Detail;
 use App\Models\Import;
+use App\Models\PantryItem;
 use App\Models\ParetoClassification;
 use App\Models\Transaction;
 
@@ -286,4 +288,76 @@ it('el dueño puede listar las categorías de su clasificación pareto', functio
 
     $this->getJson("/api/pareto-classification/{$pareto->id}/categories", $headers)
         ->assertStatus(200);
+});
+
+// -------------------------------------------------------------- pantry items
+
+it('no permite actualizar el item de despensa de otro usuario', function () {
+    [$owner, $headers] = ownerAndIntruder();
+    $product = \App\Models\Product::factory()->create(['unit' => 'kg']);
+    $item = PantryItem::factory()->create([
+        'user_id' => $owner->id,
+        'product_id' => $product->id,
+        'unit' => 'kg',
+    ]);
+
+    $this->putJson("/api/shopping/pantry-items/{$item->id}", [
+        'product_id' => $product->id,
+        'quantity' => 99,
+        'unit' => 'kg',
+        'acquisition_source' => 'purchased',
+    ], $headers)->assertStatus(404);
+
+    $this->assertDatabaseHas('pantry_items', ['id' => $item->id, 'quantity' => $item->quantity]);
+});
+
+it('no permite eliminar el item de despensa de otro usuario', function () {
+    [$owner, $headers] = ownerAndIntruder();
+    $item = PantryItem::factory()->create(['user_id' => $owner->id]);
+
+    $this->deleteJson("/api/shopping/pantry-items/{$item->id}", [], $headers)->assertStatus(404);
+
+    $this->assertDatabaseHas('pantry_items', ['id' => $item->id]);
+});
+
+// ---------------------------------------------------------- consumption habits
+
+it('no permite actualizar el habito de consumo de otro usuario', function () {
+    [$owner, $headers] = ownerAndIntruder();
+    $product = \App\Models\Product::factory()->create(['unit' => 'kg']);
+    $habit = ConsumptionHabit::factory()->create([
+        'user_id' => $owner->id,
+        'product_id' => $product->id,
+        'unit' => 'kg',
+    ]);
+
+    $this->putJson("/api/shopping/consumption-habits/{$habit->id}", [
+        'product_id' => $product->id,
+        'weekly_quantity' => 99,
+        'unit' => 'kg',
+    ], $headers)->assertStatus(404);
+
+    $this->assertDatabaseHas('consumption_habits', ['id' => $habit->id, 'weekly_quantity' => $habit->weekly_quantity]);
+});
+
+it('no permite eliminar el habito de consumo de otro usuario', function () {
+    [$owner, $headers] = ownerAndIntruder();
+    $habit = ConsumptionHabit::factory()->create(['user_id' => $owner->id]);
+
+    $this->deleteJson("/api/shopping/consumption-habits/{$habit->id}", [], $headers)->assertStatus(404);
+
+    $this->assertDatabaseHas('consumption_habits', ['id' => $habit->id]);
+});
+
+// ------------------------------------------------------ grocery budget link
+
+it('no permite fijar la categoria de otro usuario en el techo de compras', function () {
+    [$owner, $headers] = ownerAndIntruder();
+    $foreignCategory = Category::factory()->create(['user_id' => $owner->id]);
+
+    $this->putJson('/api/shopping/grocery-budget-link', [
+        'category_id' => $foreignCategory->id,
+    ], $headers)->assertStatus(422);
+
+    $this->assertDatabaseMissing('grocery_budget_links', ['category_id' => $foreignCategory->id]);
 });

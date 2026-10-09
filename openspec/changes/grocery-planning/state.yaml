@@ -1,0 +1,634 @@
+schema: spec-driven
+change: grocery-planning
+title: Weekly grocery planning
+created: 2026-09-26
+artifact_store: openspec
+owning_subdomain: Shopping # new logical subdomain, not yet registered in config.yaml
+also_touches: [Categorization, Financial Analysis]
+
+phases:
+  explore:
+    status: complete
+    artifact: exploration.md
+    note: |
+      The explore phase agent has no file-write tool, so it saved to Engram only
+      (observation 308, topic key `sdd/grocery-planning/explore`). The orchestrator wrote
+      this file back and, while doing so, verified the phase's load-bearing claims against
+      the code: `expenseByCategoryBetween` exists as described, `App\Enums\BudgetPeriod`
+      exists, and the `FinancialEntity::BCP_ID` seeded-id caveat reads as quoted.
+      One claim was CORRECTED — `category_pareto_assignments` uses a plain unique
+      `category_id` FK with no `user_id`, not the composite `(id, user_id)` pattern. Its
+      shape is the precedent to copy; its FK is not.
+  propose:
+    status: complete
+    artifact: proposal.md
+    depends_on: [explore]
+    note: |
+      BOUND: category identification is lazy-resolve-then-pin. Resolve `🛒 Supermercado` by
+      name once on first use, persist the `category_id` in a new per-user
+      `grocery_budget_links` table, never consult the name again. The seed-time alternative
+      was rejected because it needs a backfill migration for already-seeded users (the owner
+      is one) while covering no case lazy resolution misses.
+
+      Two sub-cases bound with it:
+      - No link yet, or the name no longer matches: the list still computes; the ceiling is
+        returned ABSENT, never zero. The silent zero is the bug F3 exists to prevent.
+      - Deleting the pinned category: the pin's composite FK carries ON DELETE CASCADE, so the
+        pin dies with the category and the capability returns to the no-link state. RESTRICT
+        (the default, and what enforce_cross_user_ownership uses for transactions) would make
+        an unrelated SPA delete fail with a constraint error the UI cannot explain. Verified:
+        `App\Models\Category` does NOT use SoftDeletes, so the delete is physical.
+
+      The consumption model was already CLOSED by the owner on 2026-09-26 (explicit declared
+      weekly consumption) and the proposal states the manual setup cost plainly rather than
+      softening it: roughly 20-40 staples entered once, maintained as habits change.
+
+      Table count is FOUR, not three: the three domain tables plus `grocery_budget_links`,
+      which copies the SHAPE of `category_pareto_assignments` and not its FK.
+  spec:
+    status: complete
+    artifact: specs/shopping/spec.md
+    depends_on: [propose]
+    note: |
+      New capability `shopping`: 9 requirements, 19 Given/When/Then scenarios, each traced to
+      a ranked quality attribute as config.yaml requires. Scenarios are tabular rather than
+      narrative bullets because the phase skill's 650-word budget conflicts with the
+      narrative style of the existing ingestion/coaching specs; coverage was preserved.
+
+      AMENDED by the orchestrator after tasks flagged a contradiction. The original
+      "Global product catalogue" requirement said a user-submitted product was "created
+      global, visible to all". Spec ran in parallel with design and could not see D3, which
+      made products.user_id nullable so a user's own addition stays private. The requirement
+      is now "Seeded global catalogue with private extension", with a third scenario proving
+      user B cannot see user A's addition. Design D3 is binding; the spec now matches it.
+  design:
+    status: complete
+    artifact: design.md
+    depends_on: [propose]
+    note: |
+      Nine binding decisions (D1-D9). The load-bearing ones:
+      - D1 `ShoppingPlanService` IS the pure decider; no separate builder, because a
+        service-plus-builder pair would leave the "one owning Service" of ADR-0005 naming a
+        class that decides nothing.
+      - D2 two contracts; the composition of CategoryRepositoryContract and
+        expenseByCategoryBetween() lives inside GroceryBudgetRepository, not the Action.
+      - D3 `products.user_id` NULLABLE — global catalogue plus private extension. This
+        overrides the proposal's pure-global table, which could not satisfy q3 without
+        leaking one user's product name into every other user's picker. The orchestrator
+        independently reached the same conclusion while reviewing the spec.
+      - D5 the ceiling has THREE states (unlinked / unbudgeted / set), because a pinned
+        category with a zero budget is not the same fact as no link at all.
+      - D6 the pin is written on a GET; unq_grocery_budget_links_user_id is the concurrency
+        arbiter. Named explicitly as a side effect on a read so reviewers see it.
+      - D7 no API Resources layer. Verified: nothing under app/ imports JsonResource.
+      - D9 adopt the `fk_` prefix.
+      q6 is guaranteed STRUCTURALLY, not by discipline: plan() derives lines from
+      (habits, pantry, week) and the ceiling from (ceiling, week), sharing no term, so an
+      exceeded ceiling cannot reorder or hide a line. Likewise the pure service never reads
+      acquisition_source, so no path can make a gift touch a Transaction.
+  tasks:
+    status: complete
+    artifact: tasks.md
+    depends_on: [spec, design]
+    note: |
+      Re-forecast against FIVE backend-only slices (owner decided frontend is deferred —
+      see frontend_scope below), not design's six-slice ~1,940 or the proposal's five-slice
+      ~1,490 (which counted no frontend at all). Concrete task list totals ≈1,540 authored
+      lines. Every individual slice estimate (380/320/240/300/300) stays at or under ~380,
+      but slice 1 is close enough to 400, and the aggregate large enough, that the forecast
+      is kept at High risk with chained/stacked commits rather than downgraded on estimate
+      alone. Flagged one spec/design tension: specs/shopping/spec.md's "created global,
+      visible to all" scenario for user-submitted products predated design D3. Tasks
+      correctly followed D3 (binding) and recorded the gap at task 1.9.
+      RESOLVED by the orchestrator: the spec requirement was amended to match D3 before
+      apply, so task 1.9 now traces to a spec that agrees with it. No task change needed.
+  apply:
+    status: complete # all five slices landed, definition-of-done checklist satisfied
+    depends_on: [tasks]
+    note: |
+      Slice 1 landed: `products` table (M1), `App\Enums\Unit`, `Product` model +
+      factory, `config/shopping.php` (~40-item Peruvian staples catalogue),
+      `ProductCatalogueSeeder` (idempotent upsert on slug), `ShoppingRepositoryContract`
+      + `ShoppingRepository`, `StoreProductRequest`, `ProductCatalogueController`
+      (index/store), two routes (`GET`/`POST shopping/products`) inside the
+      `JwtMiddleware` group, AppServiceProvider binding. Strict TDD followed
+      throughout — every behavioural task's test was written and run RED before its
+      GREEN implementation (see the apply-progress artifact for the full evidence
+      table).
+
+      11 tests, 45 assertions, all green: `ShoppingSchemaTest` (3),
+      `ProductCatalogueSeederTest` (2), `ProductCatalogueEndpointTest` (6).
+
+      Also landed: `openspec/config.yaml` Shopping + Financial Coaching subdomain
+      entries and the three stale `.agents/rules/*` path corrections; the
+      `CLAUDE.md:45` `fk_` correction (D9); `docs/domain/context-map.md` Shopping
+      node + Relaciones row (Spanish, separate workspace repo); four new
+      `docs/domain/ubiquitous-language.md` terms (Spanish, same repo).
+
+      Task 1.9's spec/design wording gap is RESOLVED — the orchestrator amended
+      spec.md before this apply batch, so no owner action is needed there.
+
+      Task 1.16 (data-dictionary regeneration): resolved by the orchestrator in a
+      later session, diagnosing the earlier block as a wrong-database-lineage
+      problem, not a staleness problem (`wajaycha_audit` on the docker instance
+      simply never had `products` — the real target is native PostgreSQL,
+      `127.0.0.1:5432/wajaycha_bk`). Regenerated then with the escape-hatch
+      `MCP_DATABASE_URI` override; result was additive. That regeneration was
+      never committed to the separate `docs/` git repository, so it reappears as
+      part of slice 2's uncommitted diff below.
+
+      Slice 2 landed: `pantry_items` table (M2, `restrictOnDelete` on
+      `product_id`, composite indexes `idx_pantry_items_user_product` /
+      `idx_pantry_items_user_expires`), `App\Enums\AcquisitionSource`,
+      `PantryItem` model + factory, `ShoppingRepositoryContract` /
+      `ShoppingRepository` extended with `createPantryItem`/`listPantryItemsFor`/
+      `findPantryItem`/`updatePantryItem`/`deletePantryItem`,
+      `Store`/`UpdatePantryItemRequest` (composed `Rule::exists` visibility +
+      unit-match closure), `Store`/`UpdatePantryItemAction`,
+      `PantryItemController` (index/store/update/destroy), four routes inside the
+      `JwtMiddleware` group. D8 (no route model binding, resolve by
+      `(id, userId)`, 404 on miss) implemented deliberately in two steps: 2.7's
+      GREEN used an unscoped lookup on purpose so 2.8's `CrossUserAccessTest`
+      extension would fail for the real reason before 2.9 fixed it — confirmed
+      genuinely RED (200, not 404) before applying the fix.
+
+      11 new tests, 25 assertions, all green: `ShoppingSchemaTest` (+3),
+      `PantryItemEndpointTest` (6, new file), `CrossUserAccessTest` (+2).
+
+      Full regression after slice 2: `php artisan test` — 920 passed, 2328
+      assertions, 0 failed (up from the slice-1 baseline of 909/2285, exactly
+      +11/+43 — no drift, no regression).
+      `./vendor/bin/phpstan analyse` (Larastan level 6) clean, no baseline growth.
+      `./vendor/bin/pint --test` clean on every slice-1 and slice-2 file (15
+      files individually verified); the many other findings pint reports are
+      pre-existing baseline noise across the rest of the app, untouched by this
+      change.
+
+      Measured slice 2 size (`git diff --numstat` on tracked files +
+      reconstructed-original diff on untracked-but-pre-existing files + `wc -l`
+      on wholly new files): ≈690 lines, against a ~320-line forecast (2.16x) —
+      worse than slice 1's 1.8x overrun. New files alone: 523 lines across 10
+      files. Extensions to slice-1 files: `ShoppingRepositoryContract.php` +30,
+      `ShoppingRepository.php` +35, `ShoppingSchemaTest.php` +63,
+      `CrossUserAccessTest.php` +31, `routes/api.php` +8 (mixed with 2
+      leftover slice-1 lines, since neither slice has been committed yet).
+      This exceeds the 400-line single-PR budget on its own, not just against
+      its forecast — flagged for the owner/orchestrator rather than silently
+      absorbed, same treatment slice 1 got.
+
+      Slice 3 landed: `consumption_habits` table (M3, `restrictOnDelete` on
+      `product_id`, unique guard `unq_consumption_habits_user_id_product_id`,
+      index `idx_consumption_habits_user_active`), `ConsumptionHabit` model +
+      factory, `ShoppingRepositoryContract` / `ShoppingRepository` extended
+      with `createConsumptionHabit` (upserts by `(user_id, product_id)` via
+      `updateOrCreate` — "declaring the same product twice updates, not
+      duplicates"), `activeHabitsFor`, `findConsumptionHabit`,
+      `updateConsumptionHabit`, `deleteConsumptionHabit`,
+      `Store`/`UpdateConsumptionHabitRequest` (same composed `Rule::exists`
+      visibility + unit-match closure slice 2 established, reused verbatim
+      with `weekly_quantity` in place of `quantity`), `Store`/
+      `UpdateConsumptionHabitAction`, `ConsumptionHabitController`
+      (index/store/update/destroy), four routes inside the `JwtMiddleware`
+      group. D8 implemented directly (scoped `findConsumptionHabit(id,
+      userId)` from the start, not staged unscoped-then-scoped like slice 2);
+      to still honour "make sure the test is genuinely RED", the scoped
+      lookup was temporarily reverted to an unscoped `find($id)` after the
+      full GREEN batch landed, the two new `CrossUserAccessTest` PUT/DELETE
+      cases were re-run and confirmed to fail with 200 (not 404) against
+      that unscoped version, then the D8-scoped lookup was restored and the
+      suite re-confirmed green.
+
+      12 new tests, 35 assertions, all green: `ShoppingSchemaTest` (+3),
+      `ConsumptionHabitEndpointTest` (7, new file), `CrossUserAccessTest`
+      (+2).
+
+      Full regression after slice 3: `php -d memory_limit=1G vendor/bin/pest`
+      — 932 passed, 2363 assertions, 0 failed (up from the slice-2 baseline
+      of 920/2328, exactly +12/+35 — no drift, no regression).
+      `./vendor/bin/phpstan analyse --memory-limit=1G` (Larastan level 6)
+      clean, no baseline growth (210/210 files, 0 errors).
+      `./vendor/bin/pint --test` clean on every one of the 14 files this
+      slice touched, individually verified; the full-project run's many
+      other findings are pre-existing baseline noise across the rest of the
+      app (unrelated migrations, config, seeders, tests), untouched by this
+      change.
+
+      Measured slice 3 size: wholly-new files (migration, model, factory,
+      two FormRequests, two Actions, controller, endpoint test) = 464 lines
+      (`wc -l`); extensions to shared files, isolated from slices 1-2's
+      content already in those same untracked files =
+      `ShoppingRepositoryContract.php` +33, `ShoppingRepository.php` +45,
+      `ShoppingSchemaTest.php` +34, `CrossUserAccessTest.php` +29,
+      `routes/api.php` +13 (tracked `git diff --numstat`, mixed with slices
+      1-2's leftover lines since neither has been committed). Total ≈618
+      lines against a ~240-line forecast (2.58x) — the worst overrun of the
+      three slices landed so far (1.8x, 2.16x, 2.58x), though still within
+      this attempt's authorized 700-line ceiling.
+
+      Data dictionary regenerated (task 3.7): additive diff, +81/-2, adding
+      `consumption_habits` (this slice) plus `pantry_items` and `products`
+      again (slices 1-2's regenerations were never committed to the separate
+      `docs/` git repository, so they resurface here too — same pattern
+      slice 2 already recorded). No table dropped. Left uncommitted — `docs/`
+      is a separate repository outside this attempt's scope.
+
+      Slice 4 landed: `grocery_budget_links` table (M4, composite FK
+      `fk_grocery_budget_links_category_id (category_id, user_id) REFERENCES
+      categories (id, user_id) ON DELETE CASCADE` added via raw SQL — the
+      Schema builder cannot express it — with `ON DELETE CASCADE` written
+      explicitly, since the precedent migration's own composite FKs have no
+      `ON DELETE` clause and default to `NO ACTION`), unique arbiter
+      `unq_grocery_budget_links_user_id`, index
+      `idx_grocery_budget_links_category_user`; `GroceryBudgetLink` model +
+      factory; DTOs `GroceryCategoryMatch` / `GroceryCeilingInput`;
+      `GroceryBudgetRepositoryContract` / `GroceryBudgetRepository`
+      (`findLink`, `findCategoryByExactName` — exact string equality over
+      `CategoryRepositoryContract::getAllForUser()`, `pin` — a single
+      `Model::upsert()` on `user_id` serving both the auto-resolve race and
+      the manual override, `ceilingFor` composing `CategoryRepositoryContract
+      ::findById()` and the existing `TransactionRepositoryContract
+      ::expenseByCategoryBetween()` — no new method on either foreign
+      contract, no raw query against `categories` or `transactions`);
+      `ResolveGroceryCategoryAction` (lazy-resolve-then-pin, D6);
+      `UpdateGroceryBudgetLinkRequest`; `GroceryBudgetLinkController`
+      (`show`/`update`); two routes (`GET`/`PUT shopping/grocery-budget-link`)
+      inside the `JwtMiddleware` group; `AppServiceProvider` binding.
+
+      Deviation from tasks.md 4.9's literal signature: `ceilingFor(int
+      $userId, CarbonImmutable $asOf)`, not `PlanningWeek $week` —
+      `PlanningWeek` is slice 5's own DTO and slice 4 was scoped to depend on
+      slice 1 only. `$asOf` is the only field the window computation
+      (design.md D5) actually needs; forward-compatible with `$week->asOf`
+      once slice 5 lands.
+
+      Discovery during 4.6: `User::factory()->create()` already seeds a leaf
+      `Category` named exactly `config('shopping.grocery_category_name')`
+      via `UserObserver` -> `SeedDefaultWorkspaceAction`
+      (`config/onboarding.php:69`). Most real users already have the match
+      before ever touching this endpoint — the realistic case the whole
+      lazy-resolve design targets. Tests were written against this seeded
+      category rather than a manually-created duplicate, which the first
+      draft got wrong (ambiguous match, caught before GREEN).
+
+      17 new tests, 57 assertions, all green: `ShoppingSchemaTest` (+3),
+      `GroceryBudgetLinkCascadeTest` (2, new file),
+      `GroceryCategoryResolutionTest` (4, new file), `GroceryCeilingReadTest`
+      (4, new file), `GroceryBudgetLinkEndpointTest` (3, new file),
+      `CrossUserAccessTest` (+1).
+
+      Full regression after slice 4: `php -d memory_limit=1G vendor/bin/pest`
+      — 949 passed, 2420 assertions, 0 failed (up from the slice-3 baseline
+      of 932/2363, exactly +17/+57 — no drift, no regression).
+      `./vendor/bin/phpstan analyse --memory-limit=1G` (Larastan level 6):
+      one error found and fixed (a `Collection::first()` closure typed
+      `Category` where the collection's declared element type is the base
+      `Model`; changed to an `instanceof` check inside a `Model`-typed
+      closure); re-run clean, 218/218 files, 0 errors, no baseline growth.
+      `./vendor/bin/pint --test` clean on all 18 slice-4 files (new +
+      extended), individually verified.
+
+      Measured slice 4 size: wholly-new files (migration, model, factory,
+      two DTOs, contract, repository, action, FormRequest, controller, four
+      test files) = 931 lines (`wc -l`); additions to shared files, isolated
+      from slices 1-3's pre-existing content in those same untracked files =
+      `ShoppingSchemaTest.php` +39, `CrossUserAccessTest.php` +12,
+      `AppServiceProvider.php` +5, `routes/api.php` +2. Total 989 lines
+      against a ~300-line forecast (3.3x) — the worst overrun of the four
+      slices landed so far (1.8x, 2.16x, 2.58x, 3.3x), and the first to
+      exceed this attempt's own authorized `--max-changed-lines 800`
+      ceiling. Flagged for the owner/orchestrator rather than silently
+      absorbed or trimmed by weakening a test.
+
+      Data dictionary regenerated (task 4.15): additive diff, +106/-2 (the
+      same two pre-existing/unrelated lines slices 2-3 already recorded —
+      the generation timestamp and `users.password` nullability). Adds
+      `grocery_budget_links`. No table dropped. Left uncommitted — `docs/`
+      is a separate repository outside this attempt's scope.
+
+      Slice 5 landed (this session): `app/DTOs/Shopping/PlanningWeek.php`
+      (Monday-to-Sunday in `America/Lima`, `forDate()` named constructor);
+      the remaining plain DTOs — `ConsumptionHabitLine`, `PantryStock`,
+      `ShoppingListLine`, `CoveredLine`, `GroceryCeilingReading`,
+      `WeeklyShoppingPlan` (each with `toArray()`, no `App\Models` import);
+      `app/Services/Shopping/ShoppingPlanService.php` — the pure decider
+      (D1): habit-minus-pantry netting, the expiry cut at `asOf`, unit
+      mismatch (including `null`) never converted, the `lines`/`covered`
+      split, the three ceiling states, and the window table (`MONTHLY` =
+      calendar month, `YEARLY` = calendar year, never a twelfth) —
+      re-derived independently of `GroceryBudgetRepository::windowFor()`
+      since the pure service may depend on no repository; `App\Services\
+      Shopping` added to `BoundariesTest.php`'s `toUseStrictTypes()` list,
+      all 8 architecture rules still pass unchanged;
+      `ShoppingRepositoryContract`/`ShoppingRepository` extended with two
+      NEW methods, `activeHabitLinesFor()` and `pantryStockFor()` (see the
+      task 5.8 deviation note in `tasks.md` — `activeHabitsFor()` itself
+      was deliberately left unchanged, still serving the CRUD read);
+      `app/Actions/Shopping/BuildWeeklyPlanAction.php` (builds
+      `PlanningWeek::forDate(Carbon::now())`, calls both repositories, the
+      lazy-resolve action, and `ShoppingPlanService::plan()`); a
+      `@property-read Product|null $product` docblock added to
+      `ConsumptionHabit` (Larastan needed it to type the new mapping —
+      `PantryItem` needed no equivalent addition since its own mapping
+      never dereferences `->product`); `WeeklyPlanController@show` (writes
+      the lazy-resolve pin as a side effect, commented at the call site
+      per D6); one route (`GET shopping/weekly-plan`).
+
+      20 new Unit tests (56 assertions) + 4 new Feature tests (18
+      assertions) = 24 new tests, 74 assertions, all green:
+      `PlanningWeekTest` (3, new file, no database), `ShoppingPlanServiceTest`
+      (17, new file, no database — the `ParetoReportBuilderTest` mould),
+      `WeeklyPlanEndpointTest` (4, new file).
+
+      Full regression: `php -d memory_limit=1G vendor/bin/pest` — **973
+      passed, 2494 assertions, 0 failed** (up from the slice-4 baseline of
+      949/2420, exactly +24/+74 — no drift, no regression).
+      `./vendor/bin/phpstan analyse --memory-limit=1G` (Larastan level 6):
+      one error found and fixed (`ConsumptionHabit::$product` had no known
+      type; added the `@property-read` docblock, the
+      `Import.php`/`Transaction.php` precedent); re-run clean, 228/228
+      files, 0 errors, no baseline growth.
+      `./vendor/bin/pint --test`: one style issue auto-fixed
+      (`no_blank_lines_after_phpdoc` in the new
+      `ShoppingPlanServiceTest.php`); all 18 slice-5 files (new + shared)
+      individually clean after the fix; whole-project run shows only
+      pre-existing unrelated findings across files this change never
+      touched — same pattern slices 2-3 already recorded.
+      `CrossUserOwnershipTest.php` and `CrossUserAccessTest.php` re-run
+      explicitly and pass unchanged.
+
+      Genuine JSON-encoding discovery, not a service bug: PHP's
+      `json_encode` drops the fractional zero from a whole-number float
+      (`2.0` encodes as `2`), so `TestResponse::json()` decodes it back as
+      an int. Two `WeeklyPlanEndpointTest` assertions on whole-number
+      float fields (`needed_quantity`, `ceiling.overspend`) needed a
+      `(float)` cast before `->toBe(2.0)` — the same pattern the codebase
+      already uses elsewhere for DB-read floats (e.g.
+      `ConsumptionHabitEndpointTest.php`'s `(float) $habit->weekly_quantity`),
+      just not previously exercised through an HTTP JSON round-trip in
+      this suite.
+
+      Measured slice 5 size: wholly-new files (7 DTOs, service, action,
+      controller, 3 test files) = 957 lines (`wc -l`); additions,
+      isolated from slices 1-4's pre-existing content in the same
+      untracked files (exact deltas, not the whole uncommitted diff) =
+      `ShoppingRepositoryContract.php` +31, `ShoppingRepository.php` +37,
+      `ConsumptionHabit.php` +3, `routes/api.php` +2,
+      `BoundariesTest.php` 1 line changed (0 net). Total ≈1,031 lines
+      against a ~300-line forecast (3.44x) — the worst overrun of the
+      five slices (1.8x, 2.16x, 2.58x, 3.3x, 3.44x), and it exceeds this
+      attempt's own authorized `--max-changed-lines 1000` ceiling by
+      ~31 lines (~3%). Flagged plainly rather than trimmed to hit the
+      number: the bulk is the mandatory strict-TDD unit-test coverage this
+      slice's own brief asked for (7 distinct rule groups x 2+ triangulated
+      cases each) plus 7 DTOs that each need a `toArray()` (D7: no API
+      Resources layer), not speculative scope.
+
+      Data dictionary regeneration (task 5.9) confirmed a NO-OP for this
+      slice's own content — no new migration ran. Re-discovered the same
+      wrong-database-lineage trap task 1.16 already diagnosed and fixed:
+      the plain `./scripts/generate-data-dictionary.sh` run (no override)
+      read `wajaycha_audit`, not `wajaycha_bk`, and would have DROPPED
+      slices 1-4's uncommitted tables from the file (106 lines lost). That
+      bad output was reverted via `git checkout --` before being
+      regenerated correctly with the `MCP_DATABASE_URI` override built
+      from Laravel's own resolved config (no credential printed), which
+      reproduced the exact +106/-2 diff slice 4 already recorded. Net
+      effect on the file: none beyond the generation timestamp. OPEN FOR
+      THE OWNER, unchanged from task 1.16: `.env.mcp.local` still points
+      the generator at `wajaycha_audit` by default.
+
+      Still uncommitted: no commit exists for slices 1-5 (not explicitly
+      requested in any batch) — all five live together in the working
+      tree, which is why several shared files (`routes/api.php`,
+      `ShoppingRepositoryContract.php`, `ShoppingRepository.php`,
+      `ShoppingSchemaTest.php`, `CrossUserAccessTest.php`,
+      `AppServiceProvider.php`, `ConsumptionHabit.php`,
+      `BoundariesTest.php`) mix contributions from multiple slices.
+
+      Definition-of-done checklist: all seven items satisfied. One count
+      note — this file's own header says "19 Given/When/Then scenarios"
+      but a direct count of `specs/shopping/spec.md`'s 9 requirement
+      tables totals 18 rows; every one of the 18 traces to a passing test
+      across slices 1-5. Left for `sdd-verify`'s own formal trace to
+      confirm the exact count rather than asserted here with more
+      confidence than a spot-check earns.
+
+      Runtime attempt: acquired `gp-slice3-actor-001`, settled
+      `gp-slice3-settle-001`, outcome `passed`, final state `complete`.
+      Slice 4: acquired `gp-slice4-actor-001`, settled
+      `gp-slice4-settle-001`. Slice 5: acquired `gp-slice5-actor-001`
+      (state `proceed`, parent-issued token, no blind acquire), settled
+      `gp-slice5-settle-001` — see the apply-progress artifact for the
+      returned state.
+    engram_topic_keys:
+      apply-progress: sdd/grocery-planning/apply-progress
+  verify:
+    status: pending
+    depends_on: [apply]
+  archive:
+    status: pending
+    depends_on: [verify]
+
+next_recommended: [verify] # all five slices landed; definition-of-done checklist complete
+
+execution_mode: interactive
+delivery_strategy: ask-on-risk
+chain_strategy: stacked-to-main
+review_budget_lines: 400
+delivery_note: |
+  Separate commits on one branch, not a branch per slice. Carried forward from the
+  financial-coaching-clarify change, where the owner gave explicit feedback that many
+  chained branches are expensive to review and to maintain. Not re-asked here.
+
+review_workload_forecast: |
+  Re-forecast by sdd-tasks against the concrete task list in tasks.md.
+  400-line budget risk: High. No individual slice literally exceeds 400 lines by estimate
+  (380/320/240/300/300 ≈ 1,540 total), but slice 1 sits within ~5% of the ceiling once its
+  migration, model, factory, enum, seeder, ~40-item catalogue config, two endpoints, two
+  FormRequests and three doc/config edits are all counted with their tests, and estimates
+  routinely run under actual authored lines. Kept at High rather than downgraded on the
+  estimate alone.
+  Decision needed before apply: Yes, under ask-on-risk.
+  Chained PRs recommended: Yes — five stacked commits on one branch (Commit 1 -> Commit 5),
+  following the precedent the owner set on financial-coaching-clarify, not a branch per slice.
+  Chain strategy stacked-to-main was already cached at session start and is not re-asked here.
+  Per-slice estimates: 1) products+Unit+registration ~380, 2) pantry_items+CRUD ~320,
+  3) consumption_habits+CRUD ~240, 4) grocery_budget_links+pin+ceiling ~300,
+  5) ShoppingPlanService+endpoint ~300.
+
+frontend_scope:
+  decision: backend-only
+  decided_by: owner, 2026-09-26
+  rationale: |
+    Phase 1 ships the API only. The proposal's affected-areas table listed no
+    wajaycha-front-vue path; the frontend brief was added by the orchestrator when
+    commissioning design, not by the proposal. Design found the frontend had never been
+    counted in any estimate and would have added a sixth slice (~380 lines: one interfaces
+    file, one repository, three composables, three views, six components and Vitest tests),
+    taking the change to ~1,940 lines.
+    The frontend design is written up in design.md and stays there for a later change; it
+    costs no review budget now.
+  deferred_to: a later change, once the API has been exercised and the list shape is settled.
+
+slices:
+  - id: 1
+    title: products catalogue + Unit enum + subdomain registration and doc amendments
+    kind: schema + docs
+    estimated_lines: 380
+    note: |
+      Grew from 300 after design D3 made products.user_id nullable and added
+      POST /shopping/products. Also carries the three stale `.agents/rules/*` path fixes in
+      openspec/config.yaml (lines 34-36, 106, 114) and the CLAUDE.md:45 correction — that
+      line claims "No migration uses `fk_`", which is false: constraints at lines 111, 117,
+      128 and 134 of 2026_08_11_100000_enforce_cross_user_ownership.php use it. Verified by
+      the orchestrator.
+  - id: 2
+    title: pantry_items + AcquisitionSource enum + CRUD
+    kind: schema + behaviour
+    estimated_lines: 320
+    actual_lines: ~690 # measured; see phases.apply.note for the per-file breakdown
+  - id: 3
+    title: consumption_habits + CRUD
+    kind: schema + behaviour
+    estimated_lines: 240
+    actual_lines: ~618 # measured; see phases.apply.note for the per-file breakdown
+  - id: 4
+    title: grocery_budget_links + lazy-resolve-then-pin + composed spend/ceiling read
+    kind: schema + behaviour
+    estimated_lines: 300
+    actual_lines: 989 # measured; see phases.apply.note for the per-file breakdown. Exceeds the attempt's 800-line ceiling.
+    note: |
+      Independently valuable and verifiable, but NOT independently user-visible — it ships
+      only the link endpoints.
+  - id: 5
+    title: pure weekly-list builder + owning ShoppingPlanService + endpoint
+    kind: behaviour
+    estimated_lines: 300
+    actual_lines: 1031 # measured; see phases.apply.note for the per-file breakdown. Exceeds the attempt's 1000-line ceiling by ~31 lines.
+
+capabilities:
+  new:
+    - name: shopping
+      summary: Product catalogue, pantry state, declared consumption habits, the computed weekly list, and the grocery budget link.
+  modified: [] # Categorization and Financial Analysis are consumed through existing contracts; no requirement of theirs changes.
+
+quality_drivers: [QA-4, QA-3, QA-1, QA-7]
+quality_notes: |
+  QA-4 safety is satisfied by construction: no code path writes a Transaction.
+  QA-3 integrity is what the pin protects — name-matching fails silently and an absent
+  ceiling must never be reported as zero.
+  QA-1 friction is what this change COSTS: the habits must be hand-declared once.
+  QA-7 modifiability is why `products` stays free of seasonality and price columns, so
+  phases 2 and 3 land as purely additive migrations.
+
+engram_topic_keys:
+  explore: sdd/grocery-planning/explore
+  propose: sdd/grocery-planning/proposal
+  spec: sdd/grocery-planning/spec
+  design: sdd/grocery-planning/design
+  tasks: sdd/grocery-planning/tasks
+  apply-progress: sdd/grocery-planning/apply-progress
+
+scope:
+  decided: |
+    One-way, read-only relationship with Wajaycha. Wajaycha feeds the plan; this capability
+    never writes a Transaction back. Owner decision, 2026-09-26.
+  phase_1:
+    - canonical product catalogue (global reference table, no user_id)
+    - per-user pantry with acquisition_source enum, quantity, unit and nullable expiry
+    - per-user declared consumption habits
+    - weekly shopping list computed on read, NOT persisted
+    - grocery spend ceiling read from the pinned category's monthly_budget
+    - grocery_budget_links — per-user pin of the grocery category, composite (category_id, user_id) FK with ON DELETE CASCADE
+
+out_of_scope:
+  - id: seasonality
+    summary: Seasonality windows per product.
+    disposition: phase 2. MIDAGRI/SIEA publishes a machine-readable national harvest calendar as JSON (157 crops, monthly harvest percentages), so this is curated data rather than an integration.
+  - id: live-prices
+    summary: Same-week price data.
+    disposition: phase 3. A genuinely new external-integration class — no scraping or non-AI outbound HTTP exists in app/ today. Deferred because it is the only piece whose contract can vanish without notice, not because it is expensive.
+  - id: write-back
+    summary: Turning a plan into a Transaction.
+    disposition: excluded by the owner's one-way decision.
+  - id: receipt-line-items
+    summary: Extracting basket lines from receipt photographs.
+    disposition: excluded. Would require amending the normative Detail-is-not-a-line-item rule.
+  - id: unit-conversion
+    summary: Converting between kg, atado, paquete and unidad.
+    disposition: later change, behind the same Unit enum. Phase 1 pins one canonical unit per product and treats a mismatch as a validation error.
+  - id: non-food
+    summary: Cleaning supplies and other non-food household goods.
+    disposition: out of a food-only phase 1; do not hardcode food-only in a way that blocks broadening later.
+
+risks:
+  - RESOLVED by propose — category identification is bound to lazy-resolve-then-pin with an absent (never zero) ceiling before a link exists.
+  - Manual setup is unavoidable and certain, not a risk to mitigate away — roughly 20-40 staples entered once. A seeded products catalogue reduces typing, not the decision.
+  - A stale consumption habit silently corrupts the list. Mitigated by showing why each line exists (habit quantity minus pantry quantity) so a wrong line is legible at its source.
+  - The pantry is only as good as the user's logging discipline. Out of reach in phase 1; nothing enforces it.
+  - docs/domain/ubiquitous-language.md needs new terms for product, pantry item and consumption habit, each stating what it is NOT. That file is Spanish by owner decision while openspec artifacts are English.
+  - openspec/config.yaml needs a new subdomain entry; note it does not currently list Financial Coaching either, a pre-existing drift not to repeat.
+  - The 400-line review budget is exceeded by every slice. Five slices is a long chain.
+  - "GET /shopping/weekly-plan may WRITE the pin on first use. Idempotent and guarded by unq_grocery_budget_links_user_id, but it is a side effect on a read; name it in the PR so reviewers see it rather than discover it."
+  - "Mid-week expiry under-buys. An item expiring Thursday still counts as available when the week's list is computed on Monday, so the list says it is covered even though it will have expired before the weekend shop. This follows directly from the owner's q4 rule, which reads 'past expires_on'. Design surfaces it via soonestExpiryOn rather than hiding it. Revisit if the under-buying is felt in practice."
+  - "pantry_items.product_id stays a plain single-column FK. A composite guard is impossible because global products carry user_id IS NULL and MATCH SIMPLE can never satisfy a non-null referencing pair. Exposure is a product NAME only; it becomes worth guarding when products gains a price in phase 3."
+  - "PaymentServicesSeeder uses PaymentService::insert() and duplicates its rows on a second run (verified). The catalogue seeder copies where that seeder's data lives, not how it writes — use Product::upsert(uniqueBy: ['slug'])."
+
+open_questions:
+  - id: q1
+    question: Which week does "weekly" mean?
+    assumed: Monday-to-Sunday local week, not a rolling 7 days, because the shop is a fixed weekly event.
+    status: assumed # not yet put to the owner
+  - id: q2
+    question: Is the seeded products catalogue curated by us or built by the user?
+    assumed: We seed roughly 40 Peruvian staples so the first list is possible without typing; the user may add their own.
+    status: CONFIRMED by owner 2026-09-26
+    decision: |
+      Seed roughly 40 Peruvian staples with their canonical unit (papa, arroz, pollo, palta,
+      cebolla, tomate and the like). This is the only lever that reduces the manual setup cost,
+      because the user then picks from a list instead of typing. It enlarges slice 1 knowingly.
+      The owner was offered an empty catalogue and a smaller 10-15 item seed and chose the fuller
+      seed.
+  - id: q3
+    question: Can the user add a product the catalogue lacks?
+    assumed: Yes. Otherwise the catalogue becomes a ceiling on the product.
+    status: assumed # not yet put to the owner, but implied by the q2 decision
+  - id: q4
+    question: Does an expired pantry item still subtract from the list?
+    assumed: No. Past expires_on it stops counting as available, but the row is kept rather than deleted.
+    status: CONFIRMED by owner 2026-09-26
+    decision: |
+      Past expires_on the item stops subtracting from the list, so it reappears as something to
+      buy. The row is KEPT — neither deleted nor auto-archived — because the history of what
+      expires is the signal for buying less of it next time. The owner was offered "counts until
+      you mark it consumed" and "auto-archive on expiry" and rejected both.
+  - id: q5
+    question: Does the list show money at all, or only quantities?
+    assumed: Quantities plus the remaining ceiling. Per-line cost needs prices, which is phase 3.
+    status: assumed # not yet put to the owner
+  - id: q6
+    question: When the ceiling is already exceeded, does the list change?
+    assumed: No. It states the overspend and still shows what is needed; suppressing needed food to protect a budget line is the wrong default.
+    status: CONFIRMED by owner 2026-09-26
+    decision: |
+      The list states the overspend and still shows everything needed. It does NOT prioritise
+      within the ceiling and does NOT hide lines. The budget is information, not a gate. The
+      owner was offered "prioritise inside the ceiling" and "warn separately without touching the
+      list" and rejected both; the first was also rejected on capability grounds, since phase 1
+      has no notion of which food matters more.
+  - id: q7
+    question: Is one pinned category per user enough?
+    assumed: Yes for phase 1. Splitting groceries across two categories is a phase-2 question.
+    status: assumed # not yet put to the owner
+
+rollback: |
+  All four migrations are purely additive — no existing column, constraint or row is modified.
+  Nothing touches queues or the Gemini integration.
+  Slice 1 reverts with DROP TABLE products; the enum and docs are code and text only.
+  Slice 2 reverts with DROP TABLE pantry_items; products is unaffected.
+  Slice 3 reverts with DROP TABLE consumption_habits.
+  Slice 4 reverts with DROP TABLE grocery_budget_links; categories is untouched, so dropping it
+  loses the link and no budget data.
+  Slice 5 reverts by reverting the commit — the list was never stored.
+  Safe revert order is 5 -> 4 -> 3 -> 2 -> 1. To disable the capability without a deploy, remove
+  the pin row: the list still computes and the ceiling reports absent.

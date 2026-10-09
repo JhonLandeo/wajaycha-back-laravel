@@ -74,6 +74,24 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::get('get-service', [ImportController::class, 'getService']);
     Route::get('/imports/{id}/download', [ImportController::class, 'download']);
 
+    Route::get('shopping/products', [\App\Http\Controllers\Shopping\ProductCatalogueController::class, 'index']);
+    Route::post('shopping/products', [\App\Http\Controllers\Shopping\ProductCatalogueController::class, 'store']);
+
+    Route::get('shopping/pantry-items', [\App\Http\Controllers\Shopping\PantryItemController::class, 'index']);
+    Route::post('shopping/pantry-items', [\App\Http\Controllers\Shopping\PantryItemController::class, 'store']);
+    Route::put('shopping/pantry-items/{pantryItem}', [\App\Http\Controllers\Shopping\PantryItemController::class, 'update']);
+    Route::delete('shopping/pantry-items/{pantryItem}', [\App\Http\Controllers\Shopping\PantryItemController::class, 'destroy']);
+
+    Route::get('shopping/consumption-habits', [\App\Http\Controllers\Shopping\ConsumptionHabitController::class, 'index']);
+    Route::post('shopping/consumption-habits', [\App\Http\Controllers\Shopping\ConsumptionHabitController::class, 'store']);
+    Route::put('shopping/consumption-habits/{consumptionHabit}', [\App\Http\Controllers\Shopping\ConsumptionHabitController::class, 'update']);
+    Route::delete('shopping/consumption-habits/{consumptionHabit}', [\App\Http\Controllers\Shopping\ConsumptionHabitController::class, 'destroy']);
+
+    Route::get('shopping/grocery-budget-link', [\App\Http\Controllers\Shopping\GroceryBudgetLinkController::class, 'show']);
+    Route::put('shopping/grocery-budget-link', [\App\Http\Controllers\Shopping\GroceryBudgetLinkController::class, 'update']);
+
+    Route::get('shopping/weekly-plan', [\App\Http\Controllers\Shopping\WeeklyPlanController::class, 'show']);
+
     Route::prefix('categories')->group(function () {
         Route::get('/{category}/rules', [CategoryRuleController::class, 'getRules']);
 
