@@ -54,6 +54,20 @@ enum SourceType: string
         };
     }
 
+    /**
+     * The column values this source strictly outranks — the rows it would turn
+     * into satellites when paired with them.
+     *
+     * @return list<string>
+     */
+    public function outranked(): array
+    {
+        return array_values(array_map(
+            static fn (self $source): string => $source->value,
+            array_filter(self::cases(), fn (self $source): bool => $source->authority() < $this->authority())
+        ));
+    }
+
     /** Unknown strings survive as MANUAL: the column has no constraint behind it. */
     public static function fromColumn(?string $value): self
     {
