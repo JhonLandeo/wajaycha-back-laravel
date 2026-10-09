@@ -77,6 +77,10 @@ jobs:
 
           # 5. Ejecutar migraciones y cachés COMO www-data
           run sudo -u www-data php artisan migrate --force
+          # El catalogo de productos es global y se siembra por upsert sobre el
+          # slug: correrlo en cada deploy es idempotente. Sin esto, products
+          # queda vacio en produccion y ningun precio tiene a que pegarse.
+          run sudo -u www-data php artisan db:seed --class=ProductCatalogueSeeder --force
           run sudo -u www-data php artisan optimize:clear
           run sudo -u www-data php artisan config:cache
           run sudo -u www-data php artisan route:cache
