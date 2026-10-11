@@ -54,6 +54,21 @@ class ReconciliationLinker
 
         $satellite->update(['matched_transaction_id' => $master->id]);
 
+        $this->inheritCategory($master, $satellite);
+
+        return [$master, $satellite];
+    }
+
+    /**
+     * Fills the master's empty category from a satellite that has one.
+     *
+     * Public so that a caller which decides the master by other means — the
+     * cleanup of re-imports, which links to the root of an existing chain rather
+     * than to whichever row `rank()` would pick — still applies this one rule
+     * instead of a copy of it.
+     */
+    public function inheritCategory(Transaction $master, Transaction $satellite): void
+    {
         // El maestro es la fila que se ve, y suele ser la que menos dice: el
         // extracto trae "YAPE JOSE TOR" y la categoria la puso alguien sobre el
         // Excel. Si no se pasa, el movimiento queda sin categoria en los reportes.
@@ -62,8 +77,6 @@ class ReconciliationLinker
         if ($master->category_id === null && $satellite->category_id !== null) {
             $master->update(['category_id' => $satellite->category_id]);
         }
-
-        return [$master, $satellite];
     }
 
     /**

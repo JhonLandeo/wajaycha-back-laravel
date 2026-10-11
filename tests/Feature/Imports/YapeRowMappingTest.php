@@ -259,6 +259,33 @@ it('sigue aceptando dos pagos distintos al mismo comercio con notas distintas', 
     expect(Transaction::query()->where('user_id', $user->id)->count())->toBe(2);
 });
 
+it('descarta el duplicado aunque la copia anterior ya sea satelite de un extracto', function () {
+    $user = User::factory()->create();
+    $import = new TransactionYapeImport($user->id);
+
+    $vieja = $import->model(yapeRow());
+
+    // El extracto absorbio la copia del Excel: ya no cuenta, pero sigue siendo
+    // la prueba de que este movimiento entro. Reimportar el periodo no puede
+    // escribirlo de nuevo -- asi quedaron 101 filas contando doble cuando la
+    // copia vieja estaba cinco horas corrida y el control no la veia.
+    $extracto = Transaction::create([
+        'user_id' => $user->id,
+        'detail_id' => $vieja->detail_id,
+        'amount' => '25.50',
+        'type_transaction' => 'expense',
+        'date_operation' => '2026-03-15 00:00:00',
+        'source_type' => 'import_statement',
+        'is_manual' => false,
+    ]);
+    $vieja->update(['matched_transaction_id' => $extracto->id]);
+
+    $second = $import->model(yapeRow());
+
+    expect($second)->toBeNull()
+        ->and(Transaction::query()->where('user_id', $user->id)->count())->toBe(2);
+});
+
 // -------------------------------------------------------- the defect under test
 
 /**
