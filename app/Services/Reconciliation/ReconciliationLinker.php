@@ -54,10 +54,24 @@ class ReconciliationLinker
 
         $satellite->update(['matched_transaction_id' => $master->id]);
 
+        // El maestro es la fila que se ve, y suele ser la que menos dice: el
+        // extracto trae "YAPE JOSE TOR" y la categoria la puso alguien sobre el
+        // Excel. Si no se pasa, el movimiento queda sin categoria en los reportes.
+        // Solo se llena un vacio: una categoria que el maestro ya tiene es una
+        // decision de alguien y no se pisa.
+        if ($master->category_id === null && $satellite->category_id !== null) {
+            $master->update(['category_id' => $satellite->category_id]);
+        }
+
         return [$master, $satellite];
     }
 
-    /** Puts both rows back in the totals. */
+    /**
+     * Puts both rows back in the totals.
+     *
+     * The category the master inherited in `link()` stays: once visible it may
+     * have been confirmed by someone, and the row cannot tell which.
+     */
     public function unlink(Transaction $a, Transaction $b): void
     {
         [, $satellite] = $this->rank($a, $b);
