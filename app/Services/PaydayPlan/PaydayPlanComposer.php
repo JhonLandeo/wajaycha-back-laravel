@@ -89,6 +89,11 @@ final class PaydayPlanComposer
         return 'No hay nada pendiente de este mes para retomar.';
     }
 
+    public function expired(): string
+    {
+        return 'Ese plan ya no está disponible. El próximo te llega en tu día de cobro.';
+    }
+
     public function notLinked(): string
     {
         return '❌ Tu cuenta de Telegram no está vinculada. Abre la app y genera tu enlace de vinculación.';

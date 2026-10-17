@@ -136,6 +136,7 @@ it('uses no advice vocabulary in any message', function () {
         $composer->noPlan(),
         $composer->nothingToResume(),
         $composer->notLinked(),
+        $composer->expired(),
     ];
     $advice = ['deberías', 'debes', 'recomend', 'sugier', 'conviene', 'te aconsej', 'invierte', 'tendrías', 'mejor que', 'lástima', 'lastima', 'fallaste', 'culpa'];
 
@@ -152,4 +153,9 @@ it('answers the polite edge cases without leaking anything', function () {
     expect($composer->stale())->toBe('Ese botón ya no aplica.')
         ->and($composer->noPlan())->toContain('web')
         ->and($composer->skipped(PaydaySkipReason::Debt))->toContain('Deuda');
+});
+
+it('tells politely that an expired plan is no longer available', function () {
+    expect((new PaydayPlanComposer)->expired())->toContain('ya no está disponible')
+        ->and((new PaydayPlanComposer)->expired())->toContain('día de cobro');
 });

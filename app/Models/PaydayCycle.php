@@ -15,16 +15,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * @property int $id
  * @property int $user_id
- * @property \Illuminate\Support\CarbonImmutable $period_month
- * @property \Illuminate\Support\CarbonImmutable $payday_on
+ * @property \Carbon\CarbonImmutable $period_month
+ * @property \Carbon\CarbonImmutable $payday_on
  * @property array{payday_day: int, declared_salary: string, savings_percent: int, savings_amount: string} $plan_snapshot
  * @property PaydayCycleStatus $status
  * @property PaydaySkipReason|null $skip_reason
  * @property int $send_attempts
- * @property \Illuminate\Support\CarbonImmutable|null $sent_at
- * @property \Illuminate\Support\CarbonImmutable|null $answered_at
- * @property \Illuminate\Support\CarbonImmutable|null $reminded_at
- * @property \Illuminate\Support\CarbonImmutable|null $reminder_due_on
+ * @property \Carbon\CarbonImmutable|null $sent_at
+ * @property \Carbon\CarbonImmutable|null $answered_at
+ * @property \Carbon\CarbonImmutable|null $reminded_at
+ * @property \Carbon\CarbonImmutable|null $reminder_due_on
  */
 class PaydayCycle extends Model
 {
