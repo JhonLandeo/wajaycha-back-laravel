@@ -96,6 +96,20 @@ arch('the coaching deciders never read the database themselves')
     ->ignoring('App\Services\Coaching\SpokenObservationLedger');
 
 /**
+ * ADR-0011: the payday plan only restates what the user declared, and every state
+ * change is decided by a pure function of statuses. The claim — which IS a write —
+ * lives in `PaydayCycleRepository`, precisely so this rule can be unconditional,
+ * with no `ignoring()` list like the coaching one above.
+ */
+arch('the payday plan deciders never read the database themselves')
+    ->expect('App\Services\PaydayPlan')
+    ->not->toUse([
+        'Illuminate\Support\Facades\DB',
+        'Illuminate\Database\Eloquent\Model',
+        'App\Models',
+    ]);
+
+/**
  * Raw queries belong to repositories. `DB::transaction()` does not.
  *
  * These are different acts wearing one facade. A query is persistence — it knows a
@@ -194,7 +208,7 @@ arch('an enum depends on nothing')
  * change next has business in them.
  */
 arch('the newer namespaces declare strict types')
-    ->expect(['App\DTOs', 'App\Enums', 'App\Services\Capture', 'App\Services\Coaching', 'App\Services\Shopping', 'App\Support'])
+    ->expect(['App\DTOs', 'App\Enums', 'App\Services\Capture', 'App\Services\Coaching', 'App\Services\Shopping', 'App\Services\PaydayPlan', 'App\Support'])
     ->toUseStrictTypes()
     ->ignoring([
         'App\DTOs\TransactionDataDTO',
