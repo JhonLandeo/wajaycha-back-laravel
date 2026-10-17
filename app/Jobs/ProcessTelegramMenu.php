@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Actions\PaydayPlan\PaydayArrivedAction;
 use App\Enums\BotMenuAction;
 use App\Models\User;
 use App\Services\Capture\ChannelIdentityResolver;
@@ -13,6 +14,7 @@ use App\Services\Coaching\DailyAllowanceService;
 use App\Services\Coaching\MonthOverMonthService;
 use App\Services\Coaching\SpendingRhythmService;
 use App\Support\Redact;
+use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -111,6 +113,15 @@ class ProcessTelegramMenu implements ShouldQueue
             return;
         }
 
+        if ($action === BotMenuAction::PAYDAY_ARRIVED) {
+            // Defensivo: el boton real viaja con prefijo `p:` y entra por el job de
+            // payday, pero el valor es tambien una accion del menu y no debe caer
+            // en un `match` sin rama. PaydayArrivedAction responde por si misma.
+            app(PaydayArrivedAction::class)->execute($user->id, $this->chatId, CarbonImmutable::now());
+
+            return;
+        }
+
         $telegram->reply($this->chatId, $this->answer($action, $user, $digest, $allowance, $changes, $rhythm));
     }
 
@@ -127,6 +138,7 @@ class ProcessTelegramMenu implements ShouldQueue
             BotMenuAction::HOW_MUCH_TODAY => $allowance->composeOnDemand($user) ?? $this->unavailable(),
             BotMenuAction::WHAT_CHANGED => $changes->composeOnDemand($user) ?? $this->unavailable(),
             BotMenuAction::FIXED_OR_CHOSEN => $rhythm->composeOnDemand($user) ?? $this->unavailable(),
+            BotMenuAction::PAYDAY_ARRIVED => $this->unavailable(), // handled before answer(); never reached
         };
     }
 

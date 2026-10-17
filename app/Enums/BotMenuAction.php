@@ -63,6 +63,19 @@ enum BotMenuAction: string
      */
     case FIXED_OR_CHOSEN = 'm:fixed';
 
+    /**
+     * "Cobré hoy": the salary arrived, send me the plan. Answered by the payday
+     * handling, not by {@see \App\Jobs\ProcessTelegramMenu}.
+     *
+     * Its value uses the `p:` prefix on purpose: the webhook routes that prefix to
+     * the payday job, which can authorise against the user's cycles, while an `m:`
+     * key would land in the menu job's unknown-action fallback. It carries no cycle
+     * id because only the latest cycle is ever answerable. Offered to every user:
+     * with no plan, or with the feature off, the reply says so honestly.
+     * The value is {@see \App\DTOs\PaydayPlan\PaydayCallback::PAID}.
+     */
+    case PAYDAY_ARRIVED = 'p:paid';
+
     /** The label the user reads on the button. */
     public function label(): string
     {
@@ -71,6 +84,7 @@ enum BotMenuAction: string
             self::HOW_MUCH_TODAY => '¿Cuánto puedo gastar hoy?',
             self::WHAT_CHANGED => '¿Qué cambió desde el mes pasado?',
             self::FIXED_OR_CHOSEN => '¿Qué es fijo y qué decido yo?',
+            self::PAYDAY_ARRIVED => 'Cobré hoy',
         };
     }
 

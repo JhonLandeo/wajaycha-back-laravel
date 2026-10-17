@@ -8,6 +8,7 @@ use App\Enums\BotCommand;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessTelegramCapture;
 use App\Jobs\ProcessTelegramMenu;
+use App\Jobs\ProcessTelegramPaydayAnswer;
 use App\Services\Capture\ChannelLinkTokenRedeemer;
 use App\Services\Capture\ChannelUpdateDeduplicator;
 use App\Services\Capture\TelegramChannel;
@@ -220,6 +221,14 @@ class TelegramWebhookController extends Controller
 
         $callbackQueryId = isset($callback['id']) ? (string) $callback['id'] : null;
         $data = isset($callback['data']) && is_string($callback['data']) ? $callback['data'] : null;
+
+        // `p:` es de payday: necesita autorizar contra los ciclos del usuario y su
+        // respuesta no es una pregunta del menu. Todo lo demas sigue como antes.
+        if ($data !== null && str_starts_with($data, 'p:')) {
+            ProcessTelegramPaydayAnswer::dispatch($chatId, $callbackQueryId, $data);
+
+            return;
+        }
 
         ProcessTelegramMenu::dispatch($chatId, $callbackQueryId, $data);
     }

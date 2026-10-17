@@ -248,3 +248,32 @@ it('encola un aviso cuando el tipo de mensaje no se puede leer', function () {
             && $reflection->getProperty('chatId')->getValue($job) === '987654321';
     });
 });
+
+it('enruta un callback p: al job de payday y no al menu', function () {
+    postUpdate([
+        'update_id' => 900,
+        'callback_query' => ['id' => 'cb', 'data' => 'p:12:y', 'message' => ['chat' => ['id' => 123456789]]],
+    ])->assertOk();
+
+    Queue::assertPushed(App\Jobs\ProcessTelegramPaydayAnswer::class, 1);
+    Queue::assertNotPushed(App\Jobs\ProcessTelegramMenu::class);
+});
+
+it('enruta el boton Cobré hoy al job de payday', function () {
+    postUpdate([
+        'update_id' => 901,
+        'callback_query' => ['id' => 'cb', 'data' => 'p:paid', 'message' => ['chat' => ['id' => 123456789]]],
+    ])->assertOk();
+
+    Queue::assertPushed(App\Jobs\ProcessTelegramPaydayAnswer::class, 1);
+});
+
+it('deja los callbacks m: en el job del menu', function () {
+    postUpdate([
+        'update_id' => 902,
+        'callback_query' => ['id' => 'cb', 'data' => 'm:how', 'message' => ['chat' => ['id' => 123456789]]],
+    ])->assertOk();
+
+    Queue::assertPushed(App\Jobs\ProcessTelegramMenu::class, 1);
+    Queue::assertNotPushed(App\Jobs\ProcessTelegramPaydayAnswer::class);
+});
