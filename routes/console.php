@@ -56,3 +56,7 @@ Schedule::command(\App\Console\Commands\PruneProcessedChannelUpdates::class)->da
 // price sources. The entries and their reasoning live in PriceSchedule so the
 // times and monitor slugs are testable.
 \App\Console\PriceSchedule::register();
+
+// Payday plan: the 09:00 plan message and the 20:00 single reminder, both behind
+// the PAYDAY_ENABLED kill switch. Entries and reasoning live in PaydaySchedule.
+\App\Console\PaydaySchedule::register();
