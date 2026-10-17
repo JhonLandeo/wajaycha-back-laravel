@@ -74,6 +74,9 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::get('get-service', [ImportController::class, 'getService']);
     Route::get('/imports/{id}/download', [ImportController::class, 'download']);
 
+    Route::get('payday-plan', [\App\Http\Controllers\PaydayPlan\PaydayPlanController::class, 'show']);
+    Route::put('payday-plan', [\App\Http\Controllers\PaydayPlan\PaydayPlanController::class, 'update']);
+
     Route::get('shopping/products', [\App\Http\Controllers\Shopping\ProductCatalogueController::class, 'index']);
     Route::post('shopping/products', [\App\Http\Controllers\Shopping\ProductCatalogueController::class, 'store']);
 
