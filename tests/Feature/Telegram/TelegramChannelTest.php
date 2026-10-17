@@ -218,3 +218,33 @@ it('tolera una variante sin file_size en lugar de romper', function () {
 
     expect($elegida)->toBe('con_tamano');
 });
+
+// ------------------------------------------------- send() reports delivery
+
+it('replyWithKeyboard reports true when Telegram accepts the message', function () {
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    $keyboard = [[['text' => 'Ya separé', 'callback_data' => 'p:1:y']]];
+
+    expect($this->channel->replyWithKeyboard('123456789', 'Hola', $keyboard))->toBeTrue();
+
+    Http::assertSent(fn (Request $r) => $r['reply_markup']['inline_keyboard'] === $keyboard);
+});
+
+it('replyWithKeyboard reports false when Telegram answers 500', function () {
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => false], 500)]);
+
+    expect($this->channel->replyWithKeyboard('123456789', 'Hola', []))->toBeFalse();
+});
+
+it('replyWithKeyboard reports false when the connection never completes', function () {
+    Http::fake(fn () => throw new Illuminate\Http\Client\ConnectionException('cURL error 28'));
+
+    expect($this->channel->replyWithKeyboard('123456789', 'Hola', []))->toBeFalse();
+});
+
+it('replyWithKeyboard reports false on a definitive 400 rejection', function () {
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => false], 400)]);
+
+    expect($this->channel->replyWithKeyboard('123456789', 'Hola', []))->toBeFalse();
+});

@@ -104,10 +104,13 @@ class TelegramChannel implements CaptureChannel
      * a `callback_data` of at most 64 bytes. See {@see \App\Enums\BotMenuAction}.
      *
      * @param  array<int, array<int, array<string, string>>>  $keyboard
+     * @return bool Whether Telegram accepted the message. Callers that must know
+     *              whether the user was reached (the payday plan marks a cycle sent
+     *              or failed from it) read it; the menu ignores it.
      */
-    public function replyWithKeyboard(string $externalId, string $text, array $keyboard): void
+    public function replyWithKeyboard(string $externalId, string $text, array $keyboard): bool
     {
-        $this->send([
+        return $this->send([
             'chat_id' => $externalId,
             'text' => $text,
             'reply_markup' => ['inline_keyboard' => $keyboard],
@@ -209,8 +212,10 @@ class TelegramChannel implements CaptureChannel
      * caller's job — and having written them twice is how they drift apart.
      *
      * @param  array<string, mixed>  $payload
+     * @return bool Whether Telegram accepted the message. Failures are still
+     *              logged and never thrown; the bool is the only signal.
      */
-    private function send(array $payload): void
+    private function send(array $payload): bool
     {
         $token = $this->botToken();
 
@@ -227,14 +232,18 @@ class TelegramChannel implements CaptureChannel
             Log::error('❌ Telegram: no se pudo contactar a la API para responder. '
                 .Redact::secrets($e->getMessage()));
 
-            return;
+            return false;
         }
 
         if (! $response->successful()) {
             // No se propaga: la transaccion ya quedo guardada y hacer fallar el job
             // la duplicaria en el reintento.
             Log::error('❌ Telegram: no se pudo responder al remitente. '.$response->body());
+
+            return false;
         }
+
+        return true;
     }
 
     /**
