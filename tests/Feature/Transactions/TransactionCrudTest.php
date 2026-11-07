@@ -1,8 +1,8 @@
 <?php
 
-use App\Models\Transaction;
-use App\Models\Detail;
 use App\Models\Category;
+use App\Models\Detail;
+use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Queue;
 
@@ -18,7 +18,7 @@ it('puede crear una transacción manual con detail_description nuevo', function 
         'detail_description' => 'Compra en supermercado', // <--- Aquí mandas description
         'category_id' => $category->id,
         'is_recurrent' => false,
-        'type_transaction' => 'expense'
+        'type_transaction' => 'expense',
     ];
 
     $response = $this->postJson('/api/transactions', $payload, $headers);
@@ -30,7 +30,7 @@ it('puede crear una transacción manual con detail_description nuevo', function 
     // CORRECCIÓN AQUÍ: Cambia 'name' por 'description'
     $this->assertDatabaseHas('details', [
         'description' => 'Compra en supermercado',
-        'user_id' => $user->id
+        'user_id' => $user->id,
     ]);
 });
 
@@ -45,7 +45,7 @@ it('puede crear una transacción manual con detail_id existente', function () {
         'date_operation' => now()->toIso8601String(),
         'detail_id' => $detail->id,
         'category_id' => $category->id,
-        'type_transaction' => 'expense'
+        'type_transaction' => 'expense',
     ];
 
     $response = $this->postJson('/api/transactions', $payload, $headers);
@@ -55,7 +55,7 @@ it('puede crear una transacción manual con detail_id existente', function () {
 
 it('rechaza crear transacción sin autenticación', function () {
     $response = $this->postJson('/api/transactions', [
-        'amount' => 100
+        'amount' => 100,
     ]);
 
     $response->assertStatus(401);
@@ -69,19 +69,19 @@ it('puede actualizar una transacción manual propia', function () {
     $transaction = Transaction::factory()->create([
         'user_id' => $user->id,
         'detail_id' => $detail->id,
-        'is_manual' => true
+        'is_manual' => true,
     ]);
 
     $response = $this->putJson("/api/transactions/{$transaction->id}", [
         'amount' => 200.00,
         'date_operation' => now()->toIso8601String(),
-        'type_transaction' => 'expense'
+        'type_transaction' => 'expense',
     ], $headers);
 
     $response->assertStatus(200);
     $this->assertDatabaseHas('transactions', [
         'id' => $transaction->id,
-        'amount' => 200.00
+        'amount' => 200.00,
     ]);
 });
 
@@ -147,6 +147,50 @@ it('ignora el dato del banco al categorizar una transacción no-manual', functio
         ->and($fresh->category_id)->toBe($category->id);
 });
 
+it('no categoriza otra transacción que solo coincide en monto, fecha y tipo', function () {
+    // Coincidir en monto, fecha y sentido no identifica un movimiento: dos
+    // compras distintas pueden compartir los tres. Solo el movimiento que el
+    // usuario eligió cambia de categoría; los duplicados reales los une la
+    // conciliación, no este endpoint.
+    $user = $this->createUserWithCategories();
+    $headers = $this->actingAsJwtUser($user);
+
+    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
+    $bodega = Detail::factory()->create(['user_id' => $user->id, 'description' => 'Bodega Central']);
+    $farmacia = Detail::factory()->create(['user_id' => $user->id, 'description' => 'Farmacia del Barrio']);
+    $fecha = now()->startOfDay();
+
+    $elegida = Transaction::factory()->create([
+        'user_id' => $user->id,
+        'detail_id' => $bodega->id,
+        'amount' => 30.00,
+        'type_transaction' => 'expense',
+        'date_operation' => $fecha,
+        'category_id' => null,
+        'is_manual' => false,
+    ]);
+
+    $coincidente = Transaction::factory()->create([
+        'user_id' => $user->id,
+        'detail_id' => $farmacia->id,
+        'amount' => 30.00,
+        'type_transaction' => 'expense',
+        'date_operation' => $fecha,
+        'category_id' => null,
+        'is_manual' => false,
+    ]);
+
+    $this->putJson("/api/transactions/{$elegida->id}", [
+        'amount' => $elegida->amount,
+        'date_operation' => (string) $elegida->date_operation,
+        'type_transaction' => $elegida->type_transaction,
+        'category_id' => $category->id,
+    ], $headers)->assertOk();
+
+    expect($elegida->fresh()->category_id)->toBe($category->id)
+        ->and($coincidente->fresh()->category_id)->toBeNull();
+});
+
 it('sigue permitiendo editar el monto de una transacción manual', function () {
     $user = $this->createUserWithCategories();
     $headers = $this->actingAsJwtUser($user);
@@ -177,13 +221,13 @@ it('no puede actualizar una transacción de otro usuario', function () {
     $transaction = Transaction::factory()->create([
         'user_id' => $owner->id,
         'detail_id' => $detail->id,
-        'is_manual' => true
+        'is_manual' => true,
     ]);
 
     $response = $this->putJson("/api/transactions/{$transaction->id}", [
         'amount' => 200.00,
         'date_operation' => now()->toIso8601String(),
-        'type_transaction' => 'expense'
+        'type_transaction' => 'expense',
     ], $headers);
 
     // Some apps return 404 for missing authorization on find, or 403 on update
@@ -199,7 +243,7 @@ it('puede eliminar una transacción manual propia', function () {
     $transaction = Transaction::factory()->create([
         'user_id' => $user->id,
         'detail_id' => $detail->id,
-        'is_manual' => true
+        'is_manual' => true,
     ]);
 
     $response = $this->deleteJson("/api/transactions/{$transaction->id}", [], $headers);
@@ -215,7 +259,7 @@ it('no puede eliminar una transacción no-manual', function () {
     $transaction = Transaction::factory()->create([
         'user_id' => $user->id,
         'detail_id' => $detail->id,
-        'is_manual' => false
+        'is_manual' => false,
     ]);
 
     $response = $this->deleteJson("/api/transactions/{$transaction->id}", [], $headers);
@@ -237,7 +281,7 @@ it('puede listar transacciones paginadas con filtros de mes y año', function ()
             'first_page_url',
             'last_page',
             'per_page',
-            'total'
+            'total',
         ]);
 });
 
