@@ -32,6 +32,13 @@ class EmbeddingService
      */
     public function generate(string $text): ?array
     {
+        if (! config('services.embeddings.enabled')) {
+            // OpenCode Go no expone embeddings y la captura no depende de ellos:
+            // sin esta salida temprana cada movimiento intentaria una llamada
+            // condenada a fallar antes de guardarse.
+            return null;
+        }
+
         try {
             $model = Gemini::embeddingModel(self::MODEL);
             // @phpstan-ignore-next-line

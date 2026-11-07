@@ -7,8 +7,8 @@ namespace App\Jobs;
 use App\Actions\Capture\RegisterCapturedTransactionAction;
 use App\DTOs\Coaching\CoachingScope;
 use App\Models\User;
-use App\Services\AI\GeminiTextService;
-use App\Services\AI\GeminiVisionService;
+use App\Services\AI\OpenCodeTextService;
+use App\Services\AI\OpenCodeVisionService;
 use App\Services\Capture\CaptureChannel;
 use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
@@ -27,7 +27,7 @@ use Throwable;
  * Turns one Telegram message into a Transaction, or into the reply that explains
  * why it did not become one.
  *
- * Everything below the transport is the shared pipeline: the same Gemini services,
+ * Everything below the transport is the shared pipeline: the same OpenCode inference services,
  * the same ParsedReceiptDTO, the same register action WhatsApp uses.
  */
 class ProcessTelegramCapture implements ShouldQueue
@@ -40,7 +40,7 @@ class ProcessTelegramCapture implements ShouldQueue
      * Without this the job inherited Horizon's 60-second supervisor default
      * (`config/horizon.php`), which no one had ever compared against what this
      * job actually does. The photo path makes four outbound calls — `getFile`,
-     * the download, Gemini, then the reply — and the coach can add a fifth.
+     * the download, the inference, then the reply — and the coach can add a fifth.
      * Summed from `config/http.php` through
      * {@see \App\Support\OutboundHttp::worstCaseSecondsFor()} that is roughly
      * 145 seconds of worst case, against 60 available and a supervisor set to
@@ -86,8 +86,8 @@ class ProcessTelegramCapture implements ShouldQueue
         CaptureChannelRegistry $channels,
         ChannelIdentityResolver $identities,
         ChannelLinkTokenRedeemer $redeemer,
-        GeminiVisionService $vision,
-        GeminiTextService $textService,
+        OpenCodeVisionService $vision,
+        OpenCodeTextService $textService,
         RegisterCapturedTransactionAction $registerAction,
     ): void {
         $channel = $channels->for('telegram');
@@ -147,7 +147,7 @@ class ProcessTelegramCapture implements ShouldQueue
         }
 
         // Un monto nulo no lo tapa `isValid`: el DTO los arma por separado desde
-        // la respuesta de Gemini y nada los ata. Sin este control el null llega a
+        // la respuesta del modelo y nada los ata. Sin este control el null llega a
         // una columna NOT NULL, el job explota y el usuario recibe el mensaje
         // generico de error en vez de este, que es el que corresponde.
         if (! $parsed->isValid || $parsed->amount === null) {
@@ -200,7 +200,7 @@ class ProcessTelegramCapture implements ShouldQueue
     /**
      * The message is sanitised, not trusted. An exception raised by an outbound
      * call carries the request URI, and both dependencies put a credential in
-     * it — Telegram the bot token in the path, Gemini its key in the query. The
+     * it — Telegram the bot token in the path, the inference provider its key. The
      * adapters keep their own exceptions from reaching here, but this method
      * logs whatever failed, including code that has not been written yet.
      */

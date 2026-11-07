@@ -18,6 +18,12 @@ use Gemini\Laravel\Facades\Gemini;
 use Gemini\Responses\GenerativeModel\EmbedContentResponse;
 use Illuminate\Support\Facades\Log;
 
+beforeEach(function () {
+    // Los embeddings quedan apagados por defecto porque OpenCode Go no los
+    // ofrece; estos casos prueban el camino de Gemini cuando sí se habilita.
+    config()->set('services.embeddings.enabled', true);
+});
+
 /**
  * @param  array<float>  $values
  */

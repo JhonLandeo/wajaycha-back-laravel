@@ -9,8 +9,8 @@ use App\Models\Category;
 use App\Models\ChannelIdentity;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Services\AI\GeminiTextService;
-use App\Services\AI\GeminiVisionService;
+use App\Services\AI\OpenCodeTextService;
+use App\Services\AI\OpenCodeVisionService;
 use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
 use App\Services\Capture\ChannelLinkTokenRedeemer;
@@ -89,10 +89,10 @@ function coachingParsedMovement(float $amount, string $categoryName, string $typ
 
 function runCoachingCaptureJob(string $chatId, ParsedReceiptDTO $parsed): void
 {
-    $vision = Mockery::mock(GeminiVisionService::class);
+    $vision = Mockery::mock(OpenCodeVisionService::class);
     $vision->shouldReceive('parseReceipt')->andReturn($parsed);
 
-    $textService = Mockery::mock(GeminiTextService::class);
+    $textService = Mockery::mock(OpenCodeTextService::class);
     $textService->shouldReceive('parseText')->andReturn($parsed);
 
     (new ProcessTelegramCapture($chatId, 'texto de captura'))->handle(

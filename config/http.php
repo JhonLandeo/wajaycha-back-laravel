@@ -9,15 +9,16 @@ declare(strict_types=1);
 |
 | Cada dependencia externa del sistema entra por App\Support\OutboundHttp, y
 | ese es el unico lugar que lee este archivo. Los perfiles viven aca y no
-| adentro de cada servicio por una razon operativa concreta: cuando Gemini se
-| pone lento a las once de la noche, subir un timeout tiene que ser una
-| variable de entorno y un `config:cache`, no un deploy.
+| adentro de cada servicio por una razon operativa concreta: cuando el
+| proveedor de inferencia se pone lento a las once de la noche, subir un
+| timeout tiene que ser una variable de entorno y un `config:cache`, no un
+| deploy.
 |
 | Antes de esto ningun servicio declaraba timeout ni reintento. El default de
-| Guzzle igual cortaba, pero nadie lo habia elegido, y un 429 transitorio de
-| Gemini se convertia directamente en "no pude leer ese envio" para el usuario
-| — que en un bot de captura no se lee como un error de red, se lee como que el
-| producto no anda.
+| Guzzle igual cortaba, pero nadie lo habia elegido, y un 429 transitorio del
+| proveedor de inferencia se convertia directamente en "no pude leer ese
+| envio" para el usuario — que en un bot de captura no se lee como un error
+| de red, se lee como que el producto no anda.
 |
 */
 
@@ -68,8 +69,8 @@ return [
     |
     | ADVERTENCIA AL TOCAR ESTOS NUMEROS. Un job encolado no tiene el presupuesto
     | de una llamada, tiene el de TODAS las que hace. La ruta de captura con foto
-    | son cuatro: getFile, la descarga, Gemini y la respuesta, mas otra respuesta
-    | si ademas habla el coach. `OutboundHttp::worstCaseSecondsFor()` calcula el
+    | son cuatro: getFile, la descarga, la inferencia y la respuesta, mas otra
+    | respuesta si ademas habla el coach. `OutboundHttp::worstCaseSecondsFor()` calcula el
     | peor caso de un perfil y `ProcessTelegramCapture::$timeout` esta puesto en
     | funcion de esa suma; `OutboundHttpBudgetTest` afirma la relacion. Subir un
     | timeout o un reintento aca sin revisar el job hace fallar la suite, que es
@@ -90,7 +91,7 @@ return [
          * no es resiliencia: es ocupar un worker hasta que lo maten. El segundo
          * intento captura casi todo el beneficio de un fallo transitorio.
          */
-        'gemini' => [
+        'inference' => [
             'timeout' => 25,
             'connect_timeout' => 10,
             'retries' => 1,
@@ -100,7 +101,7 @@ return [
          * Lecturas de Telegram: getFile y la descarga del archivo. Idempotentes.
          *
          * 10 s alcanza de sobra para una llamada de archivo, y la ruta de captura
-         * con foto hace DOS de estas antes de siquiera llamar a Gemini. Conserva
+         * con foto hace DOS de estas antes de siquiera llamar a la inferencia. Conserva
          * los 2 reintentos del default: son idempotentes, que es justamente la
          * diferencia con `telegram_send`.
          */

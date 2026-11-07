@@ -25,7 +25,7 @@ class ProcessWhatsAppMessage implements ShouldQueue
     }
 
     public function handle(
-        \App\Services\AI\GeminiTextService $geminiService,
+        \App\Services\AI\OpenCodeTextService $aiService,
         \App\Services\Capture\CaptureChannelRegistry $channels,
         \App\Services\Capture\ChannelIdentityResolver $identities,
         \App\Actions\Capture\RegisterCapturedTransactionAction $registerAction
@@ -42,8 +42,8 @@ class ProcessWhatsAppMessage implements ShouldQueue
             return;
         }
 
-        // 2. ANALIZAR TEXTO CON GEMINI
-        $parsedReceipt = $geminiService->parseText($this->text);
+        // 2. ANALIZAR TEXTO CON EL MOTOR DE IA
+        $parsedReceipt = $aiService->parseText($this->text);
 
         if (! $parsedReceipt) {
             $channel->reply($this->from, '❌ Error de conexión al procesar el mensaje. Por favor, contacte con soporte si el problema persiste.');

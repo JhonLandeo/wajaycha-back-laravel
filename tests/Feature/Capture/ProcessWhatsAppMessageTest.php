@@ -6,7 +6,7 @@ use App\DTOs\WhatsApp\ParsedReceiptDTO;
 use App\Jobs\ProcessWhatsAppMessage;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Services\AI\GeminiTextService;
+use App\Services\AI\OpenCodeTextService;
 use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,7 +22,7 @@ uses(RefreshDatabase::class);
  */
 function runMessageJob(string $text, string $from, RecordingCaptureChannel $channel, ?ParsedReceiptDTO $parsed): void
 {
-    $gemini = Mockery::mock(GeminiTextService::class);
+    $gemini = Mockery::mock(OpenCodeTextService::class);
     $gemini->shouldReceive('parseText')->andReturn($parsed);
 
     (new ProcessWhatsAppMessage($text, $from))->handle(

@@ -5,24 +5,13 @@ declare(strict_types=1);
 namespace App\Services\AI;
 
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
-use App\Support\OutboundHttp;
-use Illuminate\Support\Facades\Log;
 
-class GeminiVisionService
+class OpenCodeVisionService
 {
-    protected string $apiKey;
-
-    protected string $baseUrl;
-
-    public function __construct()
-    {
-        $this->apiKey = config('services.gemini.api_key');
-        $this->baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    }
+    public function __construct(private readonly OpenCodeGateway $gateway) {}
 
     public function parseReceipt(string $imageBytes, string $mimeType): ?ParsedReceiptDTO
     {
-        $url = "{$this->baseUrl}?key={$this->apiKey}";
         $base64Image = base64_encode($imageBytes);
 
         $systemPrompt = '
@@ -41,36 +30,20 @@ class GeminiVisionService
               "message": (string, lo que haya en motivo o mensaje. Si no hay, pon vacío "")
             }';
 
-        $response = OutboundHttp::to('gemini')->post($url, [
-            'contents' => [
-                [
-                    'parts' => [
-                        ['text' => $systemPrompt],
-                        [
-                            'inlineData' => [
-                                'mimeType' => $mimeType,
-                                'data' => $base64Image,
-                            ],
+        $data = $this->gateway->generateJson([
+            [
+                'parts' => [
+                    ['text' => $systemPrompt],
+                    [
+                        'inlineData' => [
+                            'mimeType' => $mimeType,
+                            'data' => $base64Image,
                         ],
                     ],
                 ],
             ],
-            'generationConfig' => ['responseMimeType' => 'application/json'],
         ]);
 
-        if (! $response->successful()) {
-            Log::error('❌ Gemini Error: '.$response->body());
-
-            return null;
-        }
-
-        $data = $response->json();
-        $jsonString = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
-
-        if (! $jsonString) {
-            return null;
-        }
-
-        return ParsedReceiptDTO::fromGemini(json_decode($jsonString, true));
+        return $data === null ? null : ParsedReceiptDTO::fromModel($data);
     }
 }
