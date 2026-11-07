@@ -12,7 +12,6 @@ use App\Models\TransactionTag;
 use App\Repositories\Contracts\TransactionRepositoryContract;
 use App\Services\CategorizationService;
 use App\Services\ClassificationService;
-use Carbon\Carbon;
 
 final class UpdateTransactionAction
 {
@@ -145,25 +144,14 @@ final class UpdateTransactionAction
             $transaction->load('detail');
             $detail = $transaction->detail;
 
-            // Search for other transactions (like Yape imports) that might match this one to update their category too
-            $this->updateMatchingOtherTransactions($transaction, $dto->user_id, $newCategoryId);
-
+            // No se propaga la categoria a otras filas solo porque coincidan en
+            // monto, fecha y sentido: dos compras distintas pueden compartir los
+            // tres y no pertenecer a la misma categoria. Los duplicados reales
+            // los une la conciliacion (`matched_transaction_id`), que ademas
+            // hereda la categoria al enlazar.
             if ($detail && $newCategoryId && $this->classifier->isDetailUsefulForLearning($detail->description)) {
                 GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
             }
         }
-    }
-
-    private function updateMatchingOtherTransactions(Transaction $transaction, int $userId, ?int $newCategoryId): void
-    {
-        // Now that everything is in the same table, we look for other transactions
-        // with the same amount/date but different source_type
-        Transaction::query()
-            ->where('amount', $transaction->amount)
-            ->where('user_id', $userId)
-            ->where('type_transaction', $transaction->type_transaction)
-            ->whereDate('date_operation', Carbon::parse($transaction->date_operation)->toDateString())
-            ->where('id', '!=', $transaction->id)
-            ->update(['category_id' => $newCategoryId]);
     }
 }
