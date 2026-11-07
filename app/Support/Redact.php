@@ -104,11 +104,12 @@ final class Redact
      * marker.
      *
      * This exists for one reason: the Telegram Bot API puts the bot token in the
-     * URL path, and Gemini puts its key in the query string. When an outbound
-     * call cannot complete, Guzzle raises a `ConnectionException` whose message
-     * ends with the full request URI — so `$exception->getMessage()` carries the
-     * credential, and every `Log::error('...: '.$e->getMessage())` writes it to
-     * `storage/logs` and ships it to Sentry as a breadcrumb.
+     * URL path, and Gemini embeddings still put their key in the query string.
+     * When an outbound call cannot complete, Guzzle raises a
+     * `ConnectionException` whose message ends with the full request URI — so
+     * `$exception->getMessage()` carries the credential, and every
+     * `Log::error('...: '.$e->getMessage())` writes it to `storage/logs` and
+     * ships it to Sentry as a breadcrumb.
      *
      * Callers should still keep secrets out of a message when they can. This is
      * the net under the cases where the value is not theirs to shape, and it is
@@ -149,6 +150,7 @@ final class Redact
         $candidates = [
             (string) config('services.telegram.bot_token'),
             (string) config('services.telegram.secret_token'),
+            (string) config('services.opencode.api_key'),
             (string) config('services.gemini.api_key'),
             (string) config('services.whatsapp.access_token'),
             (string) config('services.whatsapp.verify_token'),

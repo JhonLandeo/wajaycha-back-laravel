@@ -5,26 +5,14 @@ declare(strict_types=1);
 namespace App\Services\AI;
 
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
-use App\Support\OutboundHttp;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 
-class GeminiTextService
+class OpenCodeTextService
 {
-    protected string $apiKey;
-
-    protected string $baseUrl;
-
-    public function __construct()
-    {
-        $this->apiKey = config('services.gemini.api_key');
-        $this->baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    }
+    public function __construct(private readonly OpenCodeGateway $gateway) {}
 
     public function parseText(string $text): ?ParsedReceiptDTO
     {
-        $url = "{$this->baseUrl}?key={$this->apiKey}";
-
         $systemPrompt = '
             Eres un asistente financiero avanzado. Lee la narración o el comando de texto del usuario sobre un gasto o ingreso y extrae los datos en un JSON válido.
             - Si el usuario dice que gastó, pagó, compró o yapeó, es un "expense". El "origin" es el "Usuario" y "destination" es la entidad (tienda, empresa, negocio o persona a la que se le paga).
@@ -44,28 +32,10 @@ class GeminiTextService
 
         $finalPrompt = $systemPrompt."\n\nFecha actual de referencia: ".Carbon::now()->toDateTimeString()."\n\nMensaje enviado por el usuario: \"".$text.'"';
 
-        $response = OutboundHttp::to('gemini')->post($url, [
-            'contents' => [
-                ['parts' => [['text' => $finalPrompt]]],
-            ],
-            'generationConfig' => [
-                'responseMimeType' => 'application/json',
-            ],
+        $data = $this->gateway->generateJson([
+            ['parts' => [['text' => $finalPrompt]]],
         ]);
 
-        if (! $response->successful()) {
-            Log::error('❌ Gemini Error: '.$response->body());
-
-            return null;
-        }
-
-        $data = $response->json();
-        $jsonString = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
-
-        if (! $jsonString) {
-            return null;
-        }
-
-        return ParsedReceiptDTO::fromGemini(json_decode($jsonString, true));
+        return $data === null ? null : ParsedReceiptDTO::fromModel($data);
     }
 }

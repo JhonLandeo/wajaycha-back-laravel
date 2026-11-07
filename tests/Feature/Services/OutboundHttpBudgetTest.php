@@ -31,7 +31,7 @@ use App\Support\OutboundHttp;
  */
 function telegramCapturePhotoPathProfiles(): array
 {
-    return ['telegram', 'telegram', 'gemini', 'telegram_send', 'telegram_send'];
+    return ['telegram', 'telegram', 'inference', 'telegram_send', 'telegram_send'];
 }
 
 function telegramCapturePhotoPathWorstCase(): int

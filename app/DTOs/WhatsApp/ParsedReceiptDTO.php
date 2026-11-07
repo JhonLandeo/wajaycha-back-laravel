@@ -28,7 +28,7 @@ final readonly class ParsedReceiptDTO
      *   message?: string
      * } $data
      */
-    public static function fromGemini(array $data): self
+    public static function fromModel(array $data): self
     {
         return new self(
             isValid: $data['is_valid_receipt'] ?? $data['is_valid_transaction'] ?? false,
