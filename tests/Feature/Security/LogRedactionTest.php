@@ -222,8 +222,8 @@ it('no escribe el chat id de Telegram cuando el remitente no esta vinculado', fu
         app(App\Services\Capture\CaptureChannelRegistry::class),
         app(App\Services\Capture\ChannelIdentityResolver::class),
         app(App\Services\Capture\ChannelLinkTokenRedeemer::class),
-        app(App\Services\AI\GeminiVisionService::class),
-        app(App\Services\AI\GeminiTextService::class),
+        app(App\Services\AI\OpenCodeVisionService::class),
+        app(App\Services\AI\OpenCodeTextService::class),
         app(RegisterCapturedTransactionAction::class),
     );
 
@@ -239,11 +239,12 @@ it('no escribe el chat id de Telegram cuando el remitente no esta vinculado', fu
  *
  * Everything so far protects the user's data. What follows protects the
  * application's own keys, and the leak is not something anyone wrote: the
- * Telegram Bot API puts the bot token in the URL path and Gemini puts its key
- * in the query string, so when an outbound call cannot complete at all, the
- * `ConnectionException` Guzzle raises carries the full request URI in its
- * message. Every `Log::error('...: '.$e->getMessage())` then writes a live
- * credential to `storage/logs` and ships it to Sentry as a breadcrumb.
+ * Telegram Bot API puts the bot token in the URL path and Gemini embeddings
+ * still put their key in the query string, so when an outbound call cannot
+ * complete at all, the `ConnectionException` Guzzle raises carries the full
+ * request URI in its message. Every `Log::error('...: '.$e->getMessage())`
+ * then writes a live credential to `storage/logs` and ships it to Sentry as a
+ * breadcrumb.
  */
 it('no escribe el bot token cuando no se puede contactar a Telegram para responder', function () {
     config()->set('services.telegram.bot_token', '123456:BOT-TOKEN-DE-PRODUCCION');
@@ -300,6 +301,15 @@ it('tapa la api key de Gemini que viaja en el query string', function () {
     );
 
     expect($saneado)->not->toContain('AIzaSyClaveDeProduccion');
+});
+
+it('tapa la api key de OpenCode', function () {
+    config()->set('services.opencode.api_key', 'oc_sk_produccion_123');
+
+    $saneado = Redact::secrets('Authorization: Bearer oc_sk_produccion_123');
+
+    expect($saneado)->not->toContain('oc_sk_produccion_123')
+        ->and($saneado)->toContain('<secreto>');
 });
 
 it('deja intacto un mensaje que no trae ningun secreto', function () {

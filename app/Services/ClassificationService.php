@@ -1,28 +1,32 @@
 <?php
+
 namespace App\Services;
 
-use Gemini\Laravel\Facades\Gemini;
+use App\Services\AI\OpenCodeGateway;
 use Illuminate\Support\Facades\Log;
 
 class ClassificationService
 {
+    public function __construct(private readonly OpenCodeGateway $gateway) {}
+
     /**
      * Clasifica un detalle para ver si es útil para el aprendizaje de IA.
      */
     public function isDetailUsefulForLearning(string $description): bool
     {
         try {
-           $prompt = $this->createPrompt($description);
+            $prompt = $this->createPrompt($description);
 
-            $model = Gemini::generativeModel('gemini-2.5-flash-lite');
-            $response = $model->generateContent($prompt);
-            
-            $result = strtolower(trim($response->text()));
+            $result = $this->gateway->generate(
+                [['parts' => [['text' => $prompt]]]],
+                ['temperature' => 0, 'maxOutputTokens' => 8],
+            );
 
-            return $result === 'util';
+            return strtolower(trim((string) $result)) === 'util';
 
         } catch (\Exception $e) {
-            Log::error('Error en ClassificationService: ' . $e->getMessage());
+            Log::error('Error en ClassificationService: '.$e->getMessage());
+
             return false;
         }
     }

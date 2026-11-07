@@ -6,7 +6,7 @@ use App\DTOs\Capture\CapturedMedia;
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
 use App\Jobs\ProcessWhatsAppImage;
 use App\Models\Transaction;
-use App\Services\AI\GeminiVisionService;
+use App\Services\AI\OpenCodeVisionService;
 use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -18,7 +18,7 @@ uses(RefreshDatabase::class);
 
 function runImageJob(string $imageId, string $from, RecordingCaptureChannel $channel, ?ParsedReceiptDTO $parsed): void
 {
-    $gemini = Mockery::mock(GeminiVisionService::class);
+    $gemini = Mockery::mock(OpenCodeVisionService::class);
     $gemini->shouldReceive('parseReceipt')->andReturn($parsed);
 
     (new ProcessWhatsAppImage($imageId, $from))->handle(

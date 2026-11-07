@@ -58,6 +58,34 @@ return [
         'webhook_url' => env('WHATSAPP_WEBHOOK_URL'),
     ],
 
+    /*
+     * OpenCode Go sustituye a Gemini en la inferencia de la captura (Telegram y
+     * WhatsApp). El gateway habla la API nativa de Gemini en
+     * `/google/v1beta/models/<modelo>:generateContent`, así que el cuerpo de la
+     * petición y la forma de la respuesta no cambian: solo el host y que la
+     * credencial viaja en `Authorization: Bearer` en vez de en `?key=`.
+     *
+     * `base_url` apunta al prefijo de Go. Para pay-as-you-go, usa
+     * `https://opencode.ai/inference`.
+     */
+    'opencode' => [
+        'api_key' => env('OPENCODE_API_KEY'),
+        'base_url' => env('OPENCODE_API_BASE_URL', 'https://opencode.ai/inference/go'),
+        'model' => env('OPENCODE_MODEL', 'gemini-4-argon'),
+        'session_id' => env('OPENCODE_SESSION_ID', 'wajaycha-capture'),
+        'user_agent' => env('OPENCODE_USER_AGENT', 'Wajaycha/1.0 (personal finance capture)'),
+    ],
+
+    /*
+     * OpenCode Go no expone un endpoint de embeddings. La categorizacion
+     * semantica sigue dependiendo de Gemini; con esto apagada, la captura
+     * funciona igual y solo se pierde el fallback vectorial (las reglas exactas
+     * y por palabra clave siguen resolviendo).
+     */
+    'embeddings' => [
+        'enabled' => (bool) env('EMBEDDINGS_ENABLED', false),
+    ],
+
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY'),
     ],

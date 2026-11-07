@@ -27,7 +27,7 @@ class ProcessWhatsAppImage implements ShouldQueue
     }
 
     public function handle(
-        \App\Services\AI\GeminiVisionService $geminiService,
+        \App\Services\AI\OpenCodeVisionService $aiService,
         \App\Services\Capture\CaptureChannelRegistry $channels,
         \App\Services\Capture\ChannelIdentityResolver $identities,
         \App\Actions\Capture\RegisterCapturedTransactionAction $registerAction
@@ -53,8 +53,8 @@ class ProcessWhatsAppImage implements ShouldQueue
             return;
         }
 
-        // 3. ANALIZAR IMAGEN CON GEMINI
-        $parsedReceipt = $geminiService->parseReceipt($media->bytes, $media->mimeType);
+        // 3. ANALIZAR IMAGEN CON EL MOTOR DE IA
+        $parsedReceipt = $aiService->parseReceipt($media->bytes, $media->mimeType);
 
         if (! $parsedReceipt) {
             $channel->reply($this->from, '❌ Error de conexión con el motor de IA. Por favor, contacte con soporte si el problema persiste.');

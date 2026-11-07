@@ -8,8 +8,8 @@ use App\Models\ChannelIdentity;
 use App\Models\ChannelLinkToken;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Services\AI\GeminiTextService;
-use App\Services\AI\GeminiVisionService;
+use App\Services\AI\OpenCodeTextService;
+use App\Services\AI\OpenCodeVisionService;
 use App\Services\Capture\CaptureChannelRegistry;
 use App\Services\Capture\ChannelIdentityResolver;
 use App\Services\Capture\ChannelLinkTokenIssuer;
@@ -56,10 +56,10 @@ function runTelegramJob(
     ?ParsedReceiptDTO $parsed = null,
     bool $unsupported = false,
 ): void {
-    $vision = Mockery::mock(GeminiVisionService::class);
+    $vision = Mockery::mock(OpenCodeVisionService::class);
     $vision->shouldReceive('parseReceipt')->andReturn($parsed);
 
-    $textService = Mockery::mock(GeminiTextService::class);
+    $textService = Mockery::mock(OpenCodeTextService::class);
     $textService->shouldReceive('parseText')->andReturn($parsed);
 
     (new ProcessTelegramCapture($chatId, $text, $mediaReference, $unsupported))->handle(
@@ -270,10 +270,10 @@ it('le avisa al remitente cuando el tipo de mensaje no se puede leer', function 
 it('no le pide a Gemini que parsee un mensaje que ya se sabe ilegible', function () {
     telegramSender();
 
-    $vision = Mockery::mock(GeminiVisionService::class);
+    $vision = Mockery::mock(OpenCodeVisionService::class);
     $vision->shouldNotReceive('parseReceipt');
 
-    $textService = Mockery::mock(GeminiTextService::class);
+    $textService = Mockery::mock(OpenCodeTextService::class);
     $textService->shouldNotReceive('parseText');
 
     // Una llamada a Gemini cuesta dinero real. La rama de aviso corta antes.
@@ -318,13 +318,12 @@ it('rechaza un movimiento valido que vino sin monto, en vez de romper contra la 
 /**
  * The income half of the capture channel.
  *
- * It was written months ago — `GeminiTextService` teaches Gemini that "me
+ * It was written months ago — `OpenCodeTextService` teaches Gemini that "me
  * pagaron" is an `income`, `RegisterCapturedTransactionAction` persists the
  * type, and the confirmation has its own wording — and until now not one test
  * asserted it. The bot's own copy never mentioned it either, so nobody, the
  * owner included, knew the channel took income at all.
  */
-
 it('registra un ingreso con su tipo, no como gasto', function () {
     $user = telegramSender();
 
