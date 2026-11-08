@@ -7,6 +7,7 @@ use App\Http\Controllers\CategoryRuleController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DetailsController;
 use App\Http\Controllers\ImportController;
+use App\Http\Controllers\IncomeSourceController;
 use App\Http\Controllers\ParetoClassificationController;
 use App\Http\Controllers\Reconciliation\ReconciliationCandidateController;
 use App\Http\Controllers\TagsController;
@@ -76,6 +77,13 @@ Route::middleware([JwtMiddleware::class])->group(function () {
 
     Route::get('payday-plan', [\App\Http\Controllers\PaydayPlan\PaydayPlanController::class, 'show']);
     Route::put('payday-plan', [\App\Http\Controllers\PaydayPlan\PaydayPlanController::class, 'update']);
+
+    Route::get('income-sources', [IncomeSourceController::class, 'index']);
+    Route::post('income-sources', [IncomeSourceController::class, 'store']);
+    Route::put('income-sources/{incomeSource}', [IncomeSourceController::class, 'update']);
+    Route::post('income-sources/{incomeSource}/versions', [IncomeSourceController::class, 'storeVersion']);
+    Route::post('income-sources/{incomeSource}/close', [IncomeSourceController::class, 'close']);
+    Route::delete('income-sources/{incomeSource}', [IncomeSourceController::class, 'destroy']);
 
     Route::get('shopping/products', [\App\Http\Controllers\Shopping\ProductCatalogueController::class, 'index']);
     Route::post('shopping/products', [\App\Http\Controllers\Shopping\ProductCatalogueController::class, 'store']);
