@@ -66,6 +66,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            \App\Repositories\Contracts\IncomeSourceRepositoryContract::class,
+            \App\Repositories\IncomeSourceRepository::class
+        );
+
+        $this->app->bind(
             \App\Repositories\Contracts\PaydayCycleRepositoryContract::class,
             \App\Repositories\PaydayCycleRepository::class
         );

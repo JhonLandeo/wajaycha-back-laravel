@@ -16,5 +16,10 @@ final class ParetoWindowTotals
     public function __construct(
         public readonly float $income,
         public readonly float $expense,
+        /**
+         * Ingreso planificado de la ventana. NULL cuando no hay fuentes o no se
+         * eligio un año: no hay denominador honesto para comparar metas.
+         */
+        public readonly ?float $plannedIncome = null,
     ) {}
 }

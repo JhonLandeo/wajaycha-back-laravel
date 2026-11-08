@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Actions\Pareto\BuildParetoReportAction;
 use App\Models\Category;
 use App\Models\Detail;
+use App\Models\IncomeSource;
+use App\Models\IncomeSourceVersion;
 use App\Models\ParetoClassification;
 use App\Models\Transaction;
 use App\Models\User;
@@ -208,7 +210,7 @@ it('devuelve las mismas claves que consume la SPA', function () {
                 '*' => [
                     'id', 'name', 'percentage', 'actual_percentage', 'monthly_budget',
                     'spent', 'available_budget', 'percentage_spent', 'total_income',
-                    'total_expense',
+                    'total_expense', 'planned_income',
                     'categories' => [
                         '*' => ['id', 'name', 'monthly_budget', 'budget_period', 'budget_in_window', 'spent', 'type'],
                     ],
@@ -216,6 +218,30 @@ it('devuelve las mismas claves que consume la SPA', function () {
             ],
             'current_page', 'last_page', 'per_page', 'total',
         ]);
+});
+
+it('publica el ingreso planificado de la ventana', function () {
+    $user = User::factory()->create();
+    $band = bandWith($user, 'Necesidades', 50);
+    categoryInBand($user, $band, 'Comida', 400);
+
+    $source = IncomeSource::create([
+        'user_id' => $user->id,
+        'name' => 'Sueldo',
+        'kind' => 'salary',
+    ]);
+    IncomeSourceVersion::create([
+        'income_source_id' => $source->id,
+        'amount' => '3416.00',
+        'effective_from' => '2025-01-01',
+        'effective_to' => null,
+    ]);
+
+    $month = paretoReport($user, 3);
+    $year = paretoReport($user, null);
+
+    expect($month[$band->id]['planned_income'])->toEqual(3416.0)
+        ->and($year[$band->id]['planned_income'])->toEqual(40992.0);
 });
 
 it('serializa las cifras como numeros y no como strings', function () {
