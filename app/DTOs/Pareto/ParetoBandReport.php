@@ -54,6 +54,7 @@ final class ParetoBandReport
          * split of and the report could not state until now.
          */
         public readonly float $totalBudgeted,
+        public readonly ?float $plannedIncome = null,
     ) {}
 
     public function availableBudget(): float
@@ -91,6 +92,7 @@ final class ParetoBandReport
             'total_income' => $this->totalIncome,
             'total_expense' => $this->totalExpense,
             'total_budgeted' => $this->totalBudgeted,
+            'planned_income' => $this->plannedIncome,
         ];
     }
 }

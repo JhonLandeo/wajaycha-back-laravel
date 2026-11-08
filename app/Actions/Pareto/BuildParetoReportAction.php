@@ -7,6 +7,7 @@ namespace App\Actions\Pareto;
 use App\DTOs\Pareto\ParetoBandReport;
 use App\DTOs\Pareto\ParetoWindow;
 use App\Repositories\Contracts\ParetoRepositoryContract;
+use App\Services\Income\PlannedIncomeService;
 use App\Services\Pareto\ParetoReportBuilder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -30,6 +31,7 @@ final class BuildParetoReportAction
     public function __construct(
         private readonly ParetoRepositoryContract $repository,
         private readonly ParetoReportBuilder $builder,
+        private readonly PlannedIncomeService $plannedIncome,
     ) {}
 
     public function execute(int $userId, ?int $month, ?int $year, int $page, int $perPage): LengthAwarePaginator
@@ -41,6 +43,18 @@ final class BuildParetoReportAction
             today: Carbon::now(),
         );
 
+        $totals = $this->repository->windowTotals($userId, $month, $year);
+        $totals = new \App\DTOs\Pareto\ParetoWindowTotals(
+            income: $totals->income,
+            expense: $totals->expense,
+            plannedIncome: $this->plannedIncome->forWindow(
+                $userId,
+                $month,
+                $year,
+                $window->budgetMonths,
+            ),
+        );
+
         $reports = $this->builder->build(
             bands: $this->repository->bandRowsForUser($userId),
             categories: $this->repository->budgetedLeafCategories($userId),
@@ -49,7 +63,7 @@ final class BuildParetoReportAction
             // question about the year.
             spentInYear: $this->repository->netSpendByCategory($userId, null, $year),
             window: $window,
-            totals: $this->repository->windowTotals($userId, $month, $year),
+            totals: $totals,
         );
 
         $page = max($page, 1);

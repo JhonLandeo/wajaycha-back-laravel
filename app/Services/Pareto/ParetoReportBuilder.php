@@ -127,6 +127,7 @@ final class ParetoReportBuilder
             totalIncome: $totals->income,
             totalExpense: $totals->expense,
             totalBudgeted: $totalBudgeted,
+            plannedIncome: $totals->plannedIncome,
         );
     }
 
