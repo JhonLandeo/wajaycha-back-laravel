@@ -17,6 +17,7 @@ use App\Models\Detail;
 use App\Models\Import;
 use App\Models\PantryItem;
 use App\Models\ParetoClassification;
+use App\Models\Tag;
 use App\Models\Transaction;
 
 /**
@@ -360,4 +361,31 @@ it('no permite fijar la categoria de otro usuario en el techo de compras', funct
     ], $headers)->assertStatus(422);
 
     $this->assertDatabaseMissing('grocery_budget_links', ['category_id' => $foreignCategory->id]);
+});
+
+// ------------------------------------------------------------------------- tags
+
+/**
+ * `GET /api/tags` no toma un id, así que no había un caso de "recurso ajeno" que
+ * cubrir: devolvía `Tag::all()` y el modal de categorización recibía el motivo
+ * una vez por cada usuario que lo tuviera. Cada usuario arranca con el mismo
+ * conjunto de motivos, así que el síntoma era "los motivos se repiten".
+ */
+it('solo lista los motivos del usuario autenticado', function () {
+    $owner = $this->createUserWithCategories();
+    $intruder = $this->createUserWithCategories();
+    $headers = $this->actingAsJwtUser($intruder);
+
+    Tag::create(['user_id' => $owner->id, 'name' => 'Ajeno']);
+    $own = Tag::create(['user_id' => $intruder->id, 'name' => 'Propio']);
+
+    $response = $this->getJson('/api/tags', $headers)->assertStatus(200);
+
+    $returned = $response->json();
+    $ownCount = Tag::where('user_id', $intruder->id)->count();
+
+    expect($returned)->toHaveCount($ownCount);
+    expect(collect($returned)->pluck('name'))->not->toContain('Ajeno');
+    expect(collect($returned)->pluck('id'))->toContain($own->id);
+    expect(collect($returned)->pluck('id')->unique())->toHaveCount($ownCount);
 });
