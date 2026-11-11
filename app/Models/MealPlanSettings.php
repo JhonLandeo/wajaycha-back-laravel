@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $household_size
  * @property array<int, string> $meal_types
  * @property array<int, int> $plan_weekdays
+ * @property array<int, string> $excluded_terms
  * @property int|null $max_prep_minutes
  * @property-read User $user
  */
@@ -30,6 +31,7 @@ class MealPlanSettings extends Model
         'household_size',
         'meal_types',
         'plan_weekdays',
+        'excluded_terms',
         'max_prep_minutes',
     ];
 
@@ -37,6 +39,7 @@ class MealPlanSettings extends Model
         'household_size' => 'integer',
         'meal_types' => 'array',
         'plan_weekdays' => 'array',
+        'excluded_terms' => 'array',
         'max_prep_minutes' => 'integer',
     ];
 

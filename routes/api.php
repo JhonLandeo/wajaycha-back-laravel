@@ -105,6 +105,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::put('shopping/food-budget', [\App\Http\Controllers\Shopping\FoodBudgetController::class, 'update']);
 
     Route::get('shopping/menu', [\App\Http\Controllers\Shopping\MealPlanController::class, 'show']);
+    Route::post('shopping/menu/suggest', [\App\Http\Controllers\Shopping\MealPlanController::class, 'suggest']);
     Route::put('shopping/menu/settings', [\App\Http\Controllers\Shopping\MealPlanController::class, 'updateSettings']);
     Route::put('shopping/menu/entries', [\App\Http\Controllers\Shopping\MealPlanController::class, 'saveEntry']);
     Route::delete('shopping/menu/entries/{entry}', [\App\Http\Controllers\Shopping\MealPlanController::class, 'destroyEntry']);

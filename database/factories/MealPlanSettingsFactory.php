@@ -25,6 +25,7 @@ class MealPlanSettingsFactory extends Factory
             'household_size' => 2,
             'meal_types' => ['breakfast', 'lunch', 'dinner'],
             'plan_weekdays' => [1, 2, 3, 4, 5, 6, 7],
+            'excluded_terms' => [],
             'max_prep_minutes' => null,
         ];
     }
