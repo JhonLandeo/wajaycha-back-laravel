@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\MealEntryKind;
+use App\Enums\MealEntryStatus;
 use App\Enums\MealType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property \Illuminate\Support\Carbon $plan_date
  * @property MealType $meal_type
  * @property MealEntryKind $kind
+ * @property MealEntryStatus $status
  * @property int|null $recipe_id
  * @property int $servings
  * @property int $cook_servings
@@ -44,6 +46,7 @@ class MealPlanEntry extends Model
         'plan_date',
         'meal_type',
         'kind',
+        'status',
         'recipe_id',
         'servings',
         'cook_servings',
@@ -55,6 +58,7 @@ class MealPlanEntry extends Model
         'plan_date' => 'date',
         'meal_type' => MealType::class,
         'kind' => MealEntryKind::class,
+        'status' => MealEntryStatus::class,
         'servings' => 'integer',
         'cook_servings' => 'integer',
     ];

@@ -78,9 +78,12 @@ it('saves a recipe entry and a leftover that consumes its extra portions', funct
         'recipe_id' => $recipe->id,
         'servings' => 2,
         'cook_servings' => 4,
+        'status' => 'cooked',
     ], $headers)
         ->assertOk()
         ->assertJsonPath('data.recipe.name', $recipe->name)
+        ->assertJsonPath('data.status', 'cooked')
+        ->assertJsonPath('data.status_label', 'Cociné')
         ->assertJsonPath('data.cook_servings', 4)
         ->json('data');
 

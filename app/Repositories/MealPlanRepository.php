@@ -84,6 +84,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
             ],
             [
                 'kind' => $data['kind'],
+                'status' => $data['status'] ?? 'planned',
                 'recipe_id' => $data['recipe_id'] ?? null,
                 'servings' => $data['servings'] ?? 0,
                 'cook_servings' => $data['cook_servings'] ?? 0,
