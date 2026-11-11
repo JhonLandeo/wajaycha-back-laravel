@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Shopping;
 
 use App\Actions\Shopping\BuildMenuShoppingListAction;
 use App\Actions\Shopping\SaveMealPlanEntryAction;
+use App\Actions\Shopping\SuggestMenuAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shopping\StoreMealPlanEntryRequest;
 use App\Http\Requests\Shopping\UpdateMealPlanSettingsRequest;
@@ -23,21 +24,26 @@ final class MealPlanController extends Controller
         private readonly MealPlanRepositoryContract $repository,
         private readonly SaveMealPlanEntryAction $saveEntry,
         private readonly BuildMenuShoppingListAction $buildShoppingList,
+        private readonly SuggestMenuAction $suggestMenu,
     ) {}
 
     public function show(Request $request): JsonResponse
     {
         $userId = (int) Auth::id();
         $week = $this->weekFrom($request);
-        $settings = $this->repository->settingsFor($userId);
-        $entries = $this->repository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
+
+        return response()->json(['data' => $this->menuPayload($userId, $week)]);
+    }
+
+    public function suggest(Request $request): JsonResponse
+    {
+        $userId = (int) Auth::id();
+        $week = $this->weekFrom($request);
+        $source = $this->suggestMenu->execute($userId, $week->startsOn->toDateString());
 
         return response()->json([
-            'data' => [
-                'week' => $this->weekPayload($week),
-                'settings' => $this->settingsPayload($settings),
-                'entries' => $entries->map(fn (MealPlanEntry $entry): array => $this->entryPayload($entry))->values()->all(),
-            ],
+            'data' => $this->menuPayload($userId, $week),
+            'source' => $source,
         ]);
     }
 
@@ -49,6 +55,7 @@ final class MealPlanController extends Controller
             'household_size' => (int) $request->validated('household_size'),
             'meal_types' => array_values(array_unique($request->validated('meal_types'))),
             'plan_weekdays' => array_values(array_unique(array_map('intval', $request->validated('plan_weekdays')))),
+            'excluded_terms' => array_values(array_unique($request->validated('excluded_terms', []))),
             'max_prep_minutes' => $request->validated('max_prep_minutes'),
         ]);
 
@@ -82,6 +89,21 @@ final class MealPlanController extends Controller
         return response()->json([
             'data' => $this->buildShoppingList->execute((int) Auth::id(), $week->startsOn->toDateString()),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function menuPayload(int $userId, \App\DTOs\Shopping\PlanningWeek $week): array
+    {
+        $settings = $this->repository->settingsFor($userId);
+        $entries = $this->repository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
+
+        return [
+            'week' => $this->weekPayload($week),
+            'settings' => $this->settingsPayload($settings),
+            'entries' => $entries->map(fn (MealPlanEntry $entry): array => $this->entryPayload($entry))->values()->all(),
+        ];
     }
 
     private function weekFrom(Request $request): \App\DTOs\Shopping\PlanningWeek
@@ -118,6 +140,7 @@ final class MealPlanController extends Controller
             'household_size' => (int) $settings->household_size,
             'meal_types' => $settings->meal_types,
             'plan_weekdays' => $settings->plan_weekdays,
+            'excluded_terms' => $settings->excluded_terms ?? [],
             'max_prep_minutes' => $settings->max_prep_minutes,
         ];
     }

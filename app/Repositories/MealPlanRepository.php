@@ -22,6 +22,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
                 'household_size' => 2,
                 'meal_types' => ['breakfast', 'lunch', 'dinner'],
                 'plan_weekdays' => [1, 2, 3, 4, 5, 6, 7],
+                'excluded_terms' => [],
                 'max_prep_minutes' => null,
             ]
         );
@@ -97,6 +98,14 @@ final class MealPlanRepository implements MealPlanRepositoryContract
     public function deleteEntry(MealPlanEntry $entry): bool
     {
         return (bool) $entry->delete();
+    }
+
+    public function clearWeek(int $userId, CarbonImmutable $startsOn, CarbonImmutable $endsOn): void
+    {
+        MealPlanEntry::query()
+            ->where('user_id', $userId)
+            ->whereBetween('plan_date', [$startsOn->toDateString(), $endsOn->toDateString()])
+            ->delete();
     }
 
     public function leftoverServingsUsed(int $sourceEntryId, ?int $exceptEntryId = null): int
