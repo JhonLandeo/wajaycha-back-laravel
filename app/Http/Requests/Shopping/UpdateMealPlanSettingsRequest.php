@@ -26,6 +26,8 @@ class UpdateMealPlanSettingsRequest extends FormRequest
             'meal_types.*' => ['string', 'distinct', Rule::in(MealType::values())],
             'plan_weekdays' => ['required', 'array', 'min:1'],
             'plan_weekdays.*' => ['integer', 'distinct', 'between:1,7'],
+            'excluded_terms' => ['sometimes', 'array', 'max:20'],
+            'excluded_terms.*' => ['string', 'distinct', 'max:60'],
             'max_prep_minutes' => ['nullable', 'integer', 'between:1,240'],
         ];
     }
