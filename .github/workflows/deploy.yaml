@@ -81,6 +81,9 @@ jobs:
           # slug: correrlo en cada deploy es idempotente. Sin esto, products
           # queda vacio en produccion y ningun precio tiene a que pegarse.
           run sudo -u www-data php artisan db:seed --class=ProductCatalogueSeeder --force
+          # El recetario global depende del catálogo anterior: resuelve
+          # ingredientes por slug. Es idempotente y se ejecuta después.
+          run sudo -u www-data php artisan db:seed --class=RecipeCatalogueSeeder --force
           run sudo -u www-data php artisan optimize:clear
           run sudo -u www-data php artisan config:cache
           run sudo -u www-data php artisan route:cache

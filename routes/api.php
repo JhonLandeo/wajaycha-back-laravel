@@ -101,6 +101,14 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::get('shopping/grocery-budget-link', [\App\Http\Controllers\Shopping\GroceryBudgetLinkController::class, 'show']);
     Route::put('shopping/grocery-budget-link', [\App\Http\Controllers\Shopping\GroceryBudgetLinkController::class, 'update']);
 
+    Route::get('shopping/food-budget', [\App\Http\Controllers\Shopping\FoodBudgetController::class, 'show']);
+    Route::put('shopping/food-budget', [\App\Http\Controllers\Shopping\FoodBudgetController::class, 'update']);
+
+    Route::get('shopping/recipes', [\App\Http\Controllers\Shopping\RecipeController::class, 'index']);
+    Route::post('shopping/recipes', [\App\Http\Controllers\Shopping\RecipeController::class, 'store']);
+    Route::put('shopping/recipes/{recipe}', [\App\Http\Controllers\Shopping\RecipeController::class, 'update']);
+    Route::delete('shopping/recipes/{recipe}', [\App\Http\Controllers\Shopping\RecipeController::class, 'destroy']);
+
     Route::get('shopping/weekly-plan', [\App\Http\Controllers\Shopping\WeeklyPlanController::class, 'show']);
 
     Route::prefix('categories')->group(function () {

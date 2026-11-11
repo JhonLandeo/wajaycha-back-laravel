@@ -6,7 +6,10 @@ namespace App\Actions\Shopping;
 
 use App\DTOs\Prices\PriceContext;
 use App\DTOs\Shopping\ConsumptionHabitLine;
+use App\DTOs\Shopping\GroceryCeilingInput;
 use App\DTOs\Shopping\PlanningWeek;
+use App\Enums\BudgetPeriod;
+use App\Repositories\Contracts\FoodBudgetRepositoryContract;
 use App\Repositories\Contracts\GroceryBudgetRepositoryContract;
 use App\Repositories\Contracts\PriceRepositoryContract;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
@@ -32,6 +35,7 @@ final class BuildWeeklyPlanAction
 {
     public function __construct(
         private readonly ShoppingRepositoryContract $shoppingRepository,
+        private readonly FoodBudgetRepositoryContract $foodBudgetRepository,
         private readonly GroceryBudgetRepositoryContract $budgetRepository,
         private readonly ResolveGroceryCategoryAction $resolveCategoryAction,
         private readonly ShoppingPlanService $planService,
@@ -49,12 +53,23 @@ final class BuildWeeklyPlanAction
         $habits = $this->shoppingRepository->activeHabitLinesFor($userId);
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
 
-        // Deliberate side effect of a GET (design.md D6): this may INSERT a
-        // grocery_budget_links row when no pin exists yet and the
-        // configured category name resolves — the same lazy-resolve-then-
-        // pin write `GroceryBudgetLinkController@show` already performs.
-        $link = $this->resolveCategoryAction->execute($userId);
-        $ceiling = $link !== null ? $this->budgetRepository->ceilingFor($userId, $week->asOf) : null;
+        $foodBudget = $this->foodBudgetRepository->snapshotFor($userId, $week->asOf);
+
+        if ($foodBudget !== null) {
+            $ceiling = new GroceryCeilingInput(
+                categoryId: $foodBudget->primaryCategoryId ?? 0,
+                categoryName: $foodBudget->categoryName ?? 'Comida',
+                monthlyBudget: $foodBudget->monthlyAmount,
+                budgetPeriod: BudgetPeriod::MONTHLY,
+                spent: $foodBudget->spent,
+            );
+        } else {
+            // Compatibilidad mientras el pin viejo no fue migrado: el nuevo
+            // presupuesto de comida manda cuando existe; si no, se conserva el
+            // comportamiento anterior.
+            $link = $this->resolveCategoryAction->execute($userId);
+            $ceiling = $link !== null ? $this->budgetRepository->ceilingFor($userId, $week->asOf) : null;
+        }
 
         $plan = $this->planService->plan($habits, $pantry, $ceiling, $week, $this->priceContextFor($habits, $week));
 
