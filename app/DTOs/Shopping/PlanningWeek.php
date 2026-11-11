@@ -30,4 +30,20 @@ final class PlanningWeek
             endsOn: $local->endOfWeek(CarbonImmutable::SUNDAY)->startOfDay(),
         );
     }
+
+    /**
+     * Una semana pedida explícitamente, con el reloj separado: `$asOf` sigue
+     * siendo la fecha de referencia para precios y presupuesto, mientras
+     * `$startsOn` puede ser una semana futura.
+     */
+    public static function forWeekStarting(CarbonImmutable $startsOn, CarbonImmutable $asOf): self
+    {
+        $start = $startsOn->setTimezone('America/Lima')->startOfDay();
+
+        return new self(
+            asOf: $asOf,
+            startsOn: $start->startOfWeek(CarbonImmutable::MONDAY),
+            endsOn: $start->startOfWeek(CarbonImmutable::MONDAY)->addDays(6),
+        );
+    }
 }
