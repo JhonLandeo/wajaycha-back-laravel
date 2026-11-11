@@ -26,4 +26,10 @@ interface FoodBudgetRepositoryContract
      * cuando no hay presupuesto o no tiene categorías de alcance.
      */
     public function snapshotFor(int $userId, CarbonImmutable $asOf): ?FoodBudgetSnapshot;
+
+    /**
+     * Gasto real del alcance de comida entre dos fechas, o null si no hay
+     * presupuesto con categorías. Se usa para comparar el menú con la semana.
+     */
+    public function spentBetween(int $userId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): ?float;
 }

@@ -128,6 +128,41 @@ final class FoodBudgetRepository implements FoodBudgetRepositoryContract
         );
     }
 
+    public function spentBetween(int $userId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): ?float
+    {
+        $budget = $this->findForUser($userId);
+
+        if ($budget === null || $budget->categories->isEmpty()) {
+            return null;
+        }
+
+        $allCategories = $this->categoryRepository->findByUserId($userId);
+        $childrenByParent = $this->childrenByParent($allCategories);
+        $selectedIds = $budget->categories
+            ->map(static fn (Category $category): int => (int) $category->id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $scopeIds = [];
+        foreach ($selectedIds as $selectedId) {
+            foreach ($this->descendantIds($selectedId, $childrenByParent) as $scopeId) {
+                $scopeIds[$scopeId] = true;
+            }
+        }
+
+        $totals = $this->transactionRepository->expenseByCategoryBetween($userId, $startsAt, $endsAt);
+        $spent = 0.0;
+
+        foreach ($totals as $row) {
+            if ($row->category_id !== null && isset($scopeIds[(int) $row->category_id])) {
+                $spent += (float) $row->total;
+            }
+        }
+
+        return round($spent, 2);
+    }
+
     /**
      * @param  iterable<int|string, \Illuminate\Database\Eloquent\Model>  $categories
      * @return array<int, array<int, int>>

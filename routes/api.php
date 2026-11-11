@@ -108,8 +108,10 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('shopping/menu/suggest', [\App\Http\Controllers\Shopping\MealPlanController::class, 'suggest']);
     Route::put('shopping/menu/settings', [\App\Http\Controllers\Shopping\MealPlanController::class, 'updateSettings']);
     Route::put('shopping/menu/entries', [\App\Http\Controllers\Shopping\MealPlanController::class, 'saveEntry']);
+    Route::patch('shopping/menu/entries/{entry}/status', [\App\Http\Controllers\Shopping\MealPlanController::class, 'updateStatus']);
     Route::delete('shopping/menu/entries/{entry}', [\App\Http\Controllers\Shopping\MealPlanController::class, 'destroyEntry']);
     Route::get('shopping/menu/shopping-list', [\App\Http\Controllers\Shopping\MealPlanController::class, 'shoppingList']);
+    Route::get('shopping/menu/spending', [\App\Http\Controllers\Shopping\MealPlanController::class, 'spending']);
 
     Route::get('shopping/recipes', [\App\Http\Controllers\Shopping\RecipeController::class, 'index']);
     Route::post('shopping/recipes', [\App\Http\Controllers\Shopping\RecipeController::class, 'store']);
