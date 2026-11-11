@@ -242,4 +242,3 @@ it('compares the menu estimate with the real food spend of the week', function (
         ->assertJsonPath('data.planned_cost', null)
         ->assertJsonPath('data.difference', null);
 });
-
