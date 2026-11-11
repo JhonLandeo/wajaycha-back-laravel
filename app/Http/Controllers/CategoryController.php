@@ -21,8 +21,7 @@ final class CategoryController extends Controller
         private readonly CategoryRepositoryContract $repository,
         private readonly StoreCategoryAction $storeAction,
         private readonly UpdateCategoryAction $updateAction
-    ) {
-    }
+    ) {}
 
     /**
      * Display a listing of the resource.
@@ -48,7 +47,9 @@ final class CategoryController extends Controller
     {
         $userId = (int) Auth::id();
         $search = $request->input('search');
-        $categories = $this->repository->getAllForUser($userId, $search);
+        $categories = $request->boolean('include_parents')
+            ? $this->repository->findByUserId($userId)
+            : $this->repository->getAllForUser($userId, $search);
 
         return response()->json($categories);
     }
@@ -56,7 +57,7 @@ final class CategoryController extends Controller
     public function show(int $id): JsonResponse
     {
         $category = $this->repository->findById($id, (int) Auth::id());
-        if (!$category) {
+        if (! $category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
@@ -80,7 +81,7 @@ final class CategoryController extends Controller
     public function update(UpdateCategoryRequest $request, int $id): JsonResponse
     {
         $category = $this->repository->findById($id, (int) Auth::id());
-        if (!$category) {
+        if (! $category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
@@ -96,17 +97,18 @@ final class CategoryController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $category = $this->repository->findById($id, (int) Auth::id());
-        if (!$category) {
+        if (! $category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
         if ($category->transactions()->exists()) {
             return response()->json([
-                'message' => 'No se puede eliminar la categoría porque tiene transacciones asociadas'
+                'message' => 'No se puede eliminar la categoría porque tiene transacciones asociadas',
             ], 422);
         }
 
         $this->repository->delete($category);
+
         return response()->json(['status' => 'deleted']);
     }
 
@@ -116,7 +118,7 @@ final class CategoryController extends Controller
     public function patchPareto(int $id, Request $request): JsonResponse
     {
         $category = $this->repository->findById($id, (int) Auth::id());
-        if (!$category) {
+        if (! $category) {
             return response()->json(['message' => 'Categoría no encontrada'], 404);
         }
 
