@@ -101,6 +101,13 @@ final class MealPlanRepository implements MealPlanRepositoryContract
         return (bool) $entry->delete();
     }
 
+    public function updateStatus(MealPlanEntry $entry, \App\Enums\MealEntryStatus $status): MealPlanEntry
+    {
+        $entry->update(['status' => $status->value]);
+
+        return $entry->refresh();
+    }
+
     public function clearWeek(int $userId, CarbonImmutable $startsOn, CarbonImmutable $endsOn): void
     {
         MealPlanEntry::query()

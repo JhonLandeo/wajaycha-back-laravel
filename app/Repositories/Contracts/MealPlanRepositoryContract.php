@@ -35,6 +35,8 @@ interface MealPlanRepositoryContract
 
     public function deleteEntry(MealPlanEntry $entry): bool;
 
+    public function updateStatus(MealPlanEntry $entry, \App\Enums\MealEntryStatus $status): MealPlanEntry;
+
     public function clearWeek(int $userId, CarbonImmutable $startsOn, CarbonImmutable $endsOn): void;
 
     /** Servings already claimed by leftover entries of a source entry. */

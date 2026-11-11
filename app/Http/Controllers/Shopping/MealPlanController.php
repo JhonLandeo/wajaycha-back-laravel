@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Shopping;
 
 use App\Actions\Shopping\BuildMenuShoppingListAction;
+use App\Actions\Shopping\BuildMenuSpendingAction;
 use App\Actions\Shopping\SaveMealPlanEntryAction;
 use App\Actions\Shopping\SuggestMenuAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shopping\StoreMealPlanEntryRequest;
+use App\Http\Requests\Shopping\UpdateMealEntryStatusRequest;
 use App\Http\Requests\Shopping\UpdateMealPlanSettingsRequest;
 use App\Models\MealPlanEntry;
 use App\Models\MealPlanSettings;
@@ -24,6 +26,7 @@ final class MealPlanController extends Controller
         private readonly MealPlanRepositoryContract $repository,
         private readonly SaveMealPlanEntryAction $saveEntry,
         private readonly BuildMenuShoppingListAction $buildShoppingList,
+        private readonly BuildMenuSpendingAction $buildSpending,
         private readonly SuggestMenuAction $suggestMenu,
     ) {}
 
@@ -69,6 +72,19 @@ final class MealPlanController extends Controller
         return response()->json(['data' => $this->entryPayload($entry)]);
     }
 
+    public function updateStatus(UpdateMealEntryStatusRequest $request, int $entry): JsonResponse
+    {
+        $model = $this->repository->findEntry($entry, (int) Auth::id());
+
+        if ($model === null) {
+            abort(404);
+        }
+
+        $updated = $this->repository->updateStatus($model, \App\Enums\MealEntryStatus::from((string) $request->validated('status')));
+
+        return response()->json(['data' => $this->entryPayload($updated)]);
+    }
+
     public function destroyEntry(int $entry): JsonResponse
     {
         $model = $this->repository->findEntry($entry, (int) Auth::id());
@@ -104,6 +120,15 @@ final class MealPlanController extends Controller
             'settings' => $this->settingsPayload($settings),
             'entries' => $entries->map(fn (MealPlanEntry $entry): array => $this->entryPayload($entry))->values()->all(),
         ];
+    }
+
+    public function spending(Request $request): JsonResponse
+    {
+        $week = $this->weekFrom($request);
+
+        return response()->json([
+            'data' => $this->buildSpending->execute((int) Auth::id(), $week->startsOn->toDateString()),
+        ]);
     }
 
     private function weekFrom(Request $request): \App\DTOs\Shopping\PlanningWeek
