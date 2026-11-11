@@ -131,3 +131,40 @@ it('states the overspend and still lists every needed product when the ceiling i
         ->and($response->json('data.lines'))->toHaveCount(1)
         ->and($response->json('data.lines.0.product_id'))->toBe($product->id);
 });
+it('reads the food budget when it exists, even if a legacy grocery pin also exists', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $product = Product::factory()->create(['name' => 'Arroz', 'unit' => Unit::Kg->value]);
+    ConsumptionHabit::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'weekly_quantity' => 2.0,
+        'unit' => Unit::Kg->value,
+    ]);
+
+    $category = Category::factory()->create(['user_id' => $user->id, 'monthly_budget' => 100]);
+    GroceryBudgetLink::factory()->create([
+        'user_id' => $user->id,
+        'category_id' => $category->id,
+        'resolved_by' => 'manual',
+    ]);
+
+    $budget = \App\Models\FoodBudget::factory()->create([
+        'user_id' => $user->id,
+        'monthly_amount' => 500,
+        'shopping_day' => 7,
+    ]);
+    $budget->categories()->syncWithPivotValues([$category->id], ['user_id' => $user->id]);
+
+    Transaction::factory()->create([
+        'user_id' => $user->id,
+        'category_id' => $category->id,
+        'type_transaction' => 'expense',
+        'amount' => 250.00,
+        'date_operation' => CarbonImmutable::now()->startOfMonth()->addDays(2),
+    ]);
+
+    $response = $this->getJson('/api/shopping/weekly-plan', $headers)->assertOk();
+
+    expect((float) $response->json('data.ceiling.amount'))->toBe(500.0)
+        ->and((float) $response->json('data.ceiling.spent'))->toBe(250.0);
+});
