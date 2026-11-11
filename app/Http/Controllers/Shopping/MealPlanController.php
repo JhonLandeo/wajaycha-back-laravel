@@ -157,6 +157,8 @@ final class MealPlanController extends Controller
             'meal_type_label' => $entry->meal_type->label(),
             'kind' => $entry->kind->value,
             'kind_label' => $entry->kind->label(),
+            'status' => $entry->status->value,
+            'status_label' => $entry->status->label(),
             'recipe_id' => $entry->recipe_id,
             'recipe' => $entry->recipe === null ? null : [
                 'id' => (int) $entry->recipe->id,
