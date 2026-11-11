@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Actions\Shopping;
 
 use App\Enums\MealEntryKind;
+use App\Enums\MealEntryStatus;
 use App\Enums\MealType;
 use App\Models\MealPlanEntry;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
@@ -38,6 +39,14 @@ final class SaveMealPlanEntryAction
             MealEntryKind::Leftover => $this->leftoverEntry($userId, $planDate, $mealType, $existing, $data),
             MealEntryKind::EatOut, MealEntryKind::Free => $this->emptyEntry($userId, $planDate, $mealType, $existing, $kind, $data),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function statusFor(?MealPlanEntry $existing, array $data): string
+    {
+        return (string) ($data['status'] ?? $existing?->status->value ?? MealEntryStatus::Planned->value);
     }
 
     /**
@@ -86,6 +95,7 @@ final class SaveMealPlanEntryAction
             'plan_date' => $planDate,
             'meal_type' => $mealType->value,
             'kind' => MealEntryKind::Recipe->value,
+            'status' => $this->statusFor($existing, $data),
             'recipe_id' => $recipeId,
             'servings' => $servings,
             'cook_servings' => $cookServings,
@@ -135,6 +145,7 @@ final class SaveMealPlanEntryAction
             'plan_date' => $planDate,
             'meal_type' => $mealType->value,
             'kind' => MealEntryKind::Leftover->value,
+            'status' => $this->statusFor($existing, $data),
             'recipe_id' => $source->recipe_id,
             'servings' => $servings,
             'cook_servings' => 0,
@@ -162,6 +173,7 @@ final class SaveMealPlanEntryAction
             'plan_date' => $planDate,
             'meal_type' => $mealType->value,
             'kind' => $kind->value,
+            'status' => $this->statusFor($existing, $data),
             'recipe_id' => null,
             'servings' => 0,
             'cook_servings' => 0,

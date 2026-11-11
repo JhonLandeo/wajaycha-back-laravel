@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Shopping;
 
 use App\Enums\MealEntryKind;
+use App\Enums\MealEntryStatus;
 use App\Enums\MealType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -27,6 +28,7 @@ class StoreMealPlanEntryRequest extends FormRequest
             'plan_date' => ['required', 'date_format:Y-m-d'],
             'meal_type' => ['required', Rule::enum(MealType::class)],
             'kind' => ['required', Rule::enum(MealEntryKind::class)],
+            'status' => ['sometimes', Rule::enum(MealEntryStatus::class)],
             'recipe_id' => [
                 'nullable',
                 'integer',

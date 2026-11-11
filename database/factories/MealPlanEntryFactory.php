@@ -28,6 +28,7 @@ class MealPlanEntryFactory extends Factory
             'plan_date' => now()->startOfWeek()->toDateString(),
             'meal_type' => MealType::Lunch,
             'kind' => MealEntryKind::Recipe,
+            'status' => \App\Enums\MealEntryStatus::Planned,
             'recipe_id' => Recipe::factory(),
             'servings' => 2,
             'cook_servings' => 2,
