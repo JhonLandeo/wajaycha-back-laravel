@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Models\FoodBudget;
 use App\Models\MealPlanEntry;
 use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
+use App\Models\Transaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -186,3 +188,58 @@ it('deletes an entry and its leftover children', function () {
     expect(MealPlanEntry::find($source->id))->toBeNull()
         ->and(MealPlanEntry::find($leftover->id))->toBeNull();
 });
+it('marks the status of an entry from a one-tap endpoint', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = menuRecipe($user->id);
+    $entry = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+    ]);
+
+    $this->patchJson("/api/shopping/menu/entries/{$entry->id}/status", ['status' => 'cooked'], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.status', 'cooked')
+        ->assertJsonPath('data.status_label', 'Cociné');
+
+    $this->patchJson("/api/shopping/menu/entries/{$entry->id}/status", ['status' => 'invented'], $headers)
+        ->assertStatus(422);
+});
+
+it('compares the menu estimate with the real food spend of the week', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = menuRecipe($user->id);
+    $category = \App\Models\Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 400,
+    ]);
+    $budget = FoodBudget::factory()->create([
+        'user_id' => $user->id,
+        'monthly_amount' => 400,
+    ]);
+    $budget->categories()->syncWithPivotValues([$category->id], ['user_id' => $user->id]);
+    Transaction::factory()->create([
+        'user_id' => $user->id,
+        'category_id' => $category->id,
+        'type_transaction' => 'expense',
+        'amount' => 50,
+        'date_operation' => '2026-11-10',
+    ]);
+    MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+
+    $this->getJson('/api/shopping/menu/spending?week_start=2026-11-09', $headers)
+        ->assertOk()
+        ->assertJsonPath('data.actual_spent', 50)
+        ->assertJsonPath('data.planned_cost', null)
+        ->assertJsonPath('data.difference', null);
+});
+
