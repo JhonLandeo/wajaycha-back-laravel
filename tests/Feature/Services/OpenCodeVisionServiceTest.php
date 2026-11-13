@@ -56,6 +56,7 @@ it('llama a OpenCode Go con bearer y sin la clave en la URL', function () {
         return $request->url() === 'https://opencode.ai/inference/go/google/v1beta/models/gemini-4-argon:generateContent'
             && $request->hasHeader('Authorization', 'Bearer oc_sk_test')
             && $request->hasHeader('x-opencode-session', 'wajaycha-capture')
+            && $request['contents'][0]['role'] === 'user'
             && ! str_contains($request->url(), 'key=');
     });
 });
