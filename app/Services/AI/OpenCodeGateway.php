@@ -47,7 +47,7 @@ final class OpenCodeGateway
                 'User-Agent' => (string) config('services.opencode.user_agent'),
             ])
             ->post($url, [
-                'contents' => $contents,
+                'contents' => $this->withRoles($contents),
                 'generationConfig' => $generationConfig,
             ]);
 
@@ -62,6 +62,26 @@ final class OpenCodeGateway
         $text = $response->json('candidates.0.content.parts.0.text');
 
         return is_string($text) && trim($text) !== '' ? $text : null;
+    }
+
+    /**
+     * OpenCode Go's Google endpoint rejects a `contents` entry without a valid
+     * role. The callers only build `parts`, which is enough for Google's native
+     * API but not for Go's translation layer, so the role is normalized here —
+     * one door, one contract.
+     *
+     * @param  array<int, array<string, mixed>>  $contents
+     * @return array<int, array<string, mixed>>
+     */
+    private function withRoles(array $contents): array
+    {
+        return array_map(static function (array $content): array {
+            if (! isset($content['role'])) {
+                $content['role'] = 'user';
+            }
+
+            return $content;
+        }, $contents);
     }
 
     /**
