@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Actions\Dashboard\BuildBudgetPaceAction;
 use App\DTOs\Dashboard\DashboardScope;
 use App\Enums\DashboardMeasure;
 use App\Repositories\Contracts\DashboardRepositoryContract;
@@ -21,6 +22,7 @@ class DashboardController extends Controller
 {
     public function __construct(
         private readonly DashboardRepositoryContract $dashboard,
+        private readonly BuildBudgetPaceAction $budgetPace,
     ) {}
 
     public function kpiData(Request $request): JsonResponse
@@ -55,6 +57,20 @@ class DashboardController extends Controller
             $this->scopeFrom($request),
             $request->input('search'),
         ));
+    }
+
+    public function paceData(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        return response()->json($this->budgetPace->execute(
+            (int) Auth::id(),
+            (int) $validated['year'],
+            (int) $validated['month'],
+        )->toArray());
     }
 
     /**

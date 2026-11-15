@@ -19,6 +19,7 @@ use App\Models\Category;
 use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 
 /**
  * @return array{0: User, 1: array<string, string>}
@@ -212,6 +213,112 @@ it('filtra el agrupado por categoría con el término de búsqueda', function ()
     expect($names)->not->toContain('Transporte');
 });
 
+// ----------------------------------------------------------------- pace-data
+
+it('calcula el ritmo del mes contra los presupuestos mensuales', function () {
+    $this->travelTo(Carbon::parse('2026-03-10 12:00:00', 'America/Lima'));
+
+    [$user, $headers] = dashboardOwner();
+    $food = Category::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Comida',
+        'type' => 'expense',
+        'monthly_budget' => 1000.00,
+        'budget_period' => 'monthly',
+    ]);
+    $insurance = Category::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Seguros',
+        'type' => 'expense',
+        'monthly_budget' => 1200.00,
+        'budget_period' => 'yearly',
+    ]);
+
+    expenseFor($user, '2026-03-01 12:00:00', 100.00, $food->id);
+    expenseFor($user, '2026-03-02 12:00:00', 50.00, $food->id);
+    expenseFor($user, '2026-03-09 12:00:00', 50.00, $food->id);
+    // An envelope is consumed in jumps; it must not enter a straight-line pace.
+    expenseFor($user, '2026-03-02 12:00:00', 500.00, $insurance->id);
+
+    $response = $this->postJson('/api/pace-data', ['year' => 2026, 'month' => 3], $headers);
+
+    $response->assertOk()->assertJsonPath('status', 'on_track');
+
+    expect((float) $response->json('monthly_budget'))->toBe(1000.00)
+        ->and((float) $response->json('spent'))->toBe(200.00)
+        ->and((int) $response->json('category_count'))->toBe(1)
+        ->and((int) $response->json('days_in_month'))->toBe(31)
+        ->and((int) $response->json('days_elapsed'))->toBe(10)
+        ->and((float) $response->json('projected'))->toBe(620.00)
+        ->and($response->json('daily'))->toHaveCount(10)
+        ->and($response->json('daily.9.cumulative'))->toBe(200);
+});
+
+it('marca over cuando el gasto mensual supera el presupuesto', function () {
+    $this->travelTo(Carbon::parse('2026-03-10 12:00:00', 'America/Lima'));
+
+    [$user, $headers] = dashboardOwner();
+    $food = Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 100.00,
+        'budget_period' => 'monthly',
+    ]);
+
+    expenseFor($user, '2026-03-02 12:00:00', 150.00, $food->id);
+
+    $response = $this->postJson('/api/pace-data', ['year' => 2026, 'month' => 3], $headers);
+
+    $response->assertOk()->assertJsonPath('status', 'over');
+    expect((float) $response->json('remaining'))->toBe(-50.00);
+});
+
+it('no mezcla el gasto de otro usuario en el ritmo', function () {
+    $this->travelTo(Carbon::parse('2026-03-10 12:00:00', 'America/Lima'));
+
+    [$user, $headers] = dashboardOwner();
+    $stranger = User::factory()->create();
+
+    $mine = Category::factory()->create([
+        'user_id' => $user->id,
+        'type' => 'expense',
+        'monthly_budget' => 500.00,
+        'budget_period' => 'monthly',
+    ]);
+    $theirs = Category::factory()->create([
+        'user_id' => $stranger->id,
+        'type' => 'expense',
+        'monthly_budget' => 900.00,
+        'budget_period' => 'monthly',
+    ]);
+
+    expenseFor($user, '2026-03-02 12:00:00', 40.00, $mine->id);
+    expenseFor($stranger, '2026-03-02 12:00:00', 999.00, $theirs->id);
+
+    $response = $this->postJson('/api/pace-data', ['year' => 2026, 'month' => 3], $headers);
+
+    expect((float) $response->json('monthly_budget'))->toBe(500.00)
+        ->and((float) $response->json('spent'))->toBe(40.00);
+});
+
+it('responde no_budget cuando no hay presupuestos mensuales', function () {
+    $this->travelTo(Carbon::parse('2026-03-10 12:00:00', 'America/Lima'));
+
+    [$user, $headers] = dashboardOwner();
+
+    $response = $this->postJson('/api/pace-data', ['year' => 2026, 'month' => 3], $headers);
+
+    $response->assertOk()->assertJsonPath('status', 'no_budget');
+});
+
+it('pide año y mes para calcular el ritmo', function () {
+    [$user, $headers] = dashboardOwner();
+
+    $this->postJson('/api/pace-data', ['year' => 2026], $headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('month');
+});
+
 // ------------------------------------------------------------------- guarding
 
 it('rechaza cada endpoint del dashboard sin autenticación', function (string $route) {
@@ -222,4 +329,5 @@ it('rechaza cada endpoint del dashboard sin autenticación', function (string $r
     '/api/weekly-data',
     '/api/monthly-data',
     '/api/transaction-by-category',
+    '/api/pace-data',
 ]);

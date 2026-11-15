@@ -8,6 +8,7 @@ use App\DTOs\Dashboard\DashboardScope;
 use App\Enums\DashboardMeasure;
 use App\Models\UnifyTransactions;
 use App\Repositories\Contracts\DashboardRepositoryContract;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -111,6 +112,42 @@ class DashboardRepository implements DashboardRepositoryContract
             ->orderByRaw("{$totalExpression} DESC")
             ->get()
             ->toArray();
+    }
+
+    /**
+     * @param  array<int, int>  $categoryIds
+     * @return array<int, float>
+     */
+    public function dailyExpenseForCategories(int $userId, int $year, int $month, array $categoryIds): array
+    {
+        if ($categoryIds === []) {
+            return [];
+        }
+
+        $from = Carbon::create($year, $month, 1)->startOfDay();
+        $to = $from->copy()->addMonth();
+
+        $rows = DB::table('v_unified_transactions')
+            ->selectRaw('EXTRACT(DAY FROM date_operation)::int AS day')
+            ->selectRaw('COALESCE(SUM(amount), 0) AS amount')
+            ->where('user_id', $userId)
+            ->where('type_transaction', 'expense')
+            ->whereIn('category_id', $categoryIds)
+            // Half-open range on the raw column: wrapping it in a function for the
+            // year/month test would discard the index. The GROUP BY needs EXTRACT
+            // anyway, but the predicate that prunes rows does not.
+            ->where('date_operation', '>=', $from)
+            ->where('date_operation', '<', $to)
+            ->groupByRaw('EXTRACT(DAY FROM date_operation)::int')
+            ->orderBy('day')
+            ->get();
+
+        $daily = [];
+        foreach ($rows as $row) {
+            $daily[(int) $row->day] = (float) $row->amount;
+        }
+
+        return $daily;
     }
 
     /**
