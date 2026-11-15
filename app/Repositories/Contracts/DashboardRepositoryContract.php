@@ -61,4 +61,17 @@ interface DashboardRepositoryContract
      * @return array<int, array{name: string, quantity: int, total: string}>
      */
     public function spendByCategory(DashboardScope $scope, ?string $search = null): array;
+
+    /**
+     * Expense per day of one month, restricted to the given categories.
+     *
+     * The category list is not a convenience filter: pacing compares spending
+     * against the sum of those categories' budgets, so widening the scope to
+     * every expense would divide two different things. An empty list returns an
+     * empty series without touching the database.
+     *
+     * @param  array<int, int>  $categoryIds
+     * @return array<int, float> day of month => amount
+     */
+    public function dailyExpenseForCategories(int $userId, int $year, int $month, array $categoryIds): array;
 }
