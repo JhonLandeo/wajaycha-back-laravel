@@ -8,6 +8,7 @@ use App\Enums\DietProfile;
 use App\Enums\DietTag;
 use App\Enums\KitchenEquipment;
 use App\Enums\RecipeCourse;
+use App\Enums\RecipeCuisine;
 use App\Enums\RecipeOrigin;
 use App\Enums\Unit;
 use App\Models\MealPlanSettings;
@@ -181,6 +182,7 @@ final class AiRecipeDraftValidator
                 'meal_types' => $mealTypes,
                 'course' => $course->value,
                 'origin' => RecipeOrigin::Ai->value,
+                'cuisine' => RecipeCuisine::Peruvian->value,
                 'required_equipment' => $equipment,
                 'diet_tags' => $dietTags,
                 'prep_minutes' => $prepMinutes,

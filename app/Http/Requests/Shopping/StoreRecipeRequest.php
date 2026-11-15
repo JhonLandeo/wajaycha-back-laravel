@@ -7,6 +7,7 @@ namespace App\Http\Requests\Shopping;
 use App\Enums\DietTag;
 use App\Enums\KitchenEquipment;
 use App\Enums\RecipeCourse;
+use App\Enums\RecipeCuisine;
 use App\Enums\Unit;
 use App\Models\Product;
 use App\Services\Shopping\UnitConverter;
@@ -41,6 +42,7 @@ class StoreRecipeRequest extends FormRequest
             'meal_types' => ['required', 'array', 'min:1'],
             'meal_types.*' => ['string', 'distinct', Rule::in(['breakfast', 'lunch', 'dinner'])],
             'course' => ['sometimes', Rule::enum(RecipeCourse::class)],
+            'cuisine' => ['sometimes', Rule::enum(RecipeCuisine::class)],
             'origin' => ['sometimes', Rule::in(['user', 'ai'])],
             'required_equipment' => ['sometimes', 'array'],
             'required_equipment.*' => ['string', 'distinct', Rule::enum(KitchenEquipment::class)],

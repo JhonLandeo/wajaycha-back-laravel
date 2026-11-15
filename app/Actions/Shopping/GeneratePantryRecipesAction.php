@@ -189,7 +189,7 @@ final class GeneratePantryRecipesAction
         ];
 
         return <<<PROMPT
-Eres un cocinero peruano que arma recetas con lo que hay en casa. Propón hasta {$limit} recetas nuevas y devuelve solo JSON válido.
+Eres un cocinero peruano que arma recetas con lo que hay en casa. Propón hasta {$limit} recetas nuevas de cocina peruana y devuelve solo JSON válido.
 
 Reglas:
 - Usa únicamente `producto_id` del catálogo entregado. No inventes productos ni ids.

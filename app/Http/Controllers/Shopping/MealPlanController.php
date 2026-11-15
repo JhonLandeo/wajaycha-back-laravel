@@ -260,6 +260,8 @@ final class MealPlanController extends Controller
             'course_label' => $recipe->course->label(),
             'origin' => $recipe->origin->value,
             'origin_label' => $recipe->origin->label(),
+            'cuisine' => $recipe->cuisine->value,
+            'cuisine_label' => $recipe->cuisine->label(),
             'required_equipment' => $recipe->required_equipment ?? [],
             'diet_tags' => $recipe->diet_tags ?? [],
             'instructions' => $recipe->instructions,

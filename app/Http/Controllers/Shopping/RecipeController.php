@@ -104,6 +104,10 @@ final class RecipeController extends Controller
             $data['course'] = (string) $validated['course'];
         }
 
+        if (array_key_exists('cuisine', $validated)) {
+            $data['cuisine'] = (string) $validated['cuisine'];
+        }
+
         if (array_key_exists('required_equipment', $validated)) {
             $data['required_equipment'] = array_values(array_unique($validated['required_equipment']));
         }
@@ -146,6 +150,8 @@ final class RecipeController extends Controller
             'course_label' => $recipe->course->label(),
             'origin' => $recipe->origin->value,
             'origin_label' => $recipe->origin->label(),
+            'cuisine' => $recipe->cuisine->value,
+            'cuisine_label' => $recipe->cuisine->label(),
             'required_equipment' => $recipe->required_equipment ?? [],
             'diet_tags' => $recipe->diet_tags ?? [],
             'prep_minutes' => $recipe->prep_minutes,

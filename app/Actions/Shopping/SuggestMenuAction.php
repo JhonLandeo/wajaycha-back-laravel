@@ -9,6 +9,7 @@ use App\DTOs\Shopping\PlanningWeek;
 use App\Enums\DietProfile;
 use App\Enums\MenuStrategy;
 use App\Enums\RecipeCourse;
+use App\Enums\RecipeCuisine;
 use App\Enums\Unit;
 use App\Models\MealPlanSettings;
 use App\Models\Recipe;
@@ -336,6 +337,11 @@ final class SuggestMenuAction
                     continue;
                 }
 
+                if (($recipe->cuisine ?? RecipeCuisine::Peruvian) === RecipeCuisine::International
+                    && $this->hasCuisineAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe)) {
+                    continue;
+                }
+
                 $evaluation = $this->evaluate($recipe, $choice['cook_servings'], $available);
 
                 if (($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::UsePantry
@@ -410,6 +416,7 @@ final class SuggestMenuAction
                     'nombre' => $recipe->name,
                     'comidas' => $recipe->meal_types,
                     'tipo' => $recipe->course->value,
+                    'cocina' => $recipe->cuisine->value,
                     'diet_tags' => $recipe->diet_tags ?? [],
                     'minutos' => $recipe->prep_minutes,
                     'despensa_cobertura' => $evaluation['cobertura'],
@@ -439,6 +446,7 @@ final class SuggestMenuAction
             'dias_activos' => $days,
             'criterio' => ($settings->menu_strategy ?? MenuStrategy::Balanced)->value,
             'perfil' => ($settings->diet_profile ?? DietProfile::Balanced)->value,
+            'cocina_preferida' => RecipeCuisine::Peruvian->value,
             'presupuesto_semanal' => $budget?->weeklyTarget,
             'despensa' => array_map(static fn (PantryStock $item): array => [
                 'producto' => $item->productName,
@@ -840,6 +848,15 @@ PROMPT;
             }
         }
 
+        $peruvian = array_values(array_filter(
+            $candidates,
+            static fn (Recipe $recipe): bool => ($recipe->cuisine ?? RecipeCuisine::Peruvian) === RecipeCuisine::Peruvian,
+        ));
+
+        if ($peruvian !== []) {
+            $candidates = $peruvian;
+        }
+
         $usable = array_values(array_filter(
             $candidates,
             fn (Recipe $recipe): bool => $this->canUseRecipe((int) $recipe->id, $date, $meal, $usage, $slotRecipe),
@@ -924,6 +941,7 @@ PROMPT;
             default => 0.0,
         };
         $habitBonus = 0.0;
+        $cuisineBonus = ($recipe->cuisine ?? RecipeCuisine::Peruvian) === RecipeCuisine::Peruvian ? 2.0 : 0.0;
 
         foreach ($recipe->ingredients as $ingredient) {
             if (in_array((int) $ingredient->product_id, $this->habitProductIds, true)) {
@@ -932,7 +950,7 @@ PROMPT;
             }
         }
 
-        return $dietBonus + $habitBonus + match ($strategy) {
+        return $dietBonus + $habitBonus + $cuisineBonus + match ($strategy) {
             MenuStrategy::UsePantry => $evaluation['aprovechamiento'] * 6.0
                 + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
@@ -944,6 +962,36 @@ PROMPT;
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
                 - $varietyPenalty,
         };
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function hasCuisineAlternative(
+        array $candidates,
+        int $exceptId,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+    ): bool {
+        foreach ($candidates as $recipe) {
+            $recipeId = (int) $recipe->id;
+
+            if ($recipe->course === RecipeCourse::Drink
+                || $recipeId === $exceptId
+                || ! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
+                continue;
+            }
+
+            if (($recipe->cuisine ?? RecipeCuisine::Peruvian) === RecipeCuisine::Peruvian) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

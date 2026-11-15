@@ -35,6 +35,8 @@ return [
         ['slug' => 'garbanzo', 'name' => 'Garbanzo', 'unit' => 'kg'],
         ['slug' => 'pollo-entero', 'name' => 'Pollo entero', 'unit' => 'kg'],
         ['slug' => 'carne-de-res', 'name' => 'Carne de res', 'unit' => 'kg'],
+        ['slug' => 'carne-de-cerdo', 'name' => 'Carne de cerdo', 'unit' => 'kg'],
+        ['slug' => 'papa-seca', 'name' => 'Papa seca', 'unit' => 'kg'],
         ['slug' => 'huevos', 'name' => 'Huevos', 'unit' => 'unidad'],
         ['slug' => 'leche-evaporada', 'name' => 'Leche evaporada', 'unit' => 'unidad'],
         ['slug' => 'queso-fresco', 'name' => 'Queso fresco', 'unit' => 'kg'],

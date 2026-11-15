@@ -29,6 +29,7 @@ class RecipeFactory extends Factory
             'meal_types' => ['lunch'],
             'course' => 'main',
             'origin' => 'user',
+            'cuisine' => 'peruvian',
             'required_equipment' => [],
             'diet_tags' => [],
             'prep_minutes' => fake()->numberBetween(15, 45),

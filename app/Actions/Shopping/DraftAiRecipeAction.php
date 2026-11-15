@@ -136,7 +136,7 @@ final class DraftAiRecipeAction
         ];
 
         return <<<PROMPT
-Eres un cocinero peruano. Propón una receta usando solo productos del catálogo y devuelve solo JSON válido.
+Eres un cocinero peruano. Propón una receta de cocina peruana usando solo productos del catálogo y devuelve solo JSON válido.
 
 Reglas:
 - Usa únicamente `producto_id` del catálogo. No inventes productos ni ids.

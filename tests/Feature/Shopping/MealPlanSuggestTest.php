@@ -25,7 +25,7 @@ afterEach(function () {
 /**
  * @return array{0: Recipe, 1: Product}
  */
-function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string $meal = 'lunch', string $course = 'main', array $equipment = [], array $dietTags = []): array
+function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string $meal = 'lunch', string $course = 'main', array $equipment = [], array $dietTags = [], string $cuisine = 'peruvian'): array
 {
     $product = Product::factory()->create(['name' => 'Arroz '.fake()->unique()->word(), 'unit' => 'kg']);
     $recipe = Recipe::factory()->create([
@@ -35,6 +35,7 @@ function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string 
         'course' => $course,
         'required_equipment' => $equipment,
         'diet_tags' => $dietTags,
+        'cuisine' => $cuisine,
         'base_servings' => 2,
         'prep_minutes' => 30,
     ]);
@@ -689,4 +690,59 @@ it('rejects an AI menu that ignores a high-protein profile when tagged recipes e
         ->assertOk()
         ->assertJsonPath('source', 'fallback')
         ->assertJsonPath('data.entries.0.recipe.name', 'Proteica');
+});
+
+it('prefers Peruvian recipes over international ones', function () {
+    [$user, $headers] = $this->userWithAuth();
+    suggestionRecipe($user->id, 'Internacional', 'lunch', 'main', [], [], 'international');
+    suggestionRecipe($user->id, 'Peruana', 'lunch', 'main', [], [], 'peruvian');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Peruana');
+});
+
+it('rejects an AI menu that ignores Peruvian recipes when they exist', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$international] = suggestionRecipe($user->id, 'Internacional', 'lunch', 'main', [], [], 'international');
+    suggestionRecipe($user->id, 'Peruana', 'lunch', 'main', [], [], 'peruvian');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    $aiJson = json_encode([
+        'days' => [
+            ['date' => '2026-11-09', 'meals' => ['lunch' => ['recipe_id' => $international->id, 'cook_servings' => 2]]],
+        ],
+    ]);
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => $aiJson]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'fallback')
+        ->assertJsonPath('data.entries.0.recipe.name', 'Peruana');
 });

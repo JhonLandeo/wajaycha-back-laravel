@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\RecipeCourse;
+use App\Enums\RecipeCuisine;
 use App\Enums\RecipeOrigin;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,6 +26,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property array<int, string> $meal_types
  * @property RecipeCourse $course
  * @property RecipeOrigin $origin
+ * @property RecipeCuisine $cuisine
  * @property array<int, string> $required_equipment
  * @property array<int, string> $diet_tags
  * @property int|null $prep_minutes
@@ -46,6 +48,7 @@ class Recipe extends Model
         'meal_types',
         'course',
         'origin',
+        'cuisine',
         'required_equipment',
         'diet_tags',
         'prep_minutes',
@@ -58,6 +61,7 @@ class Recipe extends Model
         'meal_types' => 'array',
         'course' => RecipeCourse::class,
         'origin' => RecipeOrigin::class,
+        'cuisine' => RecipeCuisine::class,
         'required_equipment' => 'array',
         'diet_tags' => 'array',
         'prep_minutes' => 'integer',
