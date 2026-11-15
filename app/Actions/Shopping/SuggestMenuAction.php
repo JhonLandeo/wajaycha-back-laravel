@@ -6,6 +6,7 @@ namespace App\Actions\Shopping;
 
 use App\DTOs\Shopping\PantryStock;
 use App\DTOs\Shopping\PlanningWeek;
+use App\Enums\DietProfile;
 use App\Enums\MenuStrategy;
 use App\Enums\RecipeCourse;
 use App\Enums\Unit;
@@ -358,6 +359,7 @@ final class SuggestMenuAction
                     'nombre' => $recipe->name,
                     'comidas' => $recipe->meal_types,
                     'tipo' => $recipe->course->value,
+                    'diet_tags' => $recipe->diet_tags ?? [],
                     'minutos' => $recipe->prep_minutes,
                     'despensa_cobertura' => $evaluation['cobertura'],
                     'despensa_aprovechamiento' => $evaluation['aprovechamiento'],
@@ -385,6 +387,7 @@ final class SuggestMenuAction
             'comidas_activas' => $meals,
             'dias_activos' => $days,
             'criterio' => ($settings->menu_strategy ?? MenuStrategy::Balanced)->value,
+            'perfil' => ($settings->diet_profile ?? DietProfile::Balanced)->value,
             'presupuesto_semanal' => $budget?->weeklyTarget,
             'despensa' => array_map(static fn (PantryStock $item): array => [
                 'producto' => $item->productName,
@@ -408,6 +411,7 @@ Reglas:
 - `tipo` es `main` (plato principal), `drink` (bebida) o `side` (acompañamiento). El `recipe_id` nunca es una `drink`: la bebida va en `drink_recipe_id`. Si el catálogo tiene una bebida para esa comida, úsala como acompañamiento; en el desayuno es lo esperado.
 - `drink_recipe_id` debe ser distinto de `recipe_id`, estar en el catálogo y ser una `drink`.
 - Según `criterio`: `use_pantry` prioriza `despensa_aprovechamiento` y reparte la despensa entre recetas; no elijas una receta con aprovechamiento 0 si otra candidata usa despensa. `save_money` minimiza `faltantes`. `balanced` combina ambos.
+- Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
 - No repitas la misma receta más de dos veces en la semana ni en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
 - No expliques nada fuera del JSON.
 
@@ -670,6 +674,7 @@ PROMPT;
         }
 
         $strategy = $settings->menu_strategy ?? MenuStrategy::Balanced;
+        $profile = $settings->diet_profile ?? DietProfile::Balanced;
         $evaluated = array_map(fn (Recipe $recipe): array => [
             'recipe' => $recipe,
             'evaluation' => $this->evaluate($recipe, (int) $settings->household_size, $available),
@@ -686,9 +691,9 @@ PROMPT;
             }
         }
 
-        usort($evaluated, function (array $a, array $b) use ($strategy, $usage): int {
-            $scoreA = $this->scoreRecipe($a['evaluation'], $strategy, $usage[(int) $a['recipe']->id] ?? 0);
-            $scoreB = $this->scoreRecipe($b['evaluation'], $strategy, $usage[(int) $b['recipe']->id] ?? 0);
+        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage): int {
+            $scoreA = $this->scoreRecipe($a['evaluation'], $strategy, $usage[(int) $a['recipe']->id] ?? 0, $a['recipe'], $profile);
+            $scoreB = $this->scoreRecipe($b['evaluation'], $strategy, $usage[(int) $b['recipe']->id] ?? 0, $b['recipe'], $profile);
 
             return $scoreB <=> $scoreA ?: $a['recipe']->name <=> $b['recipe']->name;
         });
@@ -763,6 +768,7 @@ PROMPT;
 
         $household = (int) $settings->household_size;
         $strategy = $settings->menu_strategy ?? MenuStrategy::Balanced;
+        $profile = $settings->diet_profile ?? DietProfile::Balanced;
 
         $usable = array_values(array_filter(
             $candidates,
@@ -803,16 +809,20 @@ PROMPT;
             }
         }
 
-        usort($evaluated, function (array $a, array $b) use ($strategy, $usage): int {
+        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage): int {
             $scoreA = $this->scoreRecipe(
                 $a['evaluation'],
                 $strategy,
                 $usage[(int) $a['recipe']->id] ?? 0,
+                $a['recipe'],
+                $profile,
             );
             $scoreB = $this->scoreRecipe(
                 $b['evaluation'],
                 $strategy,
                 $usage[(int) $b['recipe']->id] ?? 0,
+                $b['recipe'],
+                $profile,
             );
 
             return $scoreB <=> $scoreA ?: $a['recipe']->name <=> $b['recipe']->name;
@@ -830,11 +840,21 @@ PROMPT;
      *     vence_pronto: bool
      * }  $evaluation
      */
-    private function scoreRecipe(array $evaluation, MenuStrategy $strategy, int $occurrences): float
-    {
+    private function scoreRecipe(
+        array $evaluation,
+        MenuStrategy $strategy,
+        int $occurrences,
+        Recipe $recipe,
+        DietProfile $profile,
+    ): float {
         $varietyPenalty = $occurrences * 6.0;
+        $dietBonus = match ($profile) {
+            DietProfile::HighProtein => in_array('high_protein', $recipe->diet_tags ?? [], true) ? 3.0 : 0.0,
+            DietProfile::Light => in_array('light', $recipe->diet_tags ?? [], true) ? 3.0 : 0.0,
+            default => 0.0,
+        };
 
-        return match ($strategy) {
+        return $dietBonus + match ($strategy) {
             MenuStrategy::UsePantry => $evaluation['aprovechamiento'] * 6.0
                 + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)

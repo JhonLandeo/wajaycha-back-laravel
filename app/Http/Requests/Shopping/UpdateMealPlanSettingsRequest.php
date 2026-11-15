@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Shopping;
 
+use App\Enums\DietProfile;
 use App\Enums\KitchenEquipment;
 use App\Enums\MealType;
 use App\Enums\MenuStrategy;
@@ -34,6 +35,8 @@ class UpdateMealPlanSettingsRequest extends FormRequest
             'menu_strategy' => ['sometimes', Rule::enum(MenuStrategy::class)],
             'available_equipment' => ['sometimes', 'nullable', 'array'],
             'available_equipment.*' => ['string', 'distinct', Rule::enum(KitchenEquipment::class)],
+            'diet_profile' => ['sometimes', Rule::enum(DietProfile::class)],
+            'new_recipes_per_week' => ['sometimes', 'integer', 'between:0,5'],
         ];
     }
 

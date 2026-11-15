@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Shopping;
 
+use App\Actions\Shopping\DraftAiRecipeAction;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Shopping\DraftRecipeRequest;
 use App\Http\Requests\Shopping\StoreRecipeRequest;
 use App\Http\Requests\Shopping\UpdateRecipeRequest;
 use App\Models\Recipe;
@@ -26,6 +28,19 @@ final class RecipeController extends Controller
         return response()->json([
             'data' => $recipes->map(fn (Recipe $recipe): array => $this->present($recipe))->values()->all(),
         ]);
+    }
+
+    public function draft(DraftRecipeRequest $request, DraftAiRecipeAction $action): JsonResponse
+    {
+        $draft = $action->execute((int) Auth::id(), $request->validated('idea'));
+
+        if ($draft === null) {
+            return response()->json([
+                'message' => 'No pudimos generar una receta. Intenta con otra idea.',
+            ], 422);
+        }
+
+        return response()->json(['data' => $draft]);
     }
 
     public function store(StoreRecipeRequest $request): JsonResponse
@@ -93,6 +108,14 @@ final class RecipeController extends Controller
             $data['required_equipment'] = array_values(array_unique($validated['required_equipment']));
         }
 
+        if (array_key_exists('diet_tags', $validated)) {
+            $data['diet_tags'] = array_values(array_unique($validated['diet_tags']));
+        }
+
+        if (array_key_exists('origin', $validated)) {
+            $data['origin'] = (string) $validated['origin'];
+        }
+
         return $data;
     }
 
@@ -124,6 +147,7 @@ final class RecipeController extends Controller
             'origin' => $recipe->origin->value,
             'origin_label' => $recipe->origin->label(),
             'required_equipment' => $recipe->required_equipment ?? [],
+            'diet_tags' => $recipe->diet_tags ?? [],
             'prep_minutes' => $recipe->prep_minutes,
             'instructions' => $recipe->instructions,
             'is_active' => (bool) $recipe->is_active,

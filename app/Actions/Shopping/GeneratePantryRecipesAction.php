@@ -5,10 +5,7 @@ declare(strict_types=1);
 namespace App\Actions\Shopping;
 
 use App\DTOs\Shopping\PlanningWeek;
-use App\Enums\KitchenEquipment;
-use App\Enums\RecipeCourse;
-use App\Enums\RecipeOrigin;
-use App\Enums\Unit;
+use App\Enums\DietProfile;
 use App\Models\MealPlanSettings;
 use App\Models\Product;
 use App\Models\Recipe;
@@ -16,9 +13,9 @@ use App\Repositories\Contracts\MealPlanRepositoryContract;
 use App\Repositories\Contracts\RecipeRepositoryContract;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
 use App\Services\AI\OpenCodeGateway;
-use App\Services\Shopping\UnitConverter;
-use Carbon\CarbonImmutable;
+use App\Services\Shopping\AiRecipeDraftValidator;
 use Illuminate\Support\Str;
+use Carbon\CarbonImmutable;
 use Throwable;
 
 /**
@@ -33,12 +30,11 @@ final class GeneratePantryRecipesAction
 {
     private const MAX_PER_WEEK = 5;
 
-    private const MAX_INGREDIENTS = 20;
-
     public function __construct(
         private readonly MealPlanRepositoryContract $mealPlanRepository,
         private readonly RecipeRepositoryContract $recipeRepository,
         private readonly ShoppingRepositoryContract $shoppingRepository,
+        private readonly AiRecipeDraftValidator $draftValidator,
         private readonly OpenCodeGateway $gateway,
     ) {}
 
@@ -51,7 +47,13 @@ final class GeneratePantryRecipesAction
         );
 
         $settings = $this->mealPlanRepository->settingsFor($userId);
-        $remaining = self::MAX_PER_WEEK - $this->recipeRepository->countAiGeneratedSince($userId, $week->startsOn);
+        $limit = min(self::MAX_PER_WEEK, max(0, (int) $settings->new_recipes_per_week));
+
+        if ($limit <= 0) {
+            return 0;
+        }
+
+        $remaining = $limit - $this->recipeRepository->countAiGeneratedSince($userId, $week->startsOn);
 
         if ($remaining <= 0) {
             return 0;
@@ -96,7 +98,7 @@ final class GeneratePantryRecipesAction
                 continue;
             }
 
-            $recipe = $this->validateRecipe($raw, $settings, $productsById, $existingNames);
+            $recipe = $this->draftValidator->validate($raw, $settings, $productsById, $existingNames);
 
             if ($recipe === null) {
                 continue;
@@ -169,6 +171,7 @@ final class GeneratePantryRecipesAction
             'personas' => (int) $settings->household_size,
             'comidas_activas' => $settings->meal_types,
             'tiempo_maximo' => $settings->max_prep_minutes,
+            'perfil' => ($settings->diet_profile ?? DietProfile::Balanced)->value,
             'equipamiento_disponible' => $settings->available_equipment,
             'no_incluir' => $settings->excluded_terms,
             'despensa' => $pantryList,
@@ -183,7 +186,7 @@ Reglas:
 - Usa únicamente `producto_id` del catálogo entregado. No inventes productos ni ids.
 - Prioriza los ingredientes de la despensa, sobre todo los que vencen pronto, y los productos que las recetas existentes no usan.
 - No repitas una receta existente ni una combinación ya propuesta.
-- Cada receta debe llevar: `name`, `meal_types` (subconjunto de `comidas_activas`), `course` (`main` o `drink`), `prep_minutes`, `equipment` (subconjunto de `equipamiento_disponible`; si es null, no pidas equipamiento especial) e `ingredients` con `producto_id`, `quantity` y `unit` compatible con la unidad del producto.
+- Cada receta debe llevar: `name`, `meal_types` (subconjunto de `comidas_activas`), `course` (`main` o `drink`), `prep_minutes`, `equipment` (subconjunto de `equipamiento_disponible`; si es null, no pidas equipamiento especial), `instructions` con los pasos de preparación en texto claro e `ingredients` con `producto_id`, `quantity` y `unit` compatible con la unidad del producto.
 - `base_servings` no se envía: el backend usa el número de personas.
 - No uses productos de `no_incluir` en el nombre ni en los ingredientes. Respeta el tiempo máximo.
 - No expliques nada fuera del JSON.
@@ -194,139 +197,8 @@ Contexto:
 ```
 
 Formato exacto:
-{"recipes":[{"name":"Pescado con verduras al vapor","meal_types":["lunch"],"course":"main","prep_minutes":25,"equipment":["stove"],"ingredients":[{"producto_id":1,"quantity":0.4,"unit":"kg"}]}]}
+{"recipes":[{"name":"Pescado con verduras al vapor","meal_types":["lunch"],"course":"main","prep_minutes":25,"equipment":["stove"],"instructions":"1. Sazona el pescado...","ingredients":[{"producto_id":1,"quantity":0.4,"unit":"kg"}]}]}
 PROMPT;
-    }
-
-    /**
-     * @param  array<string, mixed>  $raw
-     * @param  array<int, Product>  $productsById
-     * @param  array<string, true>  $existingNames
-     * @return array{data: array<string, mixed>, ingredients: array<int, array{product_id: int, quantity: float, unit: string, is_optional: bool}>}|null
-     */
-    private function validateRecipe(
-        array $raw,
-        MealPlanSettings $settings,
-        array $productsById,
-        array &$existingNames,
-    ): ?array {
-        $name = trim((string) ($raw['name'] ?? ''));
-        $folded = $this->fold($name);
-
-        if ($name === '' || mb_strlen($name) > 120 || isset($existingNames[$folded])) {
-            return null;
-        }
-
-        $mealTypes = array_values(array_intersect(
-            $settings->meal_types,
-            array_map('strval', (array) ($raw['meal_types'] ?? [])),
-        ));
-
-        if ($mealTypes === []) {
-            return null;
-        }
-
-        $course = RecipeCourse::tryFrom((string) ($raw['course'] ?? 'main')) ?? RecipeCourse::Main;
-
-        if (! in_array($course, [RecipeCourse::Main, RecipeCourse::Drink], true)) {
-            return null;
-        }
-
-        $equipment = array_values(array_unique(array_map('strval', (array) ($raw['equipment'] ?? []))));
-        $equipment = array_values(array_filter(
-            $equipment,
-            static fn (string $value): bool => KitchenEquipment::tryFrom($value) !== null,
-        ));
-
-        if ($settings->available_equipment !== null) {
-            foreach ($equipment as $required) {
-                if (! in_array($required, $settings->available_equipment, true)) {
-                    return null;
-                }
-            }
-        }
-
-        $prepMinutes = $raw['prep_minutes'] ?? null;
-        $prepMinutes = is_numeric($prepMinutes) ? (int) $prepMinutes : null;
-
-        if ($prepMinutes !== null && $settings->max_prep_minutes !== null && $prepMinutes > $settings->max_prep_minutes) {
-            return null;
-        }
-
-        $rawIngredients = $raw['ingredients'] ?? null;
-
-        if (! is_array($rawIngredients) || $rawIngredients === [] || count($rawIngredients) > self::MAX_INGREDIENTS) {
-            return null;
-        }
-
-        $ingredients = [];
-        $byProduct = [];
-        $haystackParts = [$name];
-
-        foreach ($rawIngredients as $ingredient) {
-            if (! is_array($ingredient)) {
-                return null;
-            }
-
-            $productId = (int) ($ingredient['product_id'] ?? $ingredient['producto_id'] ?? 0);
-            $product = $productsById[$productId] ?? null;
-
-            if ($product === null) {
-                return null;
-            }
-
-            $unit = Unit::tryFrom((string) ($ingredient['unit'] ?? ''));
-            $productUnit = Unit::tryFrom((string) $product->unit);
-            $quantity = (float) ($ingredient['quantity'] ?? 0);
-
-            if ($unit === null || $productUnit === null || $quantity <= 0.0 || $quantity > 999999999.999) {
-                return null;
-            }
-
-            if (! UnitConverter::compatible($unit->value, $productUnit->value)) {
-                return null;
-            }
-
-            $canonical = UnitConverter::toCanonical($quantity, $unit->value, $productUnit->value);
-            $byProduct[$productId] = round(($byProduct[$productId] ?? 0.0) + $canonical, 3);
-            $haystackParts[] = (string) $product->name;
-        }
-
-        $haystack = $this->fold(implode(' ', $haystackParts));
-
-        foreach ($settings->excluded_terms ?? [] as $term) {
-            $term = $this->fold((string) $term);
-
-            if ($term !== '' && str_contains($haystack, $term)) {
-                return null;
-            }
-        }
-
-        foreach ($byProduct as $productId => $quantity) {
-            $productUnit = Unit::from((string) $productsById[$productId]->unit);
-
-            $ingredients[] = [
-                'product_id' => (int) $productId,
-                'quantity' => $quantity,
-                'unit' => $productUnit->value,
-                'is_optional' => false,
-            ];
-        }
-
-        return [
-            'data' => [
-                'name' => $name,
-                'base_servings' => (int) $settings->household_size,
-                'meal_types' => $mealTypes,
-                'course' => $course->value,
-                'origin' => RecipeOrigin::Ai->value,
-                'required_equipment' => $equipment,
-                'prep_minutes' => $prepMinutes,
-                'instructions' => 'Propuesta por IA a partir de la despensa.',
-                'is_active' => true,
-            ],
-            'ingredients' => $ingredients,
-        ];
     }
 
     private function fold(string $value): string

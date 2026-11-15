@@ -24,7 +24,7 @@ afterEach(function () {
 /**
  * @return array{0: Recipe, 1: Product}
  */
-function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string $meal = 'lunch', string $course = 'main', array $equipment = []): array
+function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string $meal = 'lunch', string $course = 'main', array $equipment = [], array $dietTags = []): array
 {
     $product = Product::factory()->create(['name' => 'Arroz '.fake()->unique()->word(), 'unit' => 'kg']);
     $recipe = Recipe::factory()->create([
@@ -33,6 +33,7 @@ function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string 
         'meal_types' => [$meal],
         'course' => $course,
         'required_equipment' => $equipment,
+        'diet_tags' => $dietTags,
         'base_servings' => 2,
         'prep_minutes' => 30,
     ]);
@@ -553,4 +554,74 @@ it('uses every recipe before repeating even if the AI insists on the same one', 
 
     expect($names)->toBe(['Receta A', 'Receta B', 'Receta C'])
         ->and($names)->toContain($recipeC->name);
+});
+
+it('filters recipes that do not match a vegetarian profile', function () {
+    [$user, $headers] = $this->userWithAuth();
+    suggestionRecipe($user->id, 'Con pollo', 'lunch', 'main', [], []);
+    suggestionRecipe($user->id, 'Vegetariana', 'lunch', 'main', [], ['vegetarian']);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'diet_profile' => 'vegetarian',
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Vegetariana');
+});
+
+it('prefers high-protein recipes when the profile asks for it', function () {
+    [$user, $headers] = $this->userWithAuth();
+    suggestionRecipe($user->id, 'Normal', 'lunch', 'main', [], []);
+    suggestionRecipe($user->id, 'Proteica', 'lunch', 'main', [], ['high_protein']);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'diet_profile' => 'high_protein',
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Proteica');
+});
+
+it('does not ask the AI for new recipes when the user chooses zero', function () {
+    [$user, $headers] = $this->userWithAuth();
+    suggestionRecipe($user->id, 'Del recetario');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode(['days' => []])]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk();
+
+    Http::assertSentCount(1);
+    expect(Recipe::where('origin', 'ai')->count())->toBe(0);
 });

@@ -66,6 +66,8 @@ final class MealPlanController extends Controller
             'max_prep_minutes' => $request->validated('max_prep_minutes'),
             'menu_strategy' => $request->validated('menu_strategy', $settings->menu_strategy->value),
             'available_equipment' => $request->validated('available_equipment', $settings->available_equipment),
+            'diet_profile' => $request->validated('diet_profile', $settings->diet_profile->value),
+            'new_recipes_per_week' => $request->validated('new_recipes_per_week', $settings->new_recipes_per_week),
         ]);
 
         return response()->json(['data' => $this->settingsPayload($updated)]);
@@ -179,6 +181,9 @@ final class MealPlanController extends Controller
             'menu_strategy' => $settings->menu_strategy->value,
             'menu_strategy_label' => $settings->menu_strategy->label(),
             'available_equipment' => $settings->available_equipment,
+            'diet_profile' => $settings->diet_profile->value,
+            'diet_profile_label' => $settings->diet_profile->label(),
+            'new_recipes_per_week' => (int) $settings->new_recipes_per_week,
         ];
     }
 
@@ -198,6 +203,7 @@ final class MealPlanController extends Controller
             'origin' => $recipe->origin->value,
             'origin_label' => $recipe->origin->label(),
             'required_equipment' => $recipe->required_equipment ?? [],
+            'diet_tags' => $recipe->diet_tags ?? [],
             'ingredients' => $recipe->ingredients
                 ->map(static fn ($ingredient): array => [
                     'product_id' => (int) $ingredient->product_id,

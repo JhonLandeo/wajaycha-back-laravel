@@ -26,6 +26,8 @@ final class MealPlanRepository implements MealPlanRepositoryContract
                 'max_prep_minutes' => null,
                 'menu_strategy' => \App\Enums\MenuStrategy::Balanced->value,
                 'available_equipment' => null,
+                'diet_profile' => \App\Enums\DietProfile::Balanced->value,
+                'new_recipes_per_week' => 5,
             ]
         );
 

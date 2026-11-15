@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Shopping;
 
+use App\Enums\DietProfile;
 use App\Models\MealPlanSettings;
 use App\Models\Recipe;
 use App\Repositories\Contracts\RecipeRepositoryContract;
@@ -50,6 +51,10 @@ final class MenuCandidateFilter
                 continue;
             }
 
+            if (! $this->matchesDiet($recipe, $settings)) {
+                continue;
+            }
+
             foreach ($recipe->meal_types as $meal) {
                 if (in_array($meal, $settings->meal_types, true)) {
                     $byMeal[$meal][] = $recipe;
@@ -75,6 +80,17 @@ final class MenuCandidateFilter
         }
 
         return true;
+    }
+
+    private function matchesDiet(Recipe $recipe, MealPlanSettings $settings): bool
+    {
+        $tags = $recipe->diet_tags ?? [];
+
+        return match ($settings->diet_profile ?? DietProfile::Balanced) {
+            DietProfile::Vegetarian => in_array('vegetarian', $tags, true) || in_array('vegan', $tags, true),
+            DietProfile::Vegan => in_array('vegan', $tags, true),
+            default => true,
+        };
     }
 
     public function fold(string $value): string

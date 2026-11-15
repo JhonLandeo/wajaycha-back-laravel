@@ -26,6 +26,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property RecipeCourse $course
  * @property RecipeOrigin $origin
  * @property array<int, string> $required_equipment
+ * @property array<int, string> $diet_tags
  * @property int|null $prep_minutes
  * @property string|null $instructions
  * @property bool $is_active
@@ -46,6 +47,7 @@ class Recipe extends Model
         'course',
         'origin',
         'required_equipment',
+        'diet_tags',
         'prep_minutes',
         'instructions',
         'is_active',
@@ -57,6 +59,7 @@ class Recipe extends Model
         'course' => RecipeCourse::class,
         'origin' => RecipeOrigin::class,
         'required_equipment' => 'array',
+        'diet_tags' => 'array',
         'prep_minutes' => 'integer',
         'is_active' => 'boolean',
     ];

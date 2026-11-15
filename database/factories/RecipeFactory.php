@@ -30,6 +30,7 @@ class RecipeFactory extends Factory
             'course' => 'main',
             'origin' => 'user',
             'required_equipment' => [],
+            'diet_tags' => [],
             'prep_minutes' => fake()->numberBetween(15, 45),
             'instructions' => null,
             'is_active' => true,

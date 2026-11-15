@@ -298,3 +298,19 @@ it('rejects a drink that does not belong to the meal', function () {
         'cook_servings' => 2,
     ], $headers)->assertStatus(422)->assertJsonValidationErrors('drink_recipe_id');
 });
+
+it('persists the diet profile and the weekly limit of AI recipes', function () {
+    [, $headers] = $this->userWithAuth();
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3],
+        'diet_profile' => 'vegetarian',
+        'new_recipes_per_week' => 2,
+    ], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.diet_profile', 'vegetarian')
+        ->assertJsonPath('data.diet_profile_label', 'Vegetariano')
+        ->assertJsonPath('data.new_recipes_per_week', 2);
+});

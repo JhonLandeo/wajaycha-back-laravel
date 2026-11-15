@@ -14,6 +14,7 @@ return [
     'catalogue' => [
         [
             'slug' => 'arroz-con-pollo',
+            'diet_tags' => [],
             'required_equipment' => ['stove'],
             'name' => 'Arroz con pollo',
             'base_servings' => 2,
@@ -29,6 +30,7 @@ return [
         ],
         [
             'slug' => 'lentejas-guisadas',
+            'diet_tags' => ['vegetarian', 'vegan', 'high_protein'],
             'required_equipment' => ['stove'],
             'name' => 'Lentejas guisadas',
             'base_servings' => 2,
@@ -43,6 +45,7 @@ return [
         ],
         [
             'slug' => 'tallarin-saltado-de-pollo',
+            'diet_tags' => [],
             'required_equipment' => ['stove'],
             'name' => 'Tallarín saltado de pollo',
             'base_servings' => 2,
@@ -58,6 +61,7 @@ return [
         ],
         [
             'slug' => 'tortilla-de-verduras',
+            'diet_tags' => ['vegetarian', 'high_protein'],
             'required_equipment' => ['stove'],
             'name' => 'Tortilla de verduras',
             'base_servings' => 2,
@@ -72,6 +76,7 @@ return [
         ],
         [
             'slug' => 'avena-con-platano',
+            'diet_tags' => ['vegetarian'],
             'required_equipment' => ['stove'],
             'name' => 'Avena con plátano',
             'base_servings' => 2,
@@ -85,6 +90,7 @@ return [
         ],
         [
             'slug' => 'sopa-de-verduras-con-pollo',
+            'diet_tags' => [],
             'required_equipment' => ['stove'],
             'name' => 'Sopa de verduras con pollo',
             'base_servings' => 2,
@@ -99,6 +105,7 @@ return [
         ],
         [
             'slug' => 'frejoles-con-arroz',
+            'diet_tags' => ['vegetarian', 'vegan', 'high_protein'],
             'required_equipment' => ['stove'],
             'name' => 'Frejoles con arroz',
             'base_servings' => 2,
@@ -113,6 +120,7 @@ return [
         ],
         [
             'slug' => 'pescado-al-horno-con-papa',
+            'diet_tags' => ['light'],
             'required_equipment' => ['oven'],
             'name' => 'Pescado al horno con papa',
             'base_servings' => 2,
@@ -127,6 +135,7 @@ return [
         ],
         [
             'slug' => 'ensalada-de-atun',
+            'diet_tags' => ['light'],
             'required_equipment' => ['no_cook'],
             'name' => 'Ensalada de atún',
             'base_servings' => 2,
@@ -141,6 +150,7 @@ return [
         ],
         [
             'slug' => 'pan-con-palta-y-huevo',
+            'diet_tags' => ['vegetarian'],
             'required_equipment' => ['stove'],
             'name' => 'Pan con palta y huevo',
             'base_servings' => 2,
@@ -154,6 +164,7 @@ return [
         ],
         [
             'slug' => 'quinua-con-leche',
+            'diet_tags' => ['vegetarian'],
             'required_equipment' => ['stove'],
             'name' => 'Quinua con leche',
             'base_servings' => 2,
@@ -167,6 +178,7 @@ return [
         ],
         [
             'slug' => 'siete-semillas',
+            'diet_tags' => ['vegetarian', 'vegan'],
             'required_equipment' => ['stove'],
             'name' => 'Bebida de siete semillas',
             'base_servings' => 2,
@@ -179,6 +191,7 @@ return [
         ],
         [
             'slug' => 'soya',
+            'diet_tags' => ['vegetarian', 'vegan', 'high_protein'],
             'required_equipment' => ['stove'],
             'name' => 'Bebida de soya',
             'base_servings' => 2,
