@@ -14,6 +14,7 @@ return [
     'catalogue' => [
         [
             'slug' => 'arroz-con-pollo',
+            'required_equipment' => ['stove'],
             'name' => 'Arroz con pollo',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
@@ -28,6 +29,7 @@ return [
         ],
         [
             'slug' => 'lentejas-guisadas',
+            'required_equipment' => ['stove'],
             'name' => 'Lentejas guisadas',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
@@ -41,6 +43,7 @@ return [
         ],
         [
             'slug' => 'tallarin-saltado-de-pollo',
+            'required_equipment' => ['stove'],
             'name' => 'Tallarín saltado de pollo',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
@@ -55,6 +58,7 @@ return [
         ],
         [
             'slug' => 'tortilla-de-verduras',
+            'required_equipment' => ['stove'],
             'name' => 'Tortilla de verduras',
             'base_servings' => 2,
             'meal_types' => ['breakfast', 'lunch', 'dinner'],
@@ -68,6 +72,7 @@ return [
         ],
         [
             'slug' => 'avena-con-platano',
+            'required_equipment' => ['stove'],
             'name' => 'Avena con plátano',
             'base_servings' => 2,
             'meal_types' => ['breakfast'],
@@ -80,6 +85,7 @@ return [
         ],
         [
             'slug' => 'sopa-de-verduras-con-pollo',
+            'required_equipment' => ['stove'],
             'name' => 'Sopa de verduras con pollo',
             'base_servings' => 2,
             'meal_types' => ['dinner'],
@@ -93,6 +99,7 @@ return [
         ],
         [
             'slug' => 'frejoles-con-arroz',
+            'required_equipment' => ['stove'],
             'name' => 'Frejoles con arroz',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
@@ -106,6 +113,7 @@ return [
         ],
         [
             'slug' => 'pescado-al-horno-con-papa',
+            'required_equipment' => ['oven'],
             'name' => 'Pescado al horno con papa',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
@@ -119,6 +127,7 @@ return [
         ],
         [
             'slug' => 'ensalada-de-atun',
+            'required_equipment' => ['no_cook'],
             'name' => 'Ensalada de atún',
             'base_servings' => 2,
             'meal_types' => ['dinner'],
@@ -132,6 +141,7 @@ return [
         ],
         [
             'slug' => 'pan-con-palta-y-huevo',
+            'required_equipment' => ['stove'],
             'name' => 'Pan con palta y huevo',
             'base_servings' => 2,
             'meal_types' => ['breakfast'],
@@ -144,6 +154,7 @@ return [
         ],
         [
             'slug' => 'quinua-con-leche',
+            'required_equipment' => ['stove'],
             'name' => 'Quinua con leche',
             'base_servings' => 2,
             'meal_types' => ['breakfast'],
@@ -156,6 +167,7 @@ return [
         ],
         [
             'slug' => 'siete-semillas',
+            'required_equipment' => ['stove'],
             'name' => 'Bebida de siete semillas',
             'base_servings' => 2,
             'meal_types' => ['breakfast'],
@@ -167,6 +179,7 @@ return [
         ],
         [
             'slug' => 'soya',
+            'required_equipment' => ['stove'],
             'name' => 'Bebida de soya',
             'base_servings' => 2,
             'meal_types' => ['breakfast'],

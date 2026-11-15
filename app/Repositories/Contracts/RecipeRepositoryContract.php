@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories\Contracts;
 
 use App\Models\Recipe;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 
 interface RecipeRepositoryContract
@@ -39,4 +40,7 @@ interface RecipeRepositoryContract
     public function update(Recipe $recipe, array $data, array $ingredients): Recipe;
 
     public function delete(Recipe $recipe): bool;
+
+    /** Cuántas recetas generó la IA para el usuario desde una fecha. */
+    public function countAiGeneratedSince(int $userId, CarbonImmutable $since): int;
 }

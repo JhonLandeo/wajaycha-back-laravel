@@ -47,6 +47,7 @@ final class SuggestMenuAction
         private readonly ShoppingRepositoryContract $shoppingRepository,
         private readonly FoodBudgetRepositoryContract $foodBudgetRepository,
         private readonly MenuCandidateFilter $candidateFilter,
+        private readonly GeneratePantryRecipesAction $recipeGenerator,
         private readonly MenuCalendar $calendar,
         private readonly OpenCodeGateway $gateway,
     ) {}
@@ -63,6 +64,14 @@ final class SuggestMenuAction
 
         if ($days === []) {
             return 'fallback';
+        }
+
+        // La IA puede proponer recetas nuevas con productos del catálogo antes
+        // de armar la semana. Si falla, el plan sigue con el recetario actual.
+        try {
+            $this->recipeGenerator->execute($userId, $week->startsOn->toDateString());
+        } catch (Throwable $e) {
+            report($e);
         }
 
         $meals = $settings->meal_types;
@@ -268,6 +277,10 @@ final class SuggestMenuAction
                 }
 
                 if ($recipe->course === RecipeCourse::Drink) {
+                    continue;
+                }
+
+                if ($this->hasLessUsedAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe)) {
                     continue;
                 }
 
@@ -763,6 +776,17 @@ PROMPT;
             $usable = $candidates;
         }
 
+        // Primero las que todavía no se usaron; después las de una sola
+        // aparición. Así la semana rota por todo el recetario antes de repetir.
+        $minimumUsage = min(array_map(
+            static fn (Recipe $recipe): int => $usage[(int) $recipe->id] ?? 0,
+            $usable,
+        ));
+        $usable = array_values(array_filter(
+            $usable,
+            static fn (Recipe $recipe): bool => ($usage[(int) $recipe->id] ?? 0) === $minimumUsage,
+        ));
+
         $evaluated = array_map(fn (Recipe $recipe): array => [
             'recipe' => $recipe,
             'evaluation' => $this->evaluate($recipe, $household, $available),
@@ -823,6 +847,38 @@ PROMPT;
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
                 - $varietyPenalty,
         };
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function hasLessUsedAlternative(
+        array $candidates,
+        int $chosenId,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+    ): bool {
+        $chosenUsage = $usage[$chosenId] ?? 0;
+
+        foreach ($candidates as $recipe) {
+            $recipeId = (int) $recipe->id;
+
+            if ($recipe->course === RecipeCourse::Drink
+                || $recipeId === $chosenId
+                || ! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
+                continue;
+            }
+
+            if (($usage[$recipeId] ?? 0) < $chosenUsage) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

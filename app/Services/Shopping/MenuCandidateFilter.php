@@ -46,6 +46,10 @@ final class MenuCandidateFilter
                 continue;
             }
 
+            if (! $this->hasEquipment($recipe, $settings)) {
+                continue;
+            }
+
             foreach ($recipe->meal_types as $meal) {
                 if (in_array($meal, $settings->meal_types, true)) {
                     $byMeal[$meal][] = $recipe;
@@ -54,6 +58,23 @@ final class MenuCandidateFilter
         }
 
         return $byMeal;
+    }
+
+    private function hasEquipment(Recipe $recipe, MealPlanSettings $settings): bool
+    {
+        $available = $settings->available_equipment;
+
+        if ($available === null) {
+            return true;
+        }
+
+        foreach ($recipe->required_equipment ?? [] as $equipment) {
+            if (! in_array($equipment, $available, true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function fold(string $value): string

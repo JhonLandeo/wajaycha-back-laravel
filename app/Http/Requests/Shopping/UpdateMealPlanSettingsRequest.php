@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Shopping;
 
+use App\Enums\KitchenEquipment;
 use App\Enums\MealType;
 use App\Enums\MenuStrategy;
 use Illuminate\Foundation\Http\FormRequest;
@@ -31,6 +32,8 @@ class UpdateMealPlanSettingsRequest extends FormRequest
             'excluded_terms.*' => ['string', 'distinct', 'max:60'],
             'max_prep_minutes' => ['nullable', 'integer', 'between:1,240'],
             'menu_strategy' => ['sometimes', Rule::enum(MenuStrategy::class)],
+            'available_equipment' => ['sometimes', 'nullable', 'array'],
+            'available_equipment.*' => ['string', 'distinct', Rule::enum(KitchenEquipment::class)],
         ];
     }
 

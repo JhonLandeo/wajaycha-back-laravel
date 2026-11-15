@@ -28,6 +28,8 @@ class RecipeFactory extends Factory
             'base_servings' => 2,
             'meal_types' => ['lunch'],
             'course' => 'main',
+            'origin' => 'user',
+            'required_equipment' => [],
             'prep_minutes' => fake()->numberBetween(15, 45),
             'instructions' => null,
             'is_active' => true,

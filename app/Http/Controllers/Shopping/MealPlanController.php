@@ -65,6 +65,7 @@ final class MealPlanController extends Controller
             'excluded_terms' => array_values(array_unique($request->validated('excluded_terms', []))),
             'max_prep_minutes' => $request->validated('max_prep_minutes'),
             'menu_strategy' => $request->validated('menu_strategy', $settings->menu_strategy->value),
+            'available_equipment' => $request->validated('available_equipment', $settings->available_equipment),
         ]);
 
         return response()->json(['data' => $this->settingsPayload($updated)]);
@@ -177,6 +178,7 @@ final class MealPlanController extends Controller
             'max_prep_minutes' => $settings->max_prep_minutes,
             'menu_strategy' => $settings->menu_strategy->value,
             'menu_strategy_label' => $settings->menu_strategy->label(),
+            'available_equipment' => $settings->available_equipment,
         ];
     }
 
@@ -193,6 +195,9 @@ final class MealPlanController extends Controller
             'meal_types' => $recipe->meal_types,
             'course' => $recipe->course->value,
             'course_label' => $recipe->course->label(),
+            'origin' => $recipe->origin->value,
+            'origin_label' => $recipe->origin->label(),
+            'required_equipment' => $recipe->required_equipment ?? [],
             'ingredients' => $recipe->ingredients
                 ->map(static fn ($ingredient): array => [
                     'product_id' => (int) $ingredient->product_id,

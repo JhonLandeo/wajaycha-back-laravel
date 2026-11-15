@@ -24,7 +24,7 @@ afterEach(function () {
 /**
  * @return array{0: Recipe, 1: Product}
  */
-function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string $meal = 'lunch', string $course = 'main'): array
+function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string $meal = 'lunch', string $course = 'main', array $equipment = []): array
 {
     $product = Product::factory()->create(['name' => 'Arroz '.fake()->unique()->word(), 'unit' => 'kg']);
     $recipe = Recipe::factory()->create([
@@ -32,6 +32,7 @@ function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string 
         'name' => $name,
         'meal_types' => [$meal],
         'course' => $course,
+        'required_equipment' => $equipment,
         'base_servings' => 2,
         'prep_minutes' => 30,
     ]);
@@ -422,4 +423,134 @@ it('pairs a drink with a breakfast main when the fallback builds the week', func
 
     expect($entry->recipe_id)->toBe($main->id)
         ->and($entry->drink_recipe_id)->toBe($drink->id);
+});
+
+it('does not propose recipes that need equipment the user does not have', function () {
+    [$user, $headers] = $this->userWithAuth();
+    suggestionRecipe($user->id, 'Al horno', 'lunch', 'main', ['oven']);
+    suggestionRecipe($user->id, 'A la cocina', 'lunch', 'main', ['stove']);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'available_equipment' => ['stove'],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'A la cocina');
+});
+
+it('saves an AI recipe composed from catalogue products and uses it in the week', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $product = Product::factory()->create(['name' => 'Pollo', 'unit' => 'kg']);
+
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'quantity' => 1.0,
+        'unit' => 'kg',
+        'expires_on' => null,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'available_equipment' => ['stove'],
+    ], $headers)->assertOk();
+
+    $recipesJson = json_encode([
+        'recipes' => [[
+            'name' => 'Pollo con arroz',
+            'meal_types' => ['lunch'],
+            'course' => 'main',
+            'prep_minutes' => 20,
+            'equipment' => ['stove'],
+            'ingredients' => [
+                ['producto_id' => $product->id, 'quantity' => 0.5, 'unit' => 'kg'],
+            ],
+        ]],
+    ]);
+    $daysJson = json_encode(['days' => []]);
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake(function ($request) use ($recipesJson, $daysJson) {
+        $text = str_contains($request->body(), 'cocinero peruano') ? $recipesJson : $daysJson;
+
+        return Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => $text]]]]],
+        ]);
+    });
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Pollo con arroz');
+
+    $recipe = Recipe::query()->where('origin', 'ai')->sole();
+
+    expect($recipe->name)->toBe('Pollo con arroz')
+        ->and($recipe->course->value)->toBe('main')
+        ->and($recipe->required_equipment)->toBe(['stove'])
+        ->and($recipe->ingredients)->toHaveCount(1);
+});
+
+it('uses every recipe before repeating even if the AI insists on the same one', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipeA] = suggestionRecipe($user->id, 'Receta A');
+    [$recipeB] = suggestionRecipe($user->id, 'Receta B');
+    $recipeC = suggestionRecipe($user->id, 'Receta C')[0];
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $aiJson = json_encode([
+        'days' => [
+            ['date' => '2026-11-09', 'meals' => ['lunch' => ['recipe_id' => $recipeA->id, 'cook_servings' => 2]]],
+            ['date' => '2026-11-10', 'meals' => ['lunch' => ['recipe_id' => $recipeB->id, 'cook_servings' => 2]]],
+            ['date' => '2026-11-11', 'meals' => ['lunch' => ['recipe_id' => $recipeA->id, 'cook_servings' => 2]]],
+        ],
+    ]);
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake(function ($request) use ($aiJson) {
+        $text = str_contains($request->body(), 'cocinero peruano') ? json_encode(['recipes' => []]) : $aiJson;
+
+        return Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => $text]]]]],
+        ]);
+    });
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'ai');
+
+    $names = MealPlanEntry::query()
+        ->where('user_id', $user->id)
+        ->where('kind', 'recipe')
+        ->orderBy('plan_date')
+        ->with('recipe')
+        ->get()
+        ->map(fn (MealPlanEntry $entry): string => (string) $entry->recipe?->name)
+        ->all();
+
+    expect($names)->toBe(['Receta A', 'Receta B', 'Receta C'])
+        ->and($names)->toContain($recipeC->name);
 });

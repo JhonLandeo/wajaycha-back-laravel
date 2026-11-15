@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Enums\RecipeOrigin;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
 use App\Repositories\Contracts\RecipeRepositoryContract;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -79,6 +81,15 @@ final class RecipeRepository implements RecipeRepositoryContract
     public function delete(Recipe $recipe): bool
     {
         return (bool) $recipe->delete();
+    }
+
+    public function countAiGeneratedSince(int $userId, CarbonImmutable $since): int
+    {
+        return Recipe::query()
+            ->where('user_id', $userId)
+            ->where('origin', RecipeOrigin::Ai->value)
+            ->where('created_at', '>=', $since)
+            ->count();
     }
 
     /**

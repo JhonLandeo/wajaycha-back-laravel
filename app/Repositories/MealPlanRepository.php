@@ -25,6 +25,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
                 'excluded_terms' => [],
                 'max_prep_minutes' => null,
                 'menu_strategy' => \App\Enums\MenuStrategy::Balanced->value,
+                'available_equipment' => null,
             ]
         );
 
