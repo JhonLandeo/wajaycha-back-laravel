@@ -62,7 +62,7 @@ final class RecipeRepository implements RecipeRepositoryContract
 
             $this->replaceIngredients($recipe, $ingredients);
 
-            return $recipe->load('ingredients.product');
+            return $recipe->refresh()->load('ingredients.product');
         });
     }
 

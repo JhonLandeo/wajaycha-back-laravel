@@ -36,6 +36,13 @@ class StoreMealPlanEntryRequest extends FormRequest
                     static fn ($query) => $query->whereNull('user_id')->orWhere('user_id', $userId)
                 ),
             ],
+            'drink_recipe_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('recipes', 'id')->where(
+                    static fn ($query) => $query->whereNull('user_id')->orWhere('user_id', $userId)
+                ),
+            ],
             'servings' => ['required', 'integer', 'between:0,20'],
             'cook_servings' => ['nullable', 'integer', 'between:0,50'],
             'leftover_of_entry_id' => [

@@ -7,6 +7,7 @@ namespace App\Actions\Shopping;
 use App\DTOs\Shopping\PantryStock;
 use App\DTOs\Shopping\PlanningWeek;
 use App\Enums\MenuStrategy;
+use App\Enums\RecipeCourse;
 use App\Enums\Unit;
 use App\Models\MealPlanSettings;
 use App\Models\Recipe;
@@ -58,7 +59,12 @@ final class SuggestMenuAction
         $asOf = CarbonImmutable::now();
         $week = PlanningWeek::forWeekStarting(CarbonImmutable::parse($weekStart, 'America/Lima'), $asOf);
         $settings = $this->mealPlanRepository->settingsFor($userId);
-        $days = $this->calendar->activeDays($week, $settings->plan_weekdays);
+        $days = $this->calendar->upcomingActiveDays($week, $settings->plan_weekdays);
+
+        if ($days === []) {
+            return 'fallback';
+        }
+
         $meals = $settings->meal_types;
         $candidates = $this->candidateFilter->forUser($userId, $settings);
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
@@ -81,6 +87,7 @@ final class SuggestMenuAction
                     'meal_type' => $meal,
                     'kind' => 'recipe',
                     'recipe_id' => $choice['recipe_id'],
+                    'drink_recipe_id' => $choice['drink_recipe_id'] ?? null,
                     'servings' => (int) $settings->household_size,
                     'cook_servings' => $choice['cook_servings'],
                     'leftover_of_entry_id' => null,
@@ -122,8 +129,25 @@ final class SuggestMenuAction
                     $usage[$recipeId] = ($usage[$recipeId] ?? 0) + 1;
                     $slotRecipe[$key] = $recipeId;
 
+                    $drinkPick = $this->chooseDrink(
+                        $recipeId,
+                        $candidates[$meal] ?? [],
+                        $available,
+                        $usage,
+                        $settings,
+                    );
+
+                    $drinkId = null;
+
+                    if ($drinkPick !== null) {
+                        $this->deplete($available, $drinkPick['evaluation']['requirements']);
+                        $drinkId = (int) $drinkPick['recipe']->id;
+                        $usage[$drinkId] = ($usage[$drinkId] ?? 0) + 1;
+                    }
+
                     $selected[$key] = [
                         'recipe_id' => $recipeId,
+                        'drink_recipe_id' => $drinkId,
                         'cook_servings' => (int) $settings->household_size,
                     ];
 
@@ -132,6 +156,7 @@ final class SuggestMenuAction
                         'meal_type' => $meal,
                         'kind' => 'recipe',
                         'recipe_id' => $recipeId,
+                        'drink_recipe_id' => $drinkId,
                         'servings' => (int) $settings->household_size,
                         'cook_servings' => (int) $settings->household_size,
                         'leftover_of_entry_id' => null,
@@ -152,7 +177,7 @@ final class SuggestMenuAction
      * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
      * @param  array<int, int>  $usage
      * @param  array<string, int>  $slotRecipe
-     * @return array<string, array{recipe_id: int, cook_servings: int}>
+     * @return array<string, array{recipe_id: int, drink_recipe_id: int|null, cook_servings: int}>
      */
     private function fromAi(
         PlanningWeek $week,
@@ -211,8 +236,14 @@ final class SuggestMenuAction
                 $cook = (int) ($choice['cook_servings'] ?? $settings->household_size);
                 $cook = max((int) $settings->household_size, min($cook, (int) $settings->household_size * 2));
 
+                $drinkId = (int) ($choice['drink_recipe_id'] ?? 0);
+                if ($drinkId > 0 && ! isset($byMeal[$meal][$drinkId])) {
+                    $drinkId = 0;
+                }
+
                 $choices[$date.'|'.$meal] = [
                     'recipe_id' => $recipeId,
+                    'drink_recipe_id' => $drinkId,
                     'cook_servings' => $cook,
                 ];
             }
@@ -233,6 +264,10 @@ final class SuggestMenuAction
 
                 if (! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)
                     && $this->hasUsableAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe)) {
+                    continue;
+                }
+
+                if ($recipe->course === RecipeCourse::Drink) {
                     continue;
                 }
 
@@ -257,6 +292,24 @@ final class SuggestMenuAction
                 $this->deplete($available, $evaluation['requirements']);
                 $usage[$recipeId] = ($usage[$recipeId] ?? 0) + 1;
                 $slotRecipe[$key] = $recipeId;
+
+                $drinkPick = $this->resolveDrink(
+                    $choice['drink_recipe_id'],
+                    $recipeId,
+                    $candidates[$meal] ?? [],
+                    $available,
+                    $usage,
+                    $settings,
+                );
+
+                if ($drinkPick !== null) {
+                    $this->deplete($available, $drinkPick['evaluation']['requirements']);
+                    $drinkId = (int) $drinkPick['recipe']->id;
+                    $usage[$drinkId] = ($usage[$drinkId] ?? 0) + 1;
+                    $selected[$key]['drink_recipe_id'] = $drinkId;
+                } else {
+                    $selected[$key]['drink_recipe_id'] = null;
+                }
             }
         }
 
@@ -280,7 +333,7 @@ final class SuggestMenuAction
         array $available,
     ): string {
         $budget = $this->foodBudgetRepository->snapshotFor($settings->user_id, CarbonImmutable::now());
-        $today = $week->asOf->toDateString();
+        $today = $week->asOf->setTimezone('America/Lima')->toDateString();
 
         $recipes = [];
         foreach ($candidates as $meal => $items) {
@@ -291,6 +344,7 @@ final class SuggestMenuAction
                     'id' => (int) $recipe->id,
                     'nombre' => $recipe->name,
                     'comidas' => $recipe->meal_types,
+                    'tipo' => $recipe->course->value,
                     'minutos' => $recipe->prep_minutes,
                     'despensa_cobertura' => $evaluation['cobertura'],
                     'despensa_aprovechamiento' => $evaluation['aprovechamiento'],
@@ -338,6 +392,8 @@ Reglas:
 - servings siempre es el número de personas. cook_servings debe ser >= personas; usa hasta 2x personas si quieres dejar sobras para el día siguiente.
 - `despensa_cobertura` es la fracción de ingredientes que la despensa cubre. `despensa_aprovechamiento` es cuánto de la despensa consume la receta: suma, por producto, de la fracción del stock que se lleva. `faltantes` son los productos que habría que comprar. Los tres los calcula el backend; no los recalcules.
 - `vence_pronto` marca stock que vence en cuatro días.
+- `tipo` es `main` (plato principal), `drink` (bebida) o `side` (acompañamiento). El `recipe_id` nunca es una `drink`: la bebida va en `drink_recipe_id`. Si el catálogo tiene una bebida para esa comida, úsala como acompañamiento; en el desayuno es lo esperado.
+- `drink_recipe_id` debe ser distinto de `recipe_id`, estar en el catálogo y ser una `drink`.
 - Según `criterio`: `use_pantry` prioriza `despensa_aprovechamiento` y reparte la despensa entre recetas; no elijas una receta con aprovechamiento 0 si otra candidata usa despensa. `save_money` minimiza `faltantes`. `balanced` combina ambos.
 - No repitas la misma receta más de dos veces en la semana ni en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
 - No expliques nada fuera del JSON.
@@ -348,7 +404,7 @@ Contexto:
 ```
 
 Formato exacto:
-{"days":[{"date":"YYYY-MM-DD","meals":{"breakfast":{"recipe_id":1,"cook_servings":2},"lunch":{"recipe_id":2,"cook_servings":4}}}]}
+{"days":[{"date":"YYYY-MM-DD","meals":{"breakfast":{"recipe_id":1,"drink_recipe_id":2,"cook_servings":2},"lunch":{"recipe_id":3,"cook_servings":4}}}]}
 PROMPT;
     }
 
@@ -358,8 +414,9 @@ PROMPT;
      */
     private function pantryAvailabilityByProduct(array $pantry, CarbonImmutable $asOf): array
     {
-        $today = $asOf->toDateString();
-        $threshold = $asOf->addDays(self::EXPIRING_SOON_DAYS)->toDateString();
+        $local = $asOf->setTimezone('America/Lima');
+        $today = $local->toDateString();
+        $threshold = $local->addDays(self::EXPIRING_SOON_DAYS)->toDateString();
         $available = [];
 
         foreach ($pantry as $stock) {
@@ -513,6 +570,142 @@ PROMPT;
     }
 
     /**
+     * Usa la bebida que propuso la IA si es válida; si no, elige una del catálogo
+     * para esa comida. Si no hay bebidas, la comida queda solo con el plato.
+     *
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $usage
+     * @return array{
+     *     recipe: Recipe,
+     *     evaluation: array{
+     *         requirements: array<int, array{name: string, unit: Unit, quantity: float}>,
+     *         cobertura: float,
+     *         aprovechamiento: float,
+     *         faltantes: array<int, string>,
+     *         vence_pronto: bool
+     *     }
+     * }|null
+     */
+    private function resolveDrink(
+        int $drinkId,
+        int $mainId,
+        array $candidates,
+        array $available,
+        array $usage,
+        MealPlanSettings $settings,
+    ): ?array {
+        if ($drinkId > 0 && $drinkId !== $mainId) {
+            $drink = $this->findCandidate($candidates, $drinkId);
+
+            if ($drink !== null
+                && $this->canUseDrink($drinkId, $usage)
+                && $drink->course === RecipeCourse::Drink) {
+                return [
+                    'recipe' => $drink,
+                    'evaluation' => $this->evaluate($drink, (int) $settings->household_size, $available),
+                ];
+            }
+        }
+
+        return $this->chooseDrink($mainId, $candidates, $available, $usage, $settings);
+    }
+
+    /**
+     * Una bebida para la comida, elegida con el mismo criterio que el plato
+     * principal. No aplica la regla de días consecutivos: una bebida puede
+     * repetirse más seguido que un plato.
+     *
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $usage
+     * @return array{
+     *     recipe: Recipe,
+     *     evaluation: array{
+     *         requirements: array<int, array{name: string, unit: Unit, quantity: float}>,
+     *         cobertura: float,
+     *         aprovechamiento: float,
+     *         faltantes: array<int, string>,
+     *         vence_pronto: bool
+     *     }
+     * }|null
+     */
+    private function chooseDrink(
+        int $mainId,
+        array $candidates,
+        array $available,
+        array $usage,
+        MealPlanSettings $settings,
+    ): ?array {
+        $drinks = array_values(array_filter(
+            $candidates,
+            static fn (Recipe $recipe): bool => $recipe->course === RecipeCourse::Drink
+                && (int) $recipe->id !== $mainId,
+        ));
+
+        if ($drinks === []) {
+            return null;
+        }
+
+        $usable = array_values(array_filter(
+            $drinks,
+            fn (Recipe $recipe): bool => $this->canUseDrink((int) $recipe->id, $usage),
+        ));
+
+        if ($usable === []) {
+            $usable = $drinks;
+        }
+
+        $strategy = $settings->menu_strategy ?? MenuStrategy::Balanced;
+        $evaluated = array_map(fn (Recipe $recipe): array => [
+            'recipe' => $recipe,
+            'evaluation' => $this->evaluate($recipe, (int) $settings->household_size, $available),
+        ], $usable);
+
+        if ($strategy === MenuStrategy::UsePantry) {
+            $withPantry = array_values(array_filter(
+                $evaluated,
+                static fn (array $row): bool => $row['evaluation']['aprovechamiento'] > 0.0,
+            ));
+
+            if ($withPantry !== []) {
+                $evaluated = $withPantry;
+            }
+        }
+
+        usort($evaluated, function (array $a, array $b) use ($strategy, $usage): int {
+            $scoreA = $this->scoreRecipe($a['evaluation'], $strategy, $usage[(int) $a['recipe']->id] ?? 0);
+            $scoreB = $this->scoreRecipe($b['evaluation'], $strategy, $usage[(int) $b['recipe']->id] ?? 0);
+
+            return $scoreB <=> $scoreA ?: $a['recipe']->name <=> $b['recipe']->name;
+        });
+
+        return $evaluated[0];
+    }
+
+    /**
+     * @param  array<int, int>  $usage
+     */
+    private function canUseDrink(int $recipeId, array $usage): bool
+    {
+        return ($usage[$recipeId] ?? 0) < self::MAX_RECIPE_OCCURRENCES;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     */
+    private function findCandidate(array $candidates, int $recipeId): ?Recipe
+    {
+        foreach ($candidates as $recipe) {
+            if ((int) $recipe->id === $recipeId) {
+                return $recipe;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @param  array<int, Recipe>  $candidates
      * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
      * @param  array<int, int>  $usage
@@ -540,6 +733,20 @@ PROMPT;
         if ($candidates === []) {
             return null;
         }
+
+        // El plato principal nunca es una bebida; la bebida va en su propia
+        // ranura. Si no hay platos, la comida queda vacía para que el usuario
+        // agregue uno, en vez de proponer una bebida sola.
+        $mains = array_values(array_filter(
+            $candidates,
+            static fn (Recipe $recipe): bool => $recipe->course !== RecipeCourse::Drink,
+        ));
+
+        if ($mains === []) {
+            return null;
+        }
+
+        $candidates = $mains;
 
         $household = (int) $settings->household_size;
         $strategy = $settings->menu_strategy ?? MenuStrategy::Balanced;

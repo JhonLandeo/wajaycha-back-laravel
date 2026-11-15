@@ -8,6 +8,7 @@ use App\Enums\MealEntryKind;
 use App\Enums\MealEntryStatus;
 use App\Enums\Unit;
 use App\Models\MealPlanEntry;
+use App\Models\Recipe;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
 use App\Services\Shopping\UnitConverter;
 use Carbon\CarbonImmutable;
@@ -34,7 +35,7 @@ final class SyncPantryConsumptionAction
 
     public function execute(MealPlanEntry $entry): void
     {
-        $entry->loadMissing(['recipe.ingredients.product']);
+        $entry->loadMissing(['recipe.ingredients.product', 'drinkRecipe.ingredients.product']);
 
         DB::transaction(function () use ($entry): void {
             $this->shoppingRepository->deletePantryConsumptionsForEntry((int) $entry->id);
@@ -67,14 +68,27 @@ final class SyncPantryConsumptionAction
      */
     private function requirements(MealPlanEntry $entry): array
     {
-        $recipe = $entry->recipe;
+        $requirements = [];
 
-        if ($recipe === null) {
-            return [];
+        if ($entry->recipe !== null) {
+            $this->mergeRequirements($requirements, $entry->recipe, (int) $entry->cook_servings);
         }
 
-        $scale = (int) $entry->cook_servings / max(1, (int) $recipe->base_servings);
-        $requirements = [];
+        // El acompañamiento se consume para lo que se come, no para las
+        // porciones extra que quedan como sobras.
+        if ($entry->drinkRecipe !== null) {
+            $this->mergeRequirements($requirements, $entry->drinkRecipe, (int) $entry->servings);
+        }
+
+        return $requirements;
+    }
+
+    /**
+     * @param  array<int, array{unit: string, quantity: float}>  $requirements
+     */
+    private function mergeRequirements(array &$requirements, Recipe $recipe, int $servings): void
+    {
+        $scale = max(1, $servings) / max(1, (int) $recipe->base_servings);
 
         foreach ($recipe->ingredients as $ingredient) {
             if ($ingredient->is_optional) {
@@ -104,8 +118,6 @@ final class SyncPantryConsumptionAction
             $requirements[$productId] ??= ['unit' => $productUnit->value, 'quantity' => 0.0];
             $requirements[$productId]['quantity'] = round($requirements[$productId]['quantity'] + $quantity, 3);
         }
-
-        return $requirements;
     }
 
     /**

@@ -7,21 +7,31 @@ use App\Models\PantryItem;
 use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
 
+beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-09 08:00:00', 'America/Lima'));
+});
+
+afterEach(function () {
+    $this->travelBack();
+});
+
 /**
  * @return array{0: Recipe, 1: Product}
  */
-function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string $meal = 'lunch'): array
+function suggestionRecipe(int $userId, string $name = 'Arroz con pollo', string $meal = 'lunch', string $course = 'main'): array
 {
     $product = Product::factory()->create(['name' => 'Arroz '.fake()->unique()->word(), 'unit' => 'kg']);
     $recipe = Recipe::factory()->create([
         'user_id' => $userId,
         'name' => $name,
         'meal_types' => [$meal],
+        'course' => $course,
         'base_servings' => 2,
         'prep_minutes' => 30,
     ]);
@@ -328,4 +338,88 @@ it('caps a recipe at two occurrences when another candidate is available', funct
 
     expect($entries->where('recipe_id', $recipeA->id))->toHaveCount(2)
         ->and($entries->where('recipe_id', $recipeB->id))->toHaveCount(2);
+});
+
+it('does not propose days that already passed in the current week', function () {
+    [$user, $headers] = $this->userWithAuth();
+    suggestionRecipe($user->id, 'Receta A');
+
+    // Miércoles: lunes y martes ya pasaron.
+    $this->travelTo(CarbonImmutable::parse('2026-11-11 08:00:00', 'America/Lima'));
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk();
+
+    $dates = MealPlanEntry::query()
+        ->where('user_id', $user->id)
+        ->where('kind', 'recipe')
+        ->orderBy('plan_date')
+        ->get()
+        ->map(fn (MealPlanEntry $entry): string => $entry->plan_date->toDateString())
+        ->all();
+
+    expect($dates)->toBe(['2026-11-11']);
+});
+
+it('leaves a finished week untouched when there is nothing left to plan', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = suggestionRecipe($user->id, 'Receta A');
+
+    $this->travelTo(CarbonImmutable::parse('2026-11-11 08:00:00', 'America/Lima'));
+
+    $existing = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'fallback');
+
+    expect(MealPlanEntry::query()->whereKey($existing->id)->exists())->toBeTrue();
+});
+
+it('pairs a drink with a breakfast main when the fallback builds the week', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$main] = suggestionRecipe($user->id, 'Pan con palta', 'breakfast', 'main');
+    [$drink] = suggestionRecipe($user->id, 'Bebida de soya', 'breakfast', 'drink');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['breakfast'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Pan con palta')
+        ->assertJsonPath('data.entries.0.drink_recipe.name', 'Bebida de soya');
+
+    $entry = MealPlanEntry::query()->where('user_id', $user->id)->sole();
+
+    expect($entry->recipe_id)->toBe($main->id)
+        ->and($entry->drink_recipe_id)->toBe($drink->id);
 });

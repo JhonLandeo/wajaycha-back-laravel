@@ -43,7 +43,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
         return MealPlanEntry::query()
             ->where('user_id', $userId)
             ->whereBetween('plan_date', [$startsOn->toDateString(), $endsOn->toDateString()])
-            ->with(['recipe.ingredients.product', 'leftoverOf.recipe'])
+            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe'])
             ->orderBy('plan_date')
             ->orderByRaw("CASE meal_type WHEN 'breakfast' THEN 1 WHEN 'lunch' THEN 2 ELSE 3 END")
             ->get();
@@ -55,7 +55,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
         $entry = MealPlanEntry::query()
             ->whereKey($id)
             ->where('user_id', $userId)
-            ->with(['recipe.ingredients.product', 'leftoverOf.recipe'])
+            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe'])
             ->first();
 
         return $entry;
@@ -68,7 +68,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
             ->where('user_id', $userId)
             ->where('plan_date', $planDate)
             ->where('meal_type', $mealType->value)
-            ->with(['recipe.ingredients.product', 'leftoverOf.recipe'])
+            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe'])
             ->first();
 
         return $entry;
@@ -87,6 +87,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
                 'kind' => $data['kind'],
                 'status' => $data['status'] ?? 'planned',
                 'recipe_id' => $data['recipe_id'] ?? null,
+                'drink_recipe_id' => $data['drink_recipe_id'] ?? null,
                 'servings' => $data['servings'] ?? 0,
                 'cook_servings' => $data['cook_servings'] ?? 0,
                 'leftover_of_entry_id' => $data['leftover_of_entry_id'] ?? null,
@@ -94,7 +95,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
             ]
         );
 
-        return $entry->load(['recipe.ingredients.product', 'leftoverOf.recipe']);
+        return $entry->load(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe']);
     }
 
     public function deleteEntry(MealPlanEntry $entry): bool

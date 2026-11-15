@@ -27,6 +27,7 @@ class RecipeFactory extends Factory
             'name' => fake()->unique()->words(2, true),
             'base_servings' => 2,
             'meal_types' => ['lunch'],
+            'course' => 'main',
             'prep_minutes' => fake()->numberBetween(15, 45),
             'instructions' => null,
             'is_active' => true,

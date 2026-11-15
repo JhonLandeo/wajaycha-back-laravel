@@ -76,7 +76,7 @@ final class RecipeController extends Controller
     {
         $validated = $request->validated();
 
-        return [
+        $data = [
             'name' => trim((string) $validated['name']),
             'base_servings' => (int) $validated['base_servings'],
             'meal_types' => array_values(array_unique($validated['meal_types'])),
@@ -84,6 +84,12 @@ final class RecipeController extends Controller
             'instructions' => $validated['instructions'] ?? null,
             'is_active' => (bool) ($validated['is_active'] ?? true),
         ];
+
+        if (array_key_exists('course', $validated)) {
+            $data['course'] = (string) $validated['course'];
+        }
+
+        return $data;
     }
 
     /**
@@ -109,6 +115,8 @@ final class RecipeController extends Controller
             'name' => $recipe->name,
             'base_servings' => (int) $recipe->base_servings,
             'meal_types' => $recipe->meal_types,
+            'course' => $recipe->course->value,
+            'course_label' => $recipe->course->label(),
             'prep_minutes' => $recipe->prep_minutes,
             'instructions' => $recipe->instructions,
             'is_active' => (bool) $recipe->is_active,

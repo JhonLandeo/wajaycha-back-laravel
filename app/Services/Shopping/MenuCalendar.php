@@ -33,6 +33,24 @@ final class MenuCalendar
     }
 
     /**
+     * Días activos que todavía se pueden planificar: excluye los que ya
+     * pasaron en la zona de Lima. La vista puede mostrar la historia, pero una
+     * sugerencia o un ajuste por chat no deben tocar días cerrados.
+     *
+     * @param  array<int, int>  $planWeekdays
+     * @return array<int, string>
+     */
+    public function upcomingActiveDays(PlanningWeek $week, array $planWeekdays): array
+    {
+        $today = $week->asOf->setTimezone('America/Lima')->toDateString();
+
+        return array_values(array_filter(
+            $this->activeDays($week, $planWeekdays),
+            static fn (string $date): bool => $date >= $today,
+        ));
+    }
+
+    /**
      * @param  array<int, string>  $days
      */
     public function isActive(string $date, array $days): bool

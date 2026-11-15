@@ -45,7 +45,7 @@ final class ApplyMenuChatOperationsAction
             CarbonImmutable::now(),
         );
         $settings = $this->mealPlanRepository->settingsFor($userId);
-        $days = $this->calendar->activeDays($week, $settings->plan_weekdays);
+        $days = $this->calendar->upcomingActiveDays($week, $settings->plan_weekdays);
         $meals = $settings->meal_types;
         $candidates = $this->candidateFilter->forUser($userId, $settings);
         $entries = $this->mealPlanRepository->entriesForWeek($userId, $week->startsOn, $week->endsOn);

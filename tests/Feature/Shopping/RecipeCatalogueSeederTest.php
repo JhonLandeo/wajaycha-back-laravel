@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
 use Database\Seeders\ProductCatalogueSeeder;
@@ -18,7 +19,15 @@ it('seeds the shared recipe catalogue idempotently and maps ingredients to produ
     $ingredients = RecipeIngredient::count();
 
     expect($count)->toBeGreaterThan(0)
-        ->and(Recipe::where('slug', 'arroz-con-pollo')->exists())->toBeTrue();
+        ->and(Recipe::where('slug', 'arroz-con-pollo')->exists())->toBeTrue()
+        ->and(Recipe::whereIn('slug', ['quinua-con-leche', 'siete-semillas', 'soya'])->count())->toBe(3);
+
+    $soya = Recipe::where('slug', 'soya')->sole();
+    $soyaProduct = Product::where('slug', 'soya')->sole();
+
+    expect($soya->course->value)->toBe('drink')
+        ->and($soyaProduct->name)->toBe('Soya molida')
+        ->and($soyaProduct->unit)->toBe('kg');
 
     $arroz = Recipe::where('slug', 'arroz-con-pollo')->with('ingredients.product')->sole();
     expect($arroz->ingredients)->not->toBeEmpty()

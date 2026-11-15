@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Shopping;
 
+use App\Enums\RecipeCourse;
 use App\Enums\Unit;
 use App\Models\Product;
 use App\Services\Shopping\UnitConverter;
@@ -37,6 +38,7 @@ class StoreRecipeRequest extends FormRequest
             'base_servings' => ['required', 'integer', 'between:1,20'],
             'meal_types' => ['required', 'array', 'min:1'],
             'meal_types.*' => ['string', 'distinct', Rule::in(['breakfast', 'lunch', 'dinner'])],
+            'course' => ['sometimes', Rule::enum(RecipeCourse::class)],
             'prep_minutes' => ['nullable', 'integer', 'between:1,240'],
             'instructions' => ['nullable', 'string', 'max:5000'],
             'is_active' => ['sometimes', 'boolean'],

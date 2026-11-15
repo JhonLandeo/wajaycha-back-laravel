@@ -142,5 +142,39 @@ return [
                 ['product' => 'huevos', 'quantity' => 2, 'unit' => 'unidad'],
             ],
         ],
+        [
+            'slug' => 'quinua-con-leche',
+            'name' => 'Quinua con leche',
+            'base_servings' => 2,
+            'meal_types' => ['breakfast'],
+            'course' => 'drink',
+            'prep_minutes' => 10,
+            'ingredients' => [
+                ['product' => 'quinua', 'quantity' => 0.05, 'unit' => 'kg'],
+                ['product' => 'leche-evaporada', 'quantity' => 1, 'unit' => 'unidad'],
+            ],
+        ],
+        [
+            'slug' => 'siete-semillas',
+            'name' => 'Bebida de siete semillas',
+            'base_servings' => 2,
+            'meal_types' => ['breakfast'],
+            'course' => 'drink',
+            'prep_minutes' => 5,
+            'ingredients' => [
+                ['product' => 'siete-semillas', 'quantity' => 0.08, 'unit' => 'kg'],
+            ],
+        ],
+        [
+            'slug' => 'soya',
+            'name' => 'Bebida de soya',
+            'base_servings' => 2,
+            'meal_types' => ['breakfast'],
+            'course' => 'drink',
+            'prep_minutes' => 5,
+            'ingredients' => [
+                ['product' => 'soya', 'quantity' => 0.05, 'unit' => 'kg'],
+            ],
+        ],
     ],
 ];

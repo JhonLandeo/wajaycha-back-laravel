@@ -7,6 +7,7 @@ namespace App\Actions\Shopping;
 use App\Enums\MealEntryKind;
 use App\Enums\MealEntryStatus;
 use App\Enums\MealType;
+use App\Enums\RecipeCourse;
 use App\Models\MealPlanEntry;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
 use App\Repositories\Contracts\RecipeRepositoryContract;
@@ -77,6 +78,9 @@ final class SaveMealPlanEntryAction
         if (! in_array($mealType->value, $recipe->meal_types, true)) {
             throw ValidationException::withMessages(['recipe_id' => 'Esa receta no corresponde a esta comida.']);
         }
+        if ($recipe->course === RecipeCourse::Drink) {
+            throw ValidationException::withMessages(['recipe_id' => 'La bebida va en el campo de bebida, no como plato principal.']);
+        }
 
         $servings = (int) ($data['servings'] ?? 0);
         if ($servings < 1) {
@@ -87,6 +91,8 @@ final class SaveMealPlanEntryAction
         if ($cookServings < $servings) {
             throw ValidationException::withMessages(['cook_servings' => 'No puedes cocinar menos porciones de las que se comen.']);
         }
+
+        $drinkRecipeId = $this->drinkRecipeIdFor($userId, $data, $existing, $mealType, $recipeId);
 
         if ($existing !== null && $existing->leftovers()->exists()) {
             if ((int) $existing->recipe_id !== $recipeId) {
@@ -105,11 +111,56 @@ final class SaveMealPlanEntryAction
             'kind' => MealEntryKind::Recipe->value,
             'status' => $this->statusFor($existing, $data),
             'recipe_id' => $recipeId,
+            'drink_recipe_id' => $drinkRecipeId,
             'servings' => $servings,
             'cook_servings' => $cookServings,
             'leftover_of_entry_id' => null,
             'notes' => $data['notes'] ?? null,
         ]);
+    }
+
+    /**
+     * Resuelve la bebida opcional. Si el payload no la menciona, se conserva la
+     * que ya tenía la entrada; un id 0 la quita.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function drinkRecipeIdFor(
+        int $userId,
+        array $data,
+        ?MealPlanEntry $existing,
+        MealType $mealType,
+        int $mainRecipeId,
+    ): ?int {
+        if (! array_key_exists('drink_recipe_id', $data)) {
+            return $existing?->drink_recipe_id;
+        }
+
+        $drinkRecipeId = (int) ($data['drink_recipe_id'] ?? 0);
+
+        if ($drinkRecipeId <= 0) {
+            return null;
+        }
+
+        if ($drinkRecipeId === $mainRecipeId) {
+            throw ValidationException::withMessages(['drink_recipe_id' => 'La bebida no puede ser la misma receta que el plato.']);
+        }
+
+        $drink = $this->recipeRepository->findForUser($drinkRecipeId, $userId);
+
+        if ($drink === null) {
+            throw ValidationException::withMessages(['drink_recipe_id' => 'Elige una bebida válida.']);
+        }
+
+        if ($drink->course !== RecipeCourse::Drink) {
+            throw ValidationException::withMessages(['drink_recipe_id' => 'Esa receta no es una bebida.']);
+        }
+
+        if (! in_array($mealType->value, $drink->meal_types, true)) {
+            throw ValidationException::withMessages(['drink_recipe_id' => 'Esa bebida no corresponde a esta comida.']);
+        }
+
+        return (int) $drink->id;
     }
 
     /**
@@ -155,6 +206,7 @@ final class SaveMealPlanEntryAction
             'kind' => MealEntryKind::Leftover->value,
             'status' => $this->statusFor($existing, $data),
             'recipe_id' => $source->recipe_id,
+            'drink_recipe_id' => null,
             'servings' => $servings,
             'cook_servings' => 0,
             'leftover_of_entry_id' => $source->id,
@@ -183,6 +235,7 @@ final class SaveMealPlanEntryAction
             'kind' => $kind->value,
             'status' => $this->statusFor($existing, $data),
             'recipe_id' => null,
+            'drink_recipe_id' => null,
             'servings' => 0,
             'cook_servings' => 0,
             'leftover_of_entry_id' => null,

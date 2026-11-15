@@ -15,13 +15,14 @@ uses(RefreshDatabase::class);
 /**
  * @return array{0: Recipe, 1: Product}
  */
-function pantryConsumptionRecipe(int $userId): array
+function pantryConsumptionRecipe(int $userId, string $course = 'main'): array
 {
     $product = Product::factory()->create(['name' => 'Arroz '.fake()->unique()->word(), 'unit' => 'kg']);
     $recipe = Recipe::factory()->create([
         'user_id' => $userId,
         'name' => 'Arroz con pollo '.fake()->unique()->word(),
         'meal_types' => ['lunch'],
+        'course' => $course,
         'base_servings' => 2,
     ]);
     RecipeIngredient::factory()->create([
@@ -251,4 +252,32 @@ it('deletes consumption rows when the cooked entry is deleted', function () {
 
     expect(PantryConsumption::query()->count())->toBe(0)
         ->and(PantryItem::query()->count())->toBe(1);
+});
+
+it('consumes both the main recipe and its drink when the meal is cooked', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$mainRecipe, $mainProduct] = pantryConsumptionRecipe($user->id);
+    [$drinkRecipe, $drinkProduct] = pantryConsumptionRecipe($user->id, 'drink');
+
+    pantryLot($user->id, $mainProduct, 1.0, '2026-11-20');
+    pantryLot($user->id, $drinkProduct, 1.0, '2026-11-20');
+
+    $entry = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $mainRecipe->id,
+        'drink_recipe_id' => $drinkRecipe->id,
+        'plan_date' => '2026-11-09',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+
+    $this->patchJson("/api/shopping/menu/entries/{$entry->id}/status", ['status' => 'cooked'], $headers)
+        ->assertOk();
+
+    $rows = PantryConsumption::query()->orderBy('product_id')->get();
+
+    expect($rows)->toHaveCount(2)
+        ->and((float) $rows[0]->quantity)->toBe(0.5)
+        ->and((float) $rows[1]->quantity)->toBe(0.5)
+        ->and($rows->pluck('product_id')->all())->toEqualCanonicalizing([$mainProduct->id, $drinkProduct->id]);
 });

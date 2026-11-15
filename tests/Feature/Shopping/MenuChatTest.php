@@ -7,10 +7,19 @@ use App\Models\MenuChatMessage;
 use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-09 08:00:00', 'America/Lima'));
+});
+
+afterEach(function () {
+    $this->travelBack();
+});
 
 function chatRecipe(int $userId, string $name = 'Arroz con pollo'): Recipe
 {

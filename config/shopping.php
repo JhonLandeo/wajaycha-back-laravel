@@ -61,6 +61,8 @@ return [
         ['slug' => 'quinua', 'name' => 'Quinua', 'unit' => 'kg'],
         ['slug' => 'manzana', 'name' => 'Manzana', 'unit' => 'kg'],
         ['slug' => 'naranja', 'name' => 'Naranja', 'unit' => 'kg'],
+        ['slug' => 'siete-semillas', 'name' => 'Siete semillas molida', 'unit' => 'kg'],
+        ['slug' => 'soya', 'name' => 'Soya molida', 'unit' => 'kg'],
     ],
 
 ];

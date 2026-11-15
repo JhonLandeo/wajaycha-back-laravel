@@ -27,11 +27,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property MealEntryKind $kind
  * @property MealEntryStatus $status
  * @property int|null $recipe_id
+ * @property int|null $drink_recipe_id
  * @property int $servings
  * @property int $cook_servings
  * @property int|null $leftover_of_entry_id
  * @property string|null $notes
  * @property-read Recipe|null $recipe
+ * @property-read Recipe|null $drinkRecipe
  * @property-read MealPlanEntry|null $leftoverOf
  * @property-read \Illuminate\Database\Eloquent\Collection<int, MealPlanEntry> $leftovers
  * @property-read User $user
@@ -48,6 +50,7 @@ class MealPlanEntry extends Model
         'kind',
         'status',
         'recipe_id',
+        'drink_recipe_id',
         'servings',
         'cook_servings',
         'leftover_of_entry_id',
@@ -71,6 +74,11 @@ class MealPlanEntry extends Model
     public function recipe(): BelongsTo
     {
         return $this->belongsTo(Recipe::class);
+    }
+
+    public function drinkRecipe(): BelongsTo
+    {
+        return $this->belongsTo(Recipe::class, 'drink_recipe_id');
     }
 
     public function leftoverOf(): BelongsTo

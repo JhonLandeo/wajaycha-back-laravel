@@ -15,13 +15,14 @@ uses(RefreshDatabase::class);
 /**
  * @return array{0: Recipe, 1: Product}
  */
-function menuRecipe(int $userId, string $meal = 'lunch', float $baseServings = 2): array
+function menuRecipe(int $userId, string $meal = 'lunch', float $baseServings = 2, string $course = 'main'): array
 {
     $product = Product::factory()->create(['unit' => 'kg']);
     $recipe = Recipe::factory()->create([
         'user_id' => $userId,
         'name' => 'Arroz con pollo '.fake()->unique()->word(),
         'meal_types' => [$meal],
+        'course' => $course,
         'base_servings' => $baseServings,
     ]);
     RecipeIngredient::factory()->create([
@@ -254,4 +255,46 @@ it('compares the menu estimate with the real food spend of the week', function (
         ->assertJsonPath('data.actual_spent', 50)
         ->assertJsonPath('data.planned_cost', null)
         ->assertJsonPath('data.difference', null);
+});
+
+it('saves a main recipe with a drink and returns the ingredients of both', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$mainRecipe, $mainProduct] = menuRecipe($user->id);
+    [$drinkRecipe, $drinkProduct] = menuRecipe($user->id, 'lunch', 2, 'drink');
+
+    $this->putJson('/api/shopping/menu/entries', [
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'recipe_id' => $mainRecipe->id,
+        'drink_recipe_id' => $drinkRecipe->id,
+        'servings' => 2,
+        'cook_servings' => 2,
+    ], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.recipe.name', $mainRecipe->name)
+        ->assertJsonPath('data.recipe.ingredients.0.product_name', $mainProduct->name)
+        ->assertJsonPath('data.drink_recipe_id', $drinkRecipe->id)
+        ->assertJsonPath('data.drink_recipe.name', $drinkRecipe->name)
+        ->assertJsonPath('data.drink_recipe.ingredients.0.product_name', $drinkProduct->name);
+
+    $this->getJson('/api/shopping/menu/shopping-list?week_start=2026-11-09', $headers)
+        ->assertOk()
+        ->assertJsonCount(2, 'data.lines');
+});
+
+it('rejects a drink that does not belong to the meal', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$mainRecipe] = menuRecipe($user->id, 'lunch');
+    [$dinnerRecipe] = menuRecipe($user->id, 'dinner', 2, 'drink');
+
+    $this->putJson('/api/shopping/menu/entries', [
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'recipe_id' => $mainRecipe->id,
+        'drink_recipe_id' => $dinnerRecipe->id,
+        'servings' => 2,
+        'cook_servings' => 2,
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors('drink_recipe_id');
 });

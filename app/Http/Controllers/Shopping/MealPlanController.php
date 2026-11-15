@@ -16,6 +16,7 @@ use App\Http\Requests\Shopping\UpdateMealEntryStatusRequest;
 use App\Http\Requests\Shopping\UpdateMealPlanSettingsRequest;
 use App\Models\MealPlanEntry;
 use App\Models\MealPlanSettings;
+use App\Models\Recipe;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -182,6 +183,32 @@ final class MealPlanController extends Controller
     /**
      * @return array<string, mixed>
      */
+    private function recipePayload(Recipe $recipe): array
+    {
+        return [
+            'id' => (int) $recipe->id,
+            'name' => $recipe->name,
+            'base_servings' => (int) $recipe->base_servings,
+            'prep_minutes' => $recipe->prep_minutes,
+            'meal_types' => $recipe->meal_types,
+            'course' => $recipe->course->value,
+            'course_label' => $recipe->course->label(),
+            'ingredients' => $recipe->ingredients
+                ->map(static fn ($ingredient): array => [
+                    'product_id' => (int) $ingredient->product_id,
+                    'product_name' => (string) $ingredient->product->name,
+                    'quantity' => (float) $ingredient->quantity,
+                    'unit' => (string) $ingredient->unit,
+                    'is_optional' => (bool) $ingredient->is_optional,
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     private function entryPayload(MealPlanEntry $entry): array
     {
         return [
@@ -194,13 +221,9 @@ final class MealPlanController extends Controller
             'status' => $entry->status->value,
             'status_label' => $entry->status->label(),
             'recipe_id' => $entry->recipe_id,
-            'recipe' => $entry->recipe === null ? null : [
-                'id' => (int) $entry->recipe->id,
-                'name' => $entry->recipe->name,
-                'base_servings' => (int) $entry->recipe->base_servings,
-                'prep_minutes' => $entry->recipe->prep_minutes,
-                'meal_types' => $entry->recipe->meal_types,
-            ],
+            'recipe' => $entry->recipe === null ? null : $this->recipePayload($entry->recipe),
+            'drink_recipe_id' => $entry->drink_recipe_id,
+            'drink_recipe' => $entry->drinkRecipe === null ? null : $this->recipePayload($entry->drinkRecipe),
             'servings' => (int) $entry->servings,
             'cook_servings' => (int) $entry->cook_servings,
             'leftover_of_entry_id' => $entry->leftover_of_entry_id,

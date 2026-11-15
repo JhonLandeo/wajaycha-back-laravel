@@ -12,6 +12,7 @@ use App\Enums\BudgetPeriod;
 use App\Enums\MealEntryKind;
 use App\Enums\MealEntryStatus;
 use App\Enums\Unit;
+use App\Models\Recipe;
 use App\Repositories\Contracts\FoodBudgetRepositoryContract;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
 use App\Repositories\Contracts\PriceRepositoryContract;
@@ -98,39 +99,12 @@ final class BuildMenuShoppingListAction
                 continue;
             }
 
-            $recipe = $entry->recipe;
-            $scale = $entry->cook_servings / max(1, $recipe->base_servings);
+            $this->aggregateRecipe($aggregated, $entry->recipe, (int) $entry->cook_servings);
 
-            foreach ($recipe->ingredients as $ingredient) {
-                if ($ingredient->is_optional) {
-                    continue;
-                }
-
-                $product = $ingredient->product;
-                $productUnit = Unit::tryFrom((string) $product->unit);
-                $ingredientUnit = Unit::tryFrom((string) $ingredient->unit);
-
-                if ($productUnit === null || $ingredientUnit === null) {
-                    continue;
-                }
-
-                try {
-                    $quantity = UnitConverter::toCanonical(
-                        (float) $ingredient->quantity * $scale,
-                        $ingredientUnit->value,
-                        $productUnit->value
-                    );
-                } catch (\InvalidArgumentException) {
-                    continue;
-                }
-
-                $productId = (int) $product->id;
-                $aggregated[$productId] ??= [
-                    'name' => $product->name,
-                    'unit' => $productUnit,
-                    'quantity' => 0.0,
-                ];
-                $aggregated[$productId]['quantity'] += $quantity;
+            // El acompañamiento se prepara para lo que se come, no para las
+            // porciones extra que quedan como sobras.
+            if ($entry->drinkRecipe !== null) {
+                $this->aggregateRecipe($aggregated, $entry->drinkRecipe, (int) $entry->servings);
             }
         }
 
@@ -147,6 +121,46 @@ final class BuildMenuShoppingListAction
         usort($lines, static fn (ConsumptionHabitLine $a, ConsumptionHabitLine $b): int => $a->productName <=> $b->productName);
 
         return $lines;
+    }
+
+    /**
+     * @param  array<int, array{name: string, unit: Unit, quantity: float}>  $aggregated
+     */
+    private function aggregateRecipe(array &$aggregated, Recipe $recipe, int $servings): void
+    {
+        $scale = max(1, $servings) / max(1, (int) $recipe->base_servings);
+
+        foreach ($recipe->ingredients as $ingredient) {
+            if ($ingredient->is_optional) {
+                continue;
+            }
+
+            $product = $ingredient->product;
+            $productUnit = Unit::tryFrom((string) $product->unit);
+            $ingredientUnit = Unit::tryFrom((string) $ingredient->unit);
+
+            if ($productUnit === null || $ingredientUnit === null) {
+                continue;
+            }
+
+            try {
+                $quantity = UnitConverter::toCanonical(
+                    (float) $ingredient->quantity * $scale,
+                    $ingredientUnit->value,
+                    $productUnit->value
+                );
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            $productId = (int) $product->id;
+            $aggregated[$productId] ??= [
+                'name' => $product->name,
+                'unit' => $productUnit,
+                'quantity' => 0.0,
+            ];
+            $aggregated[$productId]['quantity'] += $quantity;
+        }
     }
 
     private function ceilingFor(int $userId, CarbonImmutable $asOf): ?GroceryCeilingInput

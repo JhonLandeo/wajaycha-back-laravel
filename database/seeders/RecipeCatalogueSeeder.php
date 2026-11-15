@@ -53,6 +53,7 @@ class RecipeCatalogueSeeder extends Seeder
                     'name' => $data['name'],
                     'base_servings' => $data['base_servings'],
                     'meal_types' => $data['meal_types'],
+                    'course' => $data['course'] ?? 'main',
                     'prep_minutes' => $data['prep_minutes'],
                     'instructions' => null,
                     'is_active' => true,
