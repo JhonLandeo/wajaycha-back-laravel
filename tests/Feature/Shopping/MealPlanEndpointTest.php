@@ -314,3 +314,31 @@ it('persists the diet profile and the weekly limit of AI recipes', function () {
         ->assertJsonPath('data.diet_profile_label', 'Vegetariano')
         ->assertJsonPath('data.new_recipes_per_week', 2);
 });
+
+it('clears a day and then the whole week', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = menuRecipe($user->id, 'lunch');
+
+    foreach (['2026-11-09', '2026-11-10'] as $date) {
+        $this->putJson('/api/shopping/menu/entries', [
+            'plan_date' => $date,
+            'meal_type' => 'lunch',
+            'kind' => 'recipe',
+            'recipe_id' => $recipe->id,
+            'servings' => 2,
+            'cook_servings' => 2,
+        ], $headers)->assertOk();
+    }
+
+    $this->deleteJson('/api/shopping/menu/day?date=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('status', 'cleared');
+
+    expect(MealPlanEntry::query()->whereDate('plan_date', '2026-11-09')->count())->toBe(0)
+        ->and(MealPlanEntry::query()->whereDate('plan_date', '2026-11-10')->count())->toBe(1);
+
+    $this->deleteJson('/api/shopping/menu?week_start=2026-11-09', [], $headers)
+        ->assertOk();
+
+    expect(MealPlanEntry::query()->where('user_id', $user->id)->count())->toBe(0);
+});

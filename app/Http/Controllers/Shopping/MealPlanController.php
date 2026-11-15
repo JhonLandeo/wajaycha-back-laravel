@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Shopping;
 
+use App\Actions\Shopping\ApplyMenuSuggestionAction;
 use App\Actions\Shopping\BuildMenuShoppingListAction;
 use App\Actions\Shopping\BuildMenuSpendingAction;
 use App\Actions\Shopping\SaveMealPlanEntryAction;
@@ -11,6 +12,7 @@ use App\Actions\Shopping\SuggestMenuAction;
 use App\Actions\Shopping\UpdateMealEntryStatusAction;
 use App\Enums\MealEntryStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Shopping\ApplyMenuSuggestionRequest;
 use App\Http\Requests\Shopping\StoreMealPlanEntryRequest;
 use App\Http\Requests\Shopping\UpdateMealEntryStatusRequest;
 use App\Http\Requests\Shopping\UpdateMealPlanSettingsRequest;
@@ -31,6 +33,7 @@ final class MealPlanController extends Controller
         private readonly BuildMenuShoppingListAction $buildShoppingList,
         private readonly BuildMenuSpendingAction $buildSpending,
         private readonly SuggestMenuAction $suggestMenu,
+        private readonly ApplyMenuSuggestionAction $applySuggestion,
         private readonly UpdateMealEntryStatusAction $updateStatusAction,
     ) {}
 
@@ -52,6 +55,39 @@ final class MealPlanController extends Controller
             'data' => $this->menuPayload($userId, $week),
             'source' => $source,
         ]);
+    }
+
+    public function previewSuggestion(Request $request): JsonResponse
+    {
+        $userId = (int) Auth::id();
+        $week = $this->weekFrom($request);
+        $preview = $this->suggestMenu->preview($userId, $week->startsOn->toDateString());
+        $settings = $this->repository->settingsFor($userId);
+
+        return response()->json([
+            'source' => $preview['source'],
+            'data' => [
+                'week' => $this->weekPayload($preview['week']),
+                'settings' => $this->settingsPayload($settings),
+                'entries' => $preview['entries']
+                    ->map(fn (MealPlanEntry $entry): array => $this->entryPayload($entry))
+                    ->values()
+                    ->all(),
+            ],
+        ]);
+    }
+
+    public function applySuggestion(ApplyMenuSuggestionRequest $request): JsonResponse
+    {
+        $week = $this->weekFrom($request);
+
+        $this->applySuggestion->execute(
+            (int) Auth::id(),
+            $week->startsOn->toDateString(),
+            (array) $request->validated('entries'),
+        );
+
+        return response()->json(['status' => 'applied']);
     }
 
     public function updateSettings(UpdateMealPlanSettingsRequest $request): JsonResponse
@@ -94,6 +130,28 @@ final class MealPlanController extends Controller
         );
 
         return response()->json(['data' => $this->entryPayload($updated)]);
+    }
+
+    public function clearWeek(Request $request): JsonResponse
+    {
+        $week = $this->weekFrom($request);
+        $this->repository->clearWeek((int) Auth::id(), $week->startsOn, $week->endsOn);
+
+        return response()->json(['status' => 'cleared']);
+    }
+
+    public function clearDay(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        $this->repository->clearDay(
+            (int) Auth::id(),
+            CarbonImmutable::parse((string) $validated['date'], 'America/Lima'),
+        );
+
+        return response()->json(['status' => 'cleared']);
     }
 
     public function destroyEntry(int $entry): JsonResponse
@@ -204,6 +262,7 @@ final class MealPlanController extends Controller
             'origin_label' => $recipe->origin->label(),
             'required_equipment' => $recipe->required_equipment ?? [],
             'diet_tags' => $recipe->diet_tags ?? [],
+            'instructions' => $recipe->instructions,
             'ingredients' => $recipe->ingredients
                 ->map(static fn ($ingredient): array => [
                     'product_id' => (int) $ingredient->product_id,

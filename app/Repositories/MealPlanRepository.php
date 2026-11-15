@@ -121,6 +121,14 @@ final class MealPlanRepository implements MealPlanRepositoryContract
             ->delete();
     }
 
+    public function clearDay(int $userId, CarbonImmutable $date): void
+    {
+        MealPlanEntry::query()
+            ->where('user_id', $userId)
+            ->whereDate('plan_date', $date->toDateString())
+            ->delete();
+    }
+
     public function leftoverServingsUsed(int $sourceEntryId, ?int $exceptEntryId = null): int
     {
         return (int) MealPlanEntry::query()

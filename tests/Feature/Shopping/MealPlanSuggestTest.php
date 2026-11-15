@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\ConsumptionHabit;
 use App\Models\MealPlanEntry;
 use App\Models\PantryItem;
 use App\Models\Product;
@@ -624,4 +625,68 @@ it('does not ask the AI for new recipes when the user chooses zero', function ()
 
     Http::assertSentCount(1);
     expect(Recipe::where('origin', 'ai')->count())->toBe(0);
+});
+
+it('prefers recipes that use a declared habit product', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$habitRecipe, $habitProduct] = suggestionRecipe($user->id, 'Con habito');
+    suggestionRecipe($user->id, 'Sin habito');
+
+    ConsumptionHabit::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $habitProduct->id,
+        'weekly_quantity' => 1,
+        'unit' => 'kg',
+        'is_active' => true,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Con habito');
+});
+
+it('rejects an AI menu that ignores a high-protein profile when tagged recipes exist', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$normalRecipe] = suggestionRecipe($user->id, 'Normal');
+    suggestionRecipe($user->id, 'Proteica', 'lunch', 'main', [], ['high_protein']);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'diet_profile' => 'high_protein',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    $aiJson = json_encode([
+        'days' => [
+            ['date' => '2026-11-09', 'meals' => ['lunch' => ['recipe_id' => $normalRecipe->id, 'cook_servings' => 2]]],
+        ],
+    ]);
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => $aiJson]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'fallback')
+        ->assertJsonPath('data.entries.0.recipe.name', 'Proteica');
 });

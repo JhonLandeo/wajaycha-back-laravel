@@ -31,7 +31,8 @@ it('seeds the shared recipe catalogue idempotently and maps ingredients to produ
 
     $arroz = Recipe::where('slug', 'arroz-con-pollo')->with('ingredients.product')->sole();
     expect($arroz->ingredients)->not->toBeEmpty()
-        ->and($arroz->ingredients->first()->product)->not->toBeNull();
+        ->and($arroz->ingredients->first()->product)->not->toBeNull()
+        ->and($arroz->diet_tags)->toContain('high_protein');
 
     $this->seed(ProductCatalogueSeeder::class);
     $this->seed(RecipeCatalogueSeeder::class);

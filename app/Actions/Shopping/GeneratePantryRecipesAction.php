@@ -14,8 +14,8 @@ use App\Repositories\Contracts\RecipeRepositoryContract;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
 use App\Services\AI\OpenCodeGateway;
 use App\Services\Shopping\AiRecipeDraftValidator;
-use Illuminate\Support\Str;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -61,11 +61,12 @@ final class GeneratePantryRecipesAction
 
         $products = $this->shoppingRepository->listProductsFor($userId);
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
+        $habits = $this->shoppingRepository->activeHabitsFor($userId);
         $existing = $this->recipeRepository->allForUser($userId);
 
         try {
             $response = $this->gateway->generateJson([
-                ['parts' => [['text' => $this->prompt($week, $settings, $products, $pantry, $existing, $remaining)]]],
+                ['parts' => [['text' => $this->prompt($week, $settings, $products, $pantry, $habits, $existing, $remaining)]]],
             ], ['temperature' => 0.6]);
         } catch (Throwable $e) {
             report($e);
@@ -119,6 +120,7 @@ final class GeneratePantryRecipesAction
     /**
      * @param  array<int, Product>  $products
      * @param  array<int, \App\DTOs\Shopping\PantryStock>  $pantry
+     * @param  array<int, \App\Models\ConsumptionHabit>  $habits
      * @param  \Illuminate\Database\Eloquent\Collection<int, Recipe>  $existing
      */
     private function prompt(
@@ -126,6 +128,7 @@ final class GeneratePantryRecipesAction
         MealPlanSettings $settings,
         array $products,
         array $pantry,
+        array $habits,
         $existing,
         int $limit,
     ): string {
@@ -175,6 +178,12 @@ final class GeneratePantryRecipesAction
             'equipamiento_disponible' => $settings->available_equipment,
             'no_incluir' => $settings->excluded_terms,
             'despensa' => $pantryList,
+            'habitos' => array_map(static fn ($habit): array => [
+                'producto_id' => (int) $habit->product_id,
+                'producto' => (string) $habit->product?->name,
+                'cantidad_semanal' => (float) $habit->weekly_quantity,
+                'unidad' => (string) $habit->unit,
+            ], $habits),
             'productos' => $productList,
             'recetas_existentes' => $existingList,
         ];
@@ -185,6 +194,7 @@ Eres un cocinero peruano que arma recetas con lo que hay en casa. Propón hasta 
 Reglas:
 - Usa únicamente `producto_id` del catálogo entregado. No inventes productos ni ids.
 - Prioriza los ingredientes de la despensa, sobre todo los que vencen pronto, y los productos que las recetas existentes no usan.
+- Prefiere los productos de `habitos` cuando encajen en la receta; no es obligatorio.
 - No repitas una receta existente ni una combinación ya propuesta.
 - Cada receta debe llevar: `name`, `meal_types` (subconjunto de `comidas_activas`), `course` (`main` o `drink`), `prep_minutes`, `equipment` (subconjunto de `equipamiento_disponible`; si es null, no pidas equipamiento especial), `instructions` con los pasos de preparación en texto claro e `ingredients` con `producto_id`, `quantity` y `unit` compatible con la unidad del producto.
 - `base_servings` no se envía: el backend usa el número de personas.

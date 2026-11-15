@@ -39,6 +39,8 @@ interface MealPlanRepositoryContract
 
     public function clearWeek(int $userId, CarbonImmutable $startsOn, CarbonImmutable $endsOn): void;
 
+    public function clearDay(int $userId, CarbonImmutable $date): void;
+
     /** Servings already claimed by leftover entries of a source entry. */
     public function leftoverServingsUsed(int $sourceEntryId, ?int $exceptEntryId = null): int;
 }

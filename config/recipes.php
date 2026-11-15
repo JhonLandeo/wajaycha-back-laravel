@@ -14,7 +14,7 @@ return [
     'catalogue' => [
         [
             'slug' => 'arroz-con-pollo',
-            'diet_tags' => [],
+            'diet_tags' => ['high_protein'],
             'required_equipment' => ['stove'],
             'name' => 'Arroz con pollo',
             'base_servings' => 2,
@@ -45,7 +45,7 @@ return [
         ],
         [
             'slug' => 'tallarin-saltado-de-pollo',
-            'diet_tags' => [],
+            'diet_tags' => ['high_protein'],
             'required_equipment' => ['stove'],
             'name' => 'Tallarín saltado de pollo',
             'base_servings' => 2,
@@ -90,7 +90,7 @@ return [
         ],
         [
             'slug' => 'sopa-de-verduras-con-pollo',
-            'diet_tags' => [],
+            'diet_tags' => ['high_protein', 'light'],
             'required_equipment' => ['stove'],
             'name' => 'Sopa de verduras con pollo',
             'base_servings' => 2,
@@ -120,7 +120,7 @@ return [
         ],
         [
             'slug' => 'pescado-al-horno-con-papa',
-            'diet_tags' => ['light'],
+            'diet_tags' => ['high_protein', 'light'],
             'required_equipment' => ['oven'],
             'name' => 'Pescado al horno con papa',
             'base_servings' => 2,
@@ -135,7 +135,7 @@ return [
         ],
         [
             'slug' => 'ensalada-de-atun',
-            'diet_tags' => ['light'],
+            'diet_tags' => ['high_protein', 'light'],
             'required_equipment' => ['no_cook'],
             'name' => 'Ensalada de atún',
             'base_servings' => 2,
@@ -150,7 +150,7 @@ return [
         ],
         [
             'slug' => 'pan-con-palta-y-huevo',
-            'diet_tags' => ['vegetarian'],
+            'diet_tags' => ['vegetarian', 'high_protein'],
             'required_equipment' => ['stove'],
             'name' => 'Pan con palta y huevo',
             'base_servings' => 2,
@@ -164,7 +164,7 @@ return [
         ],
         [
             'slug' => 'quinua-con-leche',
-            'diet_tags' => ['vegetarian'],
+            'diet_tags' => ['vegetarian', 'high_protein'],
             'required_equipment' => ['stove'],
             'name' => 'Quinua con leche',
             'base_servings' => 2,

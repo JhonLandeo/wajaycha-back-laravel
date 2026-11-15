@@ -41,6 +41,12 @@ final class SuggestMenuAction
 {
     private const MAX_RECIPE_OCCURRENCES = 2;
 
+    /** @var array<int, \App\Models\ConsumptionHabit> */
+    private array $habits = [];
+
+    /** @var array<int, int> */
+    private array $habitProductIds = [];
+
     private const EXPIRING_SOON_DAYS = 4;
 
     public function __construct(
@@ -52,6 +58,33 @@ final class SuggestMenuAction
         private readonly MenuCalendar $calendar,
         private readonly OpenCodeGateway $gateway,
     ) {}
+
+    /**
+     * Calcula la semana en una transacción y la revierte: las entradas y las
+     * recetas propuestas quedan en memoria para el preview, pero nunca se
+     * guardan. El usuario decide si las aplica (ADR-0027).
+     *
+     * @return array{source: 'ai'|'fallback', week: PlanningWeek, entries: \Illuminate\Database\Eloquent\Collection<int, \App\Models\MealPlanEntry>}
+     */
+    public function preview(int $userId, string $weekStart): array
+    {
+        $asOf = CarbonImmutable::now();
+        $week = PlanningWeek::forWeekStarting(
+            CarbonImmutable::parse($weekStart, 'America/Lima'),
+            $asOf,
+        );
+
+        DB::beginTransaction();
+
+        try {
+            $source = $this->execute($userId, $week->startsOn->toDateString());
+            $entries = $this->mealPlanRepository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
+
+            return ['source' => $source, 'week' => $week, 'entries' => $entries];
+        } finally {
+            DB::rollBack();
+        }
+    }
 
     /**
      * @return 'ai'|'fallback'
@@ -78,6 +111,11 @@ final class SuggestMenuAction
         $meals = $settings->meal_types;
         $candidates = $this->candidateFilter->forUser($userId, $settings);
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
+        $this->habits = $this->shoppingRepository->activeHabitsFor($userId);
+        $this->habitProductIds = array_map(
+            static fn ($habit): int => (int) $habit->product_id,
+            $this->habits,
+        );
 
         $available = $this->pantryAvailabilityByProduct($pantry, $asOf);
         $usage = [];
@@ -259,6 +297,7 @@ final class SuggestMenuAction
             }
         }
 
+        $profile = $settings->diet_profile ?? DietProfile::Balanced;
         $selected = [];
         foreach ($days as $date) {
             foreach ($meals as $meal) {
@@ -282,6 +321,18 @@ final class SuggestMenuAction
                 }
 
                 if ($this->hasLessUsedAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe)) {
+                    continue;
+                }
+
+                $dietTag = match ($profile) {
+                    DietProfile::HighProtein => 'high_protein',
+                    DietProfile::Light => 'light',
+                    default => null,
+                };
+
+                if ($dietTag !== null
+                    && ! in_array($dietTag, $recipe->diet_tags ?? [], true)
+                    && $this->hasDietAlternative($candidates[$meal] ?? [], $recipeId, $dietTag, $date, $meal, $usage, $slotRecipe)) {
                     continue;
                 }
 
@@ -395,6 +446,12 @@ final class SuggestMenuAction
                 'unidad' => $item->unit?->value,
                 'vence' => $item->expiresOn?->toDateString(),
             ], $visiblePantry),
+            'habitos' => array_map(static fn ($habit): array => [
+                'producto_id' => (int) $habit->product_id,
+                'producto' => (string) $habit->product?->name,
+                'cantidad_semanal' => (float) $habit->weekly_quantity,
+                'unidad' => (string) $habit->unit,
+            ], $this->habits),
             'recetas' => $recipes,
         ];
 
@@ -410,7 +467,8 @@ Reglas:
 - `vence_pronto` marca stock que vence en cuatro días.
 - `tipo` es `main` (plato principal), `drink` (bebida) o `side` (acompañamiento). El `recipe_id` nunca es una `drink`: la bebida va en `drink_recipe_id`. Si el catálogo tiene una bebida para esa comida, úsala como acompañamiento; en el desayuno es lo esperado.
 - `drink_recipe_id` debe ser distinto de `recipe_id`, estar en el catálogo y ser una `drink`.
-- Según `criterio`: `use_pantry` prioriza `despensa_aprovechamiento` y reparte la despensa entre recetas; no elijas una receta con aprovechamiento 0 si otra candidata usa despensa. `save_money` minimiza `faltantes`. `balanced` combina ambos.
+- Prefiere recetas que usen los productos de `habitos`; no es obligatorio, pero ayuda a cubrir lo que el usuario declaró.
+- Según `criterio`: `use_pantry` prioriza `despensa_aprovechamiento` y reparte la despensa entre recetas; no elijas una receta con aprovechamiento 0 si otra candidata usa despensa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
 - Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
 - No repitas la misma receta más de dos veces en la semana ni en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
 - No expliques nada fuera del JSON.
@@ -770,6 +828,18 @@ PROMPT;
         $strategy = $settings->menu_strategy ?? MenuStrategy::Balanced;
         $profile = $settings->diet_profile ?? DietProfile::Balanced;
 
+        if (in_array($profile, [DietProfile::HighProtein, DietProfile::Light], true)) {
+            $dietTag = $profile === DietProfile::HighProtein ? 'high_protein' : 'light';
+            $withTag = array_values(array_filter(
+                $candidates,
+                static fn (Recipe $recipe): bool => in_array($dietTag, $recipe->diet_tags ?? [], true),
+            ));
+
+            if ($withTag !== []) {
+                $candidates = $withTag;
+            }
+        }
+
         $usable = array_values(array_filter(
             $candidates,
             fn (Recipe $recipe): bool => $this->canUseRecipe((int) $recipe->id, $date, $meal, $usage, $slotRecipe),
@@ -853,8 +923,16 @@ PROMPT;
             DietProfile::Light => in_array('light', $recipe->diet_tags ?? [], true) ? 3.0 : 0.0,
             default => 0.0,
         };
+        $habitBonus = 0.0;
 
-        return $dietBonus + match ($strategy) {
+        foreach ($recipe->ingredients as $ingredient) {
+            if (in_array((int) $ingredient->product_id, $this->habitProductIds, true)) {
+                $habitBonus = 2.0;
+                break;
+            }
+        }
+
+        return $dietBonus + $habitBonus + match ($strategy) {
             MenuStrategy::UsePantry => $evaluation['aprovechamiento'] * 6.0
                 + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
@@ -862,11 +940,41 @@ PROMPT;
             MenuStrategy::SaveMoney => $evaluation['cobertura'] * 8.0
                 + ($evaluation['vence_pronto'] ? 1.0 : 0.0)
                 - $varietyPenalty,
-            MenuStrategy::Balanced => $evaluation['aprovechamiento'] * 3.0
-                + $evaluation['cobertura'] * 4.0
+            MenuStrategy::Balanced => $evaluation['cobertura'] * 4.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
                 - $varietyPenalty,
         };
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function hasDietAlternative(
+        array $candidates,
+        int $exceptId,
+        string $tag,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+    ): bool {
+        foreach ($candidates as $recipe) {
+            $recipeId = (int) $recipe->id;
+
+            if ($recipe->course === RecipeCourse::Drink
+                || $recipeId === $exceptId
+                || ! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
+                continue;
+            }
+
+            if (in_array($tag, $recipe->diet_tags ?? [], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
