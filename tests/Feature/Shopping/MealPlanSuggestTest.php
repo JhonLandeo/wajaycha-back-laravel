@@ -146,3 +146,186 @@ it('does not propose recipes excluded by the user', function () {
         ->assertOk()
         ->assertJsonPath('data.entries.0.recipe.name', 'Lentejas guisadas');
 });
+
+it('spreads the pantry across recipes instead of repeating the one that is covered', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipeA, $productA] = suggestionRecipe($user->id, 'Receta A');
+    [$recipeB, $productB] = suggestionRecipe($user->id, 'Receta B');
+    [$recipeC, $productC] = suggestionRecipe($user->id, 'Receta C');
+
+    // A se cubre por completo y vence pronto: antes ganaba siempre porque la
+    // despensa no se agotaba entre elecciones.
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $productA->id,
+        'quantity' => 0.5,
+        'unit' => 'kg',
+        'expires_on' => now()->addDays(2)->toDateString(),
+    ]);
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $productB->id,
+        'quantity' => 0.25,
+        'unit' => 'kg',
+        'expires_on' => null,
+    ]);
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $productC->id,
+        'quantity' => 0.25,
+        'unit' => 'kg',
+        'expires_on' => null,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3],
+        'excluded_terms' => [],
+        'menu_strategy' => 'use_pantry',
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'fallback');
+
+    $names = MealPlanEntry::query()
+        ->where('user_id', $user->id)
+        ->where('kind', 'recipe')
+        ->orderBy('plan_date')
+        ->with('recipe')
+        ->get()
+        ->map(fn (MealPlanEntry $entry): string => (string) $entry->recipe?->name)
+        ->all();
+
+    expect($names)->toBe(['Receta A', 'Receta B', 'Receta C']);
+});
+
+it('ignores expired pantry when the strategy is use_pantry', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipeA, $productA] = suggestionRecipe($user->id, 'Receta A');
+    [$recipeB, $productB] = suggestionRecipe($user->id, 'Receta B');
+
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $productA->id,
+        'quantity' => 0.5,
+        'unit' => 'kg',
+        'expires_on' => now()->subDay()->toDateString(),
+    ]);
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $productB->id,
+        'quantity' => 0.5,
+        'unit' => 'kg',
+        'expires_on' => null,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'use_pantry',
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Receta B');
+});
+
+it('rejects an AI suggestion that repeats the same recipe on consecutive days', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipeA] = suggestionRecipe($user->id, 'Receta A');
+    [$recipeB] = suggestionRecipe($user->id, 'Receta B');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $aiJson = json_encode([
+        'days' => [
+            ['date' => '2026-11-09', 'meals' => ['lunch' => ['recipe_id' => $recipeA->id, 'cook_servings' => 2]]],
+            ['date' => '2026-11-10', 'meals' => ['lunch' => ['recipe_id' => $recipeA->id, 'cook_servings' => 2]]],
+        ],
+    ]);
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => $aiJson]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'ai');
+
+    $names = MealPlanEntry::query()
+        ->where('user_id', $user->id)
+        ->where('kind', 'recipe')
+        ->orderBy('plan_date')
+        ->with('recipe')
+        ->get()
+        ->map(fn (MealPlanEntry $entry): string => (string) $entry->recipe?->name)
+        ->all();
+
+    expect($names)->toBe(['Receta A', 'Receta B']);
+});
+
+it('caps a recipe at two occurrences when another candidate is available', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipeA] = suggestionRecipe($user->id, 'Receta A');
+    [$recipeB] = suggestionRecipe($user->id, 'Receta B');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3, 4],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $aiJson = json_encode([
+        'days' => [
+            ['date' => '2026-11-09', 'meals' => ['lunch' => ['recipe_id' => $recipeA->id, 'cook_servings' => 2]]],
+            ['date' => '2026-11-10', 'meals' => ['lunch' => ['recipe_id' => $recipeA->id, 'cook_servings' => 2]]],
+            ['date' => '2026-11-11', 'meals' => ['lunch' => ['recipe_id' => $recipeA->id, 'cook_servings' => 2]]],
+            ['date' => '2026-11-12', 'meals' => ['lunch' => ['recipe_id' => $recipeA->id, 'cook_servings' => 2]]],
+        ],
+    ]);
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => $aiJson]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'ai');
+
+    $entries = MealPlanEntry::query()
+        ->where('user_id', $user->id)
+        ->where('kind', 'recipe')
+        ->with('recipe')
+        ->get();
+
+    expect($entries->where('recipe_id', $recipeA->id))->toHaveCount(2)
+        ->and($entries->where('recipe_id', $recipeB->id))->toHaveCount(2);
+});

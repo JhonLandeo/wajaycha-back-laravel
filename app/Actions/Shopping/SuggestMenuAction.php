@@ -26,12 +26,21 @@ use Throwable;
  * Propone una semana completa y la guarda como entradas planificadas.
  *
  * La IA elige ids del catálogo ya filtrado; el backend valida cada id, la
- * comida y las porciones. Si la IA falla o devuelve algo inválido, la semana se
- * completa con una elección determinística que prioriza despensa y variedad.
- * Nunca se inventan recetas ni ingredientes.
+ * comida y las porciones. La despensa se consume de forma secuencial mientras
+ * se recorre la semana: cada receta elegida resta sus ingredientes de una copia
+ * de trabajo, así el siguiente hueco ve menos stock y la semana reparte lo que
+ * hay en vez de repetir el plato que más cubre.
+ *
+ * Si la IA falla o devuelve algo inválido, la semana se completa con una
+ * elección determinística que usa la misma despensa agotada y respeta la
+ * variedad. Nunca se inventan recetas ni ingredientes.
  */
 final class SuggestMenuAction
 {
+    private const MAX_RECIPE_OCCURRENCES = 2;
+
+    private const EXPIRING_SOON_DAYS = 4;
+
     public function __construct(
         private readonly MealPlanRepositoryContract $mealPlanRepository,
         private readonly ShoppingRepositoryContract $shoppingRepository,
@@ -54,10 +63,14 @@ final class SuggestMenuAction
         $candidates = $this->candidateFilter->forUser($userId, $settings);
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
 
-        $selected = $this->fromAi($week, $settings, $days, $meals, $candidates, $pantry);
+        $available = $this->pantryAvailabilityByProduct($pantry, $asOf);
+        $usage = [];
+        $slotRecipe = [];
+
+        $selected = $this->fromAi($week, $settings, $days, $meals, $candidates, $pantry, $available, $usage, $slotRecipe);
         $source = $selected === [] ? 'fallback' : 'ai';
 
-        DB::transaction(function () use ($userId, $week, $settings, $days, $meals, $candidates, $pantry, $selected): void {
+        DB::transaction(function () use ($userId, $week, $settings, $days, $meals, $candidates, $selected, &$available, &$usage, &$slotRecipe): void {
             $this->mealPlanRepository->clearWeek($userId, $week->startsOn, $week->endsOn);
 
             $created = [];
@@ -88,13 +101,29 @@ final class SuggestMenuAction
                         continue;
                     }
 
-                    $choice = $this->fallbackChoice($candidates[$meal] ?? [], $pantry, $selected, $settings);
-                    if ($choice === null) {
+                    $pick = $this->fallbackChoice(
+                        $candidates[$meal] ?? [],
+                        $available,
+                        $usage,
+                        $slotRecipe,
+                        $date,
+                        $meal,
+                        $settings,
+                    );
+
+                    if ($pick === null) {
                         continue;
                     }
 
+                    $choice = $pick['recipe'];
+                    $recipeId = (int) $choice->id;
+
+                    $this->deplete($available, $pick['evaluation']['requirements']);
+                    $usage[$recipeId] = ($usage[$recipeId] ?? 0) + 1;
+                    $slotRecipe[$key] = $recipeId;
+
                     $selected[$key] = [
-                        'recipe_id' => (int) $choice->id,
+                        'recipe_id' => $recipeId,
                         'cook_servings' => (int) $settings->household_size,
                     ];
 
@@ -102,7 +131,7 @@ final class SuggestMenuAction
                         'plan_date' => $date,
                         'meal_type' => $meal,
                         'kind' => 'recipe',
-                        'recipe_id' => (int) $choice->id,
+                        'recipe_id' => $recipeId,
                         'servings' => (int) $settings->household_size,
                         'cook_servings' => (int) $settings->household_size,
                         'leftover_of_entry_id' => null,
@@ -120,6 +149,9 @@ final class SuggestMenuAction
      * @param  array<int, string>  $meals
      * @param  array<string, array<int, Recipe>>  $candidates
      * @param  array<int, PantryStock>  $pantry
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
      * @return array<string, array{recipe_id: int, cook_servings: int}>
      */
     private function fromAi(
@@ -129,10 +161,13 @@ final class SuggestMenuAction
         array $meals,
         array $candidates,
         array $pantry,
+        array &$available,
+        array &$usage,
+        array &$slotRecipe,
     ): array {
         try {
             $response = $this->gateway->generateJson([
-                ['parts' => [['text' => $this->prompt($week, $settings, $days, $meals, $candidates, $pantry)]]],
+                ['parts' => [['text' => $this->prompt($week, $settings, $days, $meals, $candidates, $pantry, $available)]]],
             ], ['temperature' => 0.4]);
         } catch (Throwable $e) {
             report($e);
@@ -144,12 +179,14 @@ final class SuggestMenuAction
             return [];
         }
 
-        $allowed = [];
+        $byMeal = [];
         foreach ($candidates as $meal => $recipes) {
-            $allowed[$meal] = array_fill_keys(array_map(static fn (Recipe $recipe): int => (int) $recipe->id, $recipes), true);
+            foreach ($recipes as $recipe) {
+                $byMeal[$meal][(int) $recipe->id] = $recipe;
+            }
         }
 
-        $selected = [];
+        $choices = [];
         foreach ($response['days'] as $day) {
             if (! is_array($day) || ! isset($day['date'], $day['meals']) || ! is_array($day['meals'])) {
                 continue;
@@ -167,17 +204,59 @@ final class SuggestMenuAction
                 }
 
                 $recipeId = (int) ($choice['recipe_id'] ?? 0);
-                if (! isset($allowed[$meal][$recipeId])) {
+                if (! isset($byMeal[$meal][$recipeId])) {
                     continue;
                 }
 
                 $cook = (int) ($choice['cook_servings'] ?? $settings->household_size);
                 $cook = max((int) $settings->household_size, min($cook, (int) $settings->household_size * 2));
 
-                $selected[$date.'|'.$meal] = [
+                $choices[$date.'|'.$meal] = [
                     'recipe_id' => $recipeId,
                     'cook_servings' => $cook,
                 ];
+            }
+        }
+
+        $selected = [];
+        foreach ($days as $date) {
+            foreach ($meals as $meal) {
+                $key = $date.'|'.$meal;
+                $choice = $choices[$key] ?? null;
+
+                if ($choice === null) {
+                    continue;
+                }
+
+                $recipeId = $choice['recipe_id'];
+                $recipe = $byMeal[$meal][$recipeId];
+
+                if (! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)
+                    && $this->hasUsableAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe)) {
+                    continue;
+                }
+
+                $evaluation = $this->evaluate($recipe, $choice['cook_servings'], $available);
+
+                if (($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::UsePantry
+                    && $evaluation['aprovechamiento'] <= 0.0
+                    && $this->hasPantryAlternative(
+                        $candidates[$meal] ?? [],
+                        $recipeId,
+                        $available,
+                        $usage,
+                        $slotRecipe,
+                        $date,
+                        $meal,
+                        (int) $settings->household_size,
+                    )) {
+                    continue;
+                }
+
+                $selected[$key] = $choice;
+                $this->deplete($available, $evaluation['requirements']);
+                $usage[$recipeId] = ($usage[$recipeId] ?? 0) + 1;
+                $slotRecipe[$key] = $recipeId;
             }
         }
 
@@ -189,6 +268,7 @@ final class SuggestMenuAction
      * @param  array<int, string>  $meals
      * @param  array<string, array<int, Recipe>>  $candidates
      * @param  array<int, PantryStock>  $pantry
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
      */
     private function prompt(
         PlanningWeek $week,
@@ -197,22 +277,25 @@ final class SuggestMenuAction
         array $meals,
         array $candidates,
         array $pantry,
+        array $available,
     ): string {
         $budget = $this->foodBudgetRepository->snapshotFor($settings->user_id, CarbonImmutable::now());
-        $available = $this->pantryAvailabilityByProduct($pantry);
+        $today = $week->asOf->toDateString();
 
         $recipes = [];
         foreach ($candidates as $meal => $items) {
             foreach ($items as $recipe) {
-                $coverage = $this->coverageFor($recipe, (int) $settings->household_size, $available);
+                $evaluation = $this->evaluate($recipe, (int) $settings->household_size, $available);
 
                 $recipes[] = [
                     'id' => (int) $recipe->id,
                     'nombre' => $recipe->name,
                     'comidas' => $recipe->meal_types,
                     'minutos' => $recipe->prep_minutes,
-                    'despensa_cobertura' => $coverage['cobertura'],
-                    'vence_pronto' => $coverage['vence_pronto'],
+                    'despensa_cobertura' => $evaluation['cobertura'],
+                    'despensa_aprovechamiento' => $evaluation['aprovechamiento'],
+                    'vence_pronto' => $evaluation['vence_pronto'],
+                    'faltantes' => $evaluation['faltantes'],
                     'ingredientes' => $recipe->ingredients
                         ->map(static fn ($ingredient): string => (string) $ingredient->product->name)
                         ->filter()
@@ -221,6 +304,13 @@ final class SuggestMenuAction
                 ];
             }
         }
+
+        $visiblePantry = array_values(array_filter(
+            $pantry,
+            static fn (PantryStock $item): bool => $item->unit !== null
+                && $item->quantity > 0.0
+                && ($item->expiresOn === null || $item->expiresOn->toDateString() >= $today),
+        ));
 
         $context = [
             'semana' => ['inicio' => $week->startsOn->toDateString(), 'fin' => $week->endsOn->toDateString()],
@@ -234,7 +324,7 @@ final class SuggestMenuAction
                 'cantidad' => $item->quantity,
                 'unidad' => $item->unit?->value,
                 'vence' => $item->expiresOn?->toDateString(),
-            ], $pantry),
+            ], $visiblePantry),
             'recetas' => $recipes,
         ];
 
@@ -246,8 +336,10 @@ Reglas:
 - Elige solo comidas compatibles con cada receta.
 - Para cada día activo y cada comida activa, elige una receta o deja la comida vacía si no hay candidata.
 - servings siempre es el número de personas. cook_servings debe ser >= personas; usa hasta 2x personas si quieres dejar sobras para el día siguiente.
-- `despensa_cobertura` es la fracción de los ingredientes que la despensa ya cubre, calculada por el backend: 1.0 significa que no hace falta comprar nada. `vence_pronto` marca stock que vence en cuatro días. No los recalcules.
-- Según `criterio`: `use_pantry` maximiza cobertura y aprovecha lo que vence; `save_money` minimiza lo que falta comprar; `balanced` reparte ambos. Evita repetir el mismo plato demasiado; respeta el tiempo máximo y el presupuesto semanal si está disponible.
+- `despensa_cobertura` es la fracción de ingredientes que la despensa cubre. `despensa_aprovechamiento` es cuánto de la despensa consume la receta: suma, por producto, de la fracción del stock que se lleva. `faltantes` son los productos que habría que comprar. Los tres los calcula el backend; no los recalcules.
+- `vence_pronto` marca stock que vence en cuatro días.
+- Según `criterio`: `use_pantry` prioriza `despensa_aprovechamiento` y reparte la despensa entre recetas; no elijas una receta con aprovechamiento 0 si otra candidata usa despensa. `save_money` minimiza `faltantes`. `balanced` combina ambos.
+- No repitas la misma receta más de dos veces en la semana ni en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
 - No expliques nada fuera del JSON.
 
 Contexto:
@@ -264,13 +356,18 @@ PROMPT;
      * @param  array<int, PantryStock>  $pantry
      * @return array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>
      */
-    private function pantryAvailabilityByProduct(array $pantry): array
+    private function pantryAvailabilityByProduct(array $pantry, CarbonImmutable $asOf): array
     {
-        $threshold = CarbonImmutable::now()->addDays(4);
+        $today = $asOf->toDateString();
+        $threshold = $asOf->addDays(self::EXPIRING_SOON_DAYS)->toDateString();
         $available = [];
 
         foreach ($pantry as $stock) {
             if ($stock->unit === null || $stock->quantity <= 0.0) {
+                continue;
+            }
+
+            if ($stock->expiresOn !== null && $stock->expiresOn->toDateString() < $today) {
                 continue;
             }
 
@@ -283,7 +380,7 @@ PROMPT;
             $available[$productId] ??= ['quantity' => 0.0, 'unit' => $stock->unit, 'expiresSoon' => false];
             $available[$productId]['quantity'] = round($available[$productId]['quantity'] + $stock->quantity, 3);
 
-            if ($stock->expiresOn !== null && $stock->expiresOn->lte($threshold)) {
+            if ($stock->expiresOn !== null && $stock->expiresOn->toDateString() <= $threshold) {
                 $available[$productId]['expiresSoon'] = true;
             }
         }
@@ -292,19 +389,71 @@ PROMPT;
     }
 
     /**
-     * Fracción de los ingredientes de la receta que el stock disponible ya
-     * cubre, ponderada por cantidad. Es un hecho que el backend calcula y la IA
-     * consume; nunca se delega la aritmética al modelo (ADR-0015).
+     * Evalúa una receta contra el stock que queda en este punto de la semana.
+     *
+     * `aprovechamiento` es unitless a propósito: suma, por producto, la
+     * fracción del stock disponible que la receta se lleva. Así una receta que
+     * vacía dos productos compite mejor que otra que apenas toca uno, sin sumar
+     * kilos con unidades.
      *
      * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
-     * @return array{cobertura: float, vence_pronto: bool}
+     * @return array{
+     *     requirements: array<int, array{name: string, unit: Unit, quantity: float}>,
+     *     cobertura: float,
+     *     aprovechamiento: float,
+     *     faltantes: array<int, string>,
+     *     vence_pronto: bool
+     * }
      */
-    private function coverageFor(Recipe $recipe, int $householdSize, array $available): array
+    private function evaluate(Recipe $recipe, int $cookServings, array $available): array
     {
-        $scale = $householdSize / max(1, (int) $recipe->base_servings);
+        $requirements = $this->requirementsFor($recipe, $cookServings);
         $needed = 0.0;
         $covered = 0.0;
+        $aprovechamiento = 0.0;
         $expiresSoon = false;
+        $faltantes = [];
+
+        foreach ($requirements as $productId => $requirement) {
+            $needed += $requirement['quantity'];
+            $stock = $available[$productId] ?? null;
+            $used = 0.0;
+
+            if ($stock !== null && $stock['unit'] === $requirement['unit']) {
+                $used = min($requirement['quantity'], $stock['quantity']);
+
+                if ($stock['quantity'] > 0.0) {
+                    $aprovechamiento += $used / $stock['quantity'];
+                }
+
+                if ($used > 0.0 && $stock['expiresSoon']) {
+                    $expiresSoon = true;
+                }
+            }
+
+            $covered += $used;
+
+            if (round($used, 3) < round($requirement['quantity'], 3)) {
+                $faltantes[] = $requirement['name'];
+            }
+        }
+
+        return [
+            'requirements' => $requirements,
+            'cobertura' => $needed > 0.0 ? round(min(1.0, $covered / $needed), 3) : 0.0,
+            'aprovechamiento' => round($aprovechamiento, 3),
+            'faltantes' => array_values(array_unique($faltantes)),
+            'vence_pronto' => $expiresSoon,
+        ];
+    }
+
+    /**
+     * @return array<int, array{name: string, unit: Unit, quantity: float}>
+     */
+    private function requirementsFor(Recipe $recipe, int $cookServings): array
+    {
+        $scale = max(1, $cookServings) / max(1, (int) $recipe->base_servings);
+        $requirements = [];
 
         foreach ($recipe->ingredients as $ingredient) {
             if ($ingredient->is_optional) {
@@ -328,61 +477,225 @@ PROMPT;
                 continue;
             }
 
-            $needed += $quantity;
-            $stock = $available[(int) $ingredient->product->id] ?? null;
+            $productId = (int) $ingredient->product->id;
+            $requirements[$productId] ??= [
+                'name' => (string) $ingredient->product->name,
+                'unit' => $productUnit,
+                'quantity' => 0.0,
+            ];
 
-            if ($stock === null || $stock['unit'] !== $productUnit) {
+            if ($requirements[$productId]['unit'] !== $productUnit) {
                 continue;
             }
 
-            $covered += min($quantity, $stock['quantity']);
-
-            if ($stock['expiresSoon']) {
-                $expiresSoon = true;
-            }
+            $requirements[$productId]['quantity'] = round($requirements[$productId]['quantity'] + $quantity, 3);
         }
 
-        return [
-            'cobertura' => $needed > 0.0 ? round(min(1.0, $covered / $needed), 3) : 0.0,
-            'vence_pronto' => $expiresSoon,
-        ];
+        return $requirements;
+    }
+
+    /**
+     * @param  array<int, array{name: string, unit: Unit, quantity: float}>  $requirements
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     */
+    private function deplete(array &$available, array $requirements): void
+    {
+        foreach ($requirements as $productId => $requirement) {
+            if (! isset($available[$productId]) || $available[$productId]['unit'] !== $requirement['unit']) {
+                continue;
+            }
+
+            $available[$productId]['quantity'] = round(
+                max(0.0, $available[$productId]['quantity'] - $requirement['quantity']),
+                3,
+            );
+        }
     }
 
     /**
      * @param  array<int, Recipe>  $candidates
-     * @param  array<int, PantryStock>  $pantry
-     * @param  array<string, array{recipe_id: int, cook_servings: int}>  $selected
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     * @return array{
+     *     recipe: Recipe,
+     *     evaluation: array{
+     *         requirements: array<int, array{name: string, unit: Unit, quantity: float}>,
+     *         cobertura: float,
+     *         aprovechamiento: float,
+     *         faltantes: array<int, string>,
+     *         vence_pronto: bool
+     *     }
+     * }|null
      */
-    private function fallbackChoice(array $candidates, array $pantry, array $selected, MealPlanSettings $settings): ?Recipe
-    {
+    private function fallbackChoice(
+        array $candidates,
+        array $available,
+        array $usage,
+        array $slotRecipe,
+        string $date,
+        string $meal,
+        MealPlanSettings $settings,
+    ): ?array {
         if ($candidates === []) {
             return null;
         }
 
-        $available = $this->pantryAvailabilityByProduct($pantry);
         $household = (int) $settings->household_size;
+        $strategy = $settings->menu_strategy ?? MenuStrategy::Balanced;
 
-        $usage = [];
-        foreach ($selected as $choice) {
-            $usage[$choice['recipe_id']] = ($usage[$choice['recipe_id']] ?? 0) + 1;
+        $usable = array_values(array_filter(
+            $candidates,
+            fn (Recipe $recipe): bool => $this->canUseRecipe((int) $recipe->id, $date, $meal, $usage, $slotRecipe),
+        ));
+
+        // Con tres recetas de desayuno y siete días, el tope de dos se agota.
+        // Cuando no queda ninguna que lo respete, se relaja para no dejar el
+        // hueco vacío.
+        if ($usable === []) {
+            $usable = $candidates;
         }
 
-        $scored = array_map(function (Recipe $recipe) use ($available, $usage, $household, $settings): array {
-            $coverage = $this->coverageFor($recipe, $household, $available);
-            $score = -($usage[(int) $recipe->id] ?? 0) * 5;
+        $evaluated = array_map(fn (Recipe $recipe): array => [
+            'recipe' => $recipe,
+            'evaluation' => $this->evaluate($recipe, $household, $available),
+        ], $usable);
 
-            $score += match ($settings->menu_strategy ?? MenuStrategy::Balanced) {
-                MenuStrategy::UsePantry => $coverage['cobertura'] * 6 + ($coverage['vence_pronto'] ? 3 : 0),
-                MenuStrategy::SaveMoney => $coverage['cobertura'] * 4,
-                MenuStrategy::Balanced => $coverage['cobertura'] * 2 + ($coverage['vence_pronto'] ? 2 : 0),
-            };
+        if ($strategy === MenuStrategy::UsePantry) {
+            $withPantry = array_values(array_filter(
+                $evaluated,
+                static fn (array $row): bool => $row['evaluation']['aprovechamiento'] > 0.0,
+            ));
 
-            return ['recipe' => $recipe, 'score' => $score];
-        }, $candidates);
+            if ($withPantry !== []) {
+                $evaluated = $withPantry;
+            }
+        }
 
-        usort($scored, static fn (array $a, array $b): int => $b['score'] <=> $a['score'] ?: $a['recipe']->name <=> $b['recipe']->name);
+        usort($evaluated, function (array $a, array $b) use ($strategy, $usage): int {
+            $scoreA = $this->scoreRecipe(
+                $a['evaluation'],
+                $strategy,
+                $usage[(int) $a['recipe']->id] ?? 0,
+            );
+            $scoreB = $this->scoreRecipe(
+                $b['evaluation'],
+                $strategy,
+                $usage[(int) $b['recipe']->id] ?? 0,
+            );
 
-        return $scored[0]['recipe'];
+            return $scoreB <=> $scoreA ?: $a['recipe']->name <=> $b['recipe']->name;
+        });
+
+        return $evaluated[0];
+    }
+
+    /**
+     * @param  array{
+     *     requirements: array<int, array{name: string, unit: Unit, quantity: float}>,
+     *     cobertura: float,
+     *     aprovechamiento: float,
+     *     faltantes: array<int, string>,
+     *     vence_pronto: bool
+     * }  $evaluation
+     */
+    private function scoreRecipe(array $evaluation, MenuStrategy $strategy, int $occurrences): float
+    {
+        $varietyPenalty = $occurrences * 6.0;
+
+        return match ($strategy) {
+            MenuStrategy::UsePantry => $evaluation['aprovechamiento'] * 6.0
+                + $evaluation['cobertura'] * 2.0
+                + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
+                - $varietyPenalty,
+            MenuStrategy::SaveMoney => $evaluation['cobertura'] * 8.0
+                + ($evaluation['vence_pronto'] ? 1.0 : 0.0)
+                - $varietyPenalty,
+            MenuStrategy::Balanced => $evaluation['aprovechamiento'] * 3.0
+                + $evaluation['cobertura'] * 4.0
+                + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
+                - $varietyPenalty,
+        };
+    }
+
+    /**
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function canUseRecipe(
+        int $recipeId,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+    ): bool {
+        if (($usage[$recipeId] ?? 0) >= self::MAX_RECIPE_OCCURRENCES) {
+            return false;
+        }
+
+        $previous = CarbonImmutable::parse($date, 'America/Lima')->subDay()->toDateString();
+
+        return ($slotRecipe[$previous.'|'.$meal] ?? null) !== $recipeId;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function hasUsableAlternative(
+        array $candidates,
+        int $exceptId,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+    ): bool {
+        foreach ($candidates as $recipe) {
+            $recipeId = (int) $recipe->id;
+
+            if ($recipeId === $exceptId) {
+                continue;
+            }
+
+            if ($this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function hasPantryAlternative(
+        array $candidates,
+        int $exceptId,
+        array $available,
+        array $usage,
+        array $slotRecipe,
+        string $date,
+        string $meal,
+        int $cookServings,
+    ): bool {
+        foreach ($candidates as $recipe) {
+            $recipeId = (int) $recipe->id;
+
+            if ($recipeId === $exceptId
+                || ! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
+                continue;
+            }
+
+            if ($this->evaluate($recipe, $cookServings, $available)['aprovechamiento'] > 0.0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
