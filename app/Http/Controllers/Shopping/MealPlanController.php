@@ -8,6 +8,8 @@ use App\Actions\Shopping\BuildMenuShoppingListAction;
 use App\Actions\Shopping\BuildMenuSpendingAction;
 use App\Actions\Shopping\SaveMealPlanEntryAction;
 use App\Actions\Shopping\SuggestMenuAction;
+use App\Actions\Shopping\UpdateMealEntryStatusAction;
+use App\Enums\MealEntryStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shopping\StoreMealPlanEntryRequest;
 use App\Http\Requests\Shopping\UpdateMealEntryStatusRequest;
@@ -28,6 +30,7 @@ final class MealPlanController extends Controller
         private readonly BuildMenuShoppingListAction $buildShoppingList,
         private readonly BuildMenuSpendingAction $buildSpending,
         private readonly SuggestMenuAction $suggestMenu,
+        private readonly UpdateMealEntryStatusAction $updateStatusAction,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -60,6 +63,7 @@ final class MealPlanController extends Controller
             'plan_weekdays' => array_values(array_unique(array_map('intval', $request->validated('plan_weekdays')))),
             'excluded_terms' => array_values(array_unique($request->validated('excluded_terms', []))),
             'max_prep_minutes' => $request->validated('max_prep_minutes'),
+            'menu_strategy' => $request->validated('menu_strategy', $settings->menu_strategy->value),
         ]);
 
         return response()->json(['data' => $this->settingsPayload($updated)]);
@@ -80,7 +84,10 @@ final class MealPlanController extends Controller
             abort(404);
         }
 
-        $updated = $this->repository->updateStatus($model, \App\Enums\MealEntryStatus::from((string) $request->validated('status')));
+        $updated = $this->updateStatusAction->execute(
+            $model,
+            MealEntryStatus::from((string) $request->validated('status')),
+        );
 
         return response()->json(['data' => $this->entryPayload($updated)]);
     }
@@ -167,6 +174,8 @@ final class MealPlanController extends Controller
             'plan_weekdays' => $settings->plan_weekdays,
             'excluded_terms' => $settings->excluded_terms ?? [],
             'max_prep_minutes' => $settings->max_prep_minutes,
+            'menu_strategy' => $settings->menu_strategy->value,
+            'menu_strategy_label' => $settings->menu_strategy->label(),
         ];
     }
 

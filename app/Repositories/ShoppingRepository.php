@@ -8,6 +8,7 @@ use App\DTOs\Shopping\ConsumptionHabitLine;
 use App\DTOs\Shopping\PantryStock;
 use App\Enums\Unit;
 use App\Models\ConsumptionHabit;
+use App\Models\PantryConsumption;
 use App\Models\PantryItem;
 use App\Models\Product;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
@@ -133,18 +134,75 @@ final class ShoppingRepository implements ShoppingRepositoryContract
 
     public function pantryStockFor(int $userId): array
     {
-        return array_map(
-            static function (PantryItem $item): PantryStock {
-                $expiresOn = $item->expires_on;
+        $consumed = $this->consumedQuantityByPantryItem($userId);
+        $stocks = [];
 
-                return new PantryStock(
-                    productId: (int) $item->product_id,
-                    unit: Unit::tryFrom((string) $item->unit),
-                    quantity: (float) $item->quantity,
-                    expiresOn: $expiresOn !== null ? CarbonImmutable::parse($expiresOn) : null,
-                );
-            },
-            $this->listPantryItemsFor($userId)
-        );
+        foreach ($this->listPantryItemsFor($userId) as $item) {
+            $available = round((float) $item->quantity - ($consumed[(int) $item->id] ?? 0.0), 3);
+
+            // A lot consumed to zero is no longer availability, but the row and
+            // its history stay (ADR-0020: nothing is deleted, only derived).
+            if ($available <= 0.0) {
+                continue;
+            }
+
+            $expiresOn = $item->expires_on;
+
+            $stocks[] = new PantryStock(
+                productId: (int) $item->product_id,
+                unit: Unit::tryFrom((string) $item->unit),
+                quantity: $available,
+                expiresOn: $expiresOn !== null ? CarbonImmutable::parse($expiresOn) : null,
+                productName: (string) $item->product?->name,
+            );
+        }
+
+        return $stocks;
+    }
+
+    public function pantryItemsForConsumption(int $userId, array $productIds): array
+    {
+        if ($productIds === []) {
+            return [];
+        }
+
+        return PantryItem::query()
+            ->where('user_id', $userId)
+            ->whereIn('product_id', $productIds)
+            ->get()
+            ->all();
+    }
+
+    public function consumedQuantityByPantryItem(int $userId): array
+    {
+        return PantryConsumption::query()
+            ->where('user_id', $userId)
+            ->selectRaw('pantry_item_id, SUM(quantity) as consumed')
+            ->groupBy('pantry_item_id')
+            ->pluck('consumed', 'pantry_item_id')
+            ->map(static fn ($quantity): float => (float) $quantity)
+            ->all();
+    }
+
+    public function insertPantryConsumptions(array $rows): void
+    {
+        if ($rows === []) {
+            return;
+        }
+
+        $now = now();
+        foreach ($rows as $index => $row) {
+            $rows[$index]['created_at'] = $now;
+            $rows[$index]['updated_at'] = $now;
+        }
+
+        PantryConsumption::query()->insert($rows);
+    }
+
+    public function deletePantryConsumptionsForEntry(int $mealPlanEntryId): void
+    {
+        PantryConsumption::query()
+            ->where('meal_plan_entry_id', $mealPlanEntryId)
+            ->delete();
     }
 }

@@ -113,6 +113,10 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::get('shopping/menu/shopping-list', [\App\Http\Controllers\Shopping\MealPlanController::class, 'shoppingList']);
     Route::get('shopping/menu/spending', [\App\Http\Controllers\Shopping\MealPlanController::class, 'spending']);
 
+    Route::get('shopping/menu/chat', [\App\Http\Controllers\Shopping\MenuChatController::class, 'index']);
+    Route::post('shopping/menu/chat', [\App\Http\Controllers\Shopping\MenuChatController::class, 'store']);
+    Route::post('shopping/menu/chat/apply', [\App\Http\Controllers\Shopping\MenuChatController::class, 'apply']);
+
     Route::get('shopping/recipes', [\App\Http\Controllers\Shopping\RecipeController::class, 'index']);
     Route::post('shopping/recipes', [\App\Http\Controllers\Shopping\RecipeController::class, 'store']);
     Route::put('shopping/recipes/{recipe}', [\App\Http\Controllers\Shopping\RecipeController::class, 'update']);

@@ -108,13 +108,38 @@ interface ShoppingRepositoryContract
     public function activeHabitLinesFor(int $userId): array;
 
     /**
-     * Every pantry row for $userId, expired ones included — the same
-     * population `listPantryItemsFor()` reads, translated into the plain
-     * value the weekly-plan computation accepts (design.md "Inputs").
-     * `ShoppingPlanService` decides what expiry and unit mismatch MEAN;
-     * this method only detaches the row from Eloquent.
+     * Every pantry row for $userId, expired ones included, translated into the
+     * plain value the weekly-plan computation accepts (design.md "Inputs").
+     * `quantity` is already NET of `pantry_consumptions` (ADR-0020): a row fully
+     * consumed is omitted. Expiry and unit mismatch are still decided by
+     * `ShoppingPlanService`, not here.
      *
      * @return PantryStock[]
      */
     public function pantryStockFor(int $userId): array;
+
+    /**
+     * Raw pantry lots for the given products, used by the consumption action to
+     * apply FIFO by expiry. `quantity` here is the acquired quantity, NOT net of
+     * consumptions; the action subtracts them with
+     * {@see consumedQuantityByPantryItem()}.
+     *
+     * @param  array<int, int>  $productIds
+     * @return PantryItem[]
+     */
+    public function pantryItemsForConsumption(int $userId, array $productIds): array;
+
+    /**
+     * Quantity already consumed per pantry lot, keyed by `pantry_item_id`.
+     *
+     * @return array<int, float>
+     */
+    public function consumedQuantityByPantryItem(int $userId): array;
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    public function insertPantryConsumptions(array $rows): void;
+
+    public function deletePantryConsumptionsForEntry(int $mealPlanEntryId): void;
 }

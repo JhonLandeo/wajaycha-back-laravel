@@ -69,6 +69,20 @@ it('updates the household settings', function () {
         ->assertJsonPath('data.max_prep_minutes', 30);
 });
 
+it('persists the menu strategy', function () {
+    [, $headers] = $this->userWithAuth();
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3],
+        'menu_strategy' => 'save_money',
+    ], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.menu_strategy', 'save_money')
+        ->assertJsonPath('data.menu_strategy_label', 'Ahorrar');
+});
+
 it('saves a recipe entry and a leftover that consumes its extra portions', function () {
     [$user, $headers] = $this->userWithAuth();
     [$recipe, $product] = menuRecipe($user->id);
@@ -80,12 +94,11 @@ it('saves a recipe entry and a leftover that consumes its extra portions', funct
         'recipe_id' => $recipe->id,
         'servings' => 2,
         'cook_servings' => 4,
-        'status' => 'cooked',
     ], $headers)
         ->assertOk()
         ->assertJsonPath('data.recipe.name', $recipe->name)
-        ->assertJsonPath('data.status', 'cooked')
-        ->assertJsonPath('data.status_label', 'Cociné')
+        ->assertJsonPath('data.status', 'planned')
+        ->assertJsonPath('data.status_label', 'Pendiente')
         ->assertJsonPath('data.cook_servings', 4)
         ->json('data');
 

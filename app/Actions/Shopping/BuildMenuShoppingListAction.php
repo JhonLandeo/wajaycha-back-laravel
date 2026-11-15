@@ -10,6 +10,7 @@ use App\DTOs\Shopping\GroceryCeilingInput;
 use App\DTOs\Shopping\PlanningWeek;
 use App\Enums\BudgetPeriod;
 use App\Enums\MealEntryKind;
+use App\Enums\MealEntryStatus;
 use App\Enums\Unit;
 use App\Repositories\Contracts\FoodBudgetRepositoryContract;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
@@ -87,6 +88,13 @@ final class BuildMenuShoppingListAction
                 continue;
             }
             if ($entry->kind !== MealEntryKind::Recipe || $entry->recipe === null) {
+                continue;
+            }
+
+            // A cooked meal already left the pantry through
+            // pantry_consumptions; counting it here would buy its ingredients a
+            // second time (ADR-0020).
+            if ($entry->status !== MealEntryStatus::Planned) {
                 continue;
             }
 

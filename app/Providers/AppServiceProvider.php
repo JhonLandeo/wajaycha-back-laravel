@@ -76,8 +76,8 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
-            \App\Repositories\Contracts\MealPlanRepositoryContract::class,
-            \App\Repositories\MealPlanRepository::class
+            \App\Repositories\Contracts\MenuChatRepositoryContract::class,
+            \App\Repositories\MenuChatRepository::class
         );
 
         $this->app->bind(

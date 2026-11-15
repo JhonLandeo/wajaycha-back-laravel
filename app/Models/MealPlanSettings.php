@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property array<int, int> $plan_weekdays
  * @property array<int, string> $excluded_terms
  * @property int|null $max_prep_minutes
+ * @property \App\Enums\MenuStrategy $menu_strategy
  * @property-read User $user
  */
 class MealPlanSettings extends Model
@@ -33,6 +34,7 @@ class MealPlanSettings extends Model
         'plan_weekdays',
         'excluded_terms',
         'max_prep_minutes',
+        'menu_strategy',
     ];
 
     protected $casts = [
@@ -41,6 +43,7 @@ class MealPlanSettings extends Model
         'plan_weekdays' => 'array',
         'excluded_terms' => 'array',
         'max_prep_minutes' => 'integer',
+        'menu_strategy' => \App\Enums\MenuStrategy::class,
     ];
 
     public function user(): BelongsTo

@@ -22,5 +22,6 @@ final class PantryStock
         public readonly ?Unit $unit,
         public readonly float $quantity,
         public readonly ?CarbonImmutable $expiresOn,
+        public readonly string $productName = '',
     ) {}
 }

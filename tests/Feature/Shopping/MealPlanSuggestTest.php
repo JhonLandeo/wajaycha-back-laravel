@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\MealPlanEntry;
+use App\Models\PantryItem;
 use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
@@ -96,6 +97,35 @@ it('falls back to a deterministic week when the AI is unavailable', function () 
         ->assertJsonCount(3, 'data.entries');
 
     expect(MealPlanEntry::where('user_id', $user->id)->where('kind', 'recipe')->count())->toBe(3);
+});
+
+it('prefers the recipe the pantry already covers when the strategy says so', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [, $coveredProduct] = suggestionRecipe($user->id, 'Arroz cubierto');
+    suggestionRecipe($user->id, 'Lentejas sin despensa');
+
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $coveredProduct->id,
+        'quantity' => 10,
+        'unit' => 'kg',
+        'expires_on' => '2026-11-20',
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'use_pantry',
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'fallback')
+        ->assertJsonPath('data.entries.0.recipe.name', 'Arroz cubierto');
 });
 
 it('does not propose recipes excluded by the user', function () {

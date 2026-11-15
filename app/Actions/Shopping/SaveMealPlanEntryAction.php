@@ -22,6 +22,7 @@ final class SaveMealPlanEntryAction
     public function __construct(
         private readonly MealPlanRepositoryContract $mealPlanRepository,
         private readonly RecipeRepositoryContract $recipeRepository,
+        private readonly SyncPantryConsumptionAction $syncPantryConsumption,
     ) {}
 
     /**
@@ -34,11 +35,18 @@ final class SaveMealPlanEntryAction
         $planDate = (string) $data['plan_date'];
         $existing = $this->mealPlanRepository->findSlot($userId, $planDate, $mealType);
 
-        return match ($kind) {
+        $entry = match ($kind) {
             MealEntryKind::Recipe => $this->recipeEntry($userId, $planDate, $mealType, $existing, $data),
             MealEntryKind::Leftover => $this->leftoverEntry($userId, $planDate, $mealType, $existing, $data),
             MealEntryKind::EatOut, MealEntryKind::Free => $this->emptyEntry($userId, $planDate, $mealType, $existing, $kind, $data),
         };
+
+        // The status is part of the write: a cooked entry must consume pantry
+        // even when it is created or edited through this endpoint, not only
+        // through the one-tap status route.
+        $this->syncPantryConsumption->execute($entry);
+
+        return $entry;
     }
 
     /**
