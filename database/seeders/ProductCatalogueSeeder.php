@@ -39,6 +39,10 @@ class ProductCatalogueSeeder extends Seeder
                 'slug' => $item['slug'],
                 'name' => $item['name'],
                 'unit' => $item['unit'],
+                'calories_kcal' => $item['calories_kcal'] ?? null,
+                'protein_g' => $item['protein_g'] ?? null,
+                'carbs_g' => $item['carbs_g'] ?? null,
+                'fat_g' => $item['fat_g'] ?? null,
                 'is_active' => true,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -46,6 +50,10 @@ class ProductCatalogueSeeder extends Seeder
             config('shopping.catalogue', []),
         );
 
-        Product::upsert($rows, uniqueBy: ['slug'], update: ['name', 'unit', 'is_active']);
+        Product::upsert(
+            $rows,
+            uniqueBy: ['slug'],
+            update: ['name', 'unit', 'calories_kcal', 'protein_g', 'carbs_g', 'fat_g', 'is_active'],
+        );
     }
 }

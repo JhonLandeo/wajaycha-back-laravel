@@ -73,19 +73,21 @@ final class ApplyMenuSuggestionAction
                 }
 
                 $recipeOldId = $entry['recipe_id'];
-                $recipeMap[$recipeOldId] = $this->resolveRecipe(
-                    $entry['recipe'],
-                    $recipeOldId,
-                    $entry['meal_type'],
-                    'main',
-                    $userId,
-                    $settings,
-                    $productsById,
-                    $existingNames,
-                );
+                if (! isset($recipeMap[$recipeOldId])) {
+                    $recipeMap[$recipeOldId] = $this->resolveRecipe(
+                        $entry['recipe'],
+                        $recipeOldId,
+                        $entry['meal_type'],
+                        'main',
+                        $userId,
+                        $settings,
+                        $productsById,
+                        $existingNames,
+                    );
+                }
 
                 $drinkOldId = $entry['drink_recipe_id'];
-                if ($drinkOldId !== null) {
+                if ($drinkOldId !== null && ! isset($drinkMap[$drinkOldId])) {
                     $drinkMap[$drinkOldId] = $this->resolveRecipe(
                         $entry['drink_recipe'],
                         $drinkOldId,
@@ -275,7 +277,10 @@ final class ApplyMenuSuggestionAction
         $isAi = $summary !== null && ($summary['origin'] ?? null) === 'ai';
 
         if (! $isAi) {
-            $recipe = $oldId > 0 ? $this->recipeRepository->findForUser($oldId, $userId) : null;
+            // Una alternativa para un hueco vacío puede traer un id temporal
+            // negativo; la receta real viaja en el resumen.
+            $recipeId = $oldId > 0 ? $oldId : (int) ($summary['id'] ?? 0);
+            $recipe = $recipeId > 0 ? $this->recipeRepository->findForUser($recipeId, $userId) : null;
 
             if ($recipe === null || ! in_array($meal, $recipe->meal_types, true)) {
                 throw ValidationException::withMessages(['entries' => 'Una receta de la propuesta ya no está disponible.']);

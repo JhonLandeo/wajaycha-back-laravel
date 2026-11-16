@@ -7,6 +7,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * Un producto del catálogo de abarrotes.
+ *
+ * Los valores nutricionales son aproximados y están expresados por unidad
+ * canónica (`kg`, `l`, `unidad`, ...), no por 100 g (ADR-0031). Una receta que
+ * declara gramos convierte a la unidad canónica antes de multiplicar.
+ *
+ * @property int $id
+ * @property int|null $user_id
+ * @property string|null $slug
+ * @property string $name
+ * @property string $unit
+ * @property float|null $calories_kcal
+ * @property float|null $protein_g
+ * @property float|null $carbs_g
+ * @property float|null $fat_g
+ * @property bool $is_active
+ */
 class Product extends Model
 {
     /** @use HasFactory<\Database\Factories\ProductFactory> */
@@ -17,10 +35,18 @@ class Product extends Model
         'slug',
         'name',
         'unit',
+        'calories_kcal',
+        'protein_g',
+        'carbs_g',
+        'fat_g',
         'is_active',
     ];
 
     protected $casts = [
+        'calories_kcal' => 'float',
+        'protein_g' => 'float',
+        'carbs_g' => 'float',
+        'fat_g' => 'float',
         'is_active' => 'boolean',
     ];
 }

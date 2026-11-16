@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Shopping;
 
+use App\DTOs\Shopping\Nutrition;
 use App\DTOs\Shopping\PantryStock;
 use App\DTOs\Shopping\PlanningWeek;
 use App\Enums\DietProfile;
@@ -19,6 +20,7 @@ use App\Repositories\Contracts\ShoppingRepositoryContract;
 use App\Services\AI\OpenCodeGateway;
 use App\Services\Shopping\MenuCalendar;
 use App\Services\Shopping\MenuCandidateFilter;
+use App\Services\Shopping\NutritionCalculator;
 use App\Services\Shopping\UnitConverter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -50,11 +52,15 @@ final class SuggestMenuAction
 
     private const EXPIRING_SOON_DAYS = 4;
 
+    /** @var array<int, \App\DTOs\Shopping\Nutrition> */
+    private array $nutritionByRecipe = [];
+
     public function __construct(
         private readonly MealPlanRepositoryContract $mealPlanRepository,
         private readonly ShoppingRepositoryContract $shoppingRepository,
         private readonly FoodBudgetRepositoryContract $foodBudgetRepository,
         private readonly MenuCandidateFilter $candidateFilter,
+        private readonly NutritionCalculator $nutritionCalculator,
         private readonly GeneratePantryRecipesAction $recipeGenerator,
         private readonly MenuCalendar $calendar,
         private readonly OpenCodeGateway $gateway,
@@ -111,6 +117,7 @@ final class SuggestMenuAction
         }
 
         $meals = $settings->meal_types;
+        $this->nutritionByRecipe = [];
         $candidates = $this->candidateFilter->forUser($userId, $settings);
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
         $this->habits = $this->shoppingRepository->activeHabitsFor($userId);
@@ -185,6 +192,7 @@ final class SuggestMenuAction
                         $available,
                         $usage,
                         $settings,
+                        $meal,
                     );
 
                     $drinkId = null;
@@ -338,6 +346,16 @@ final class SuggestMenuAction
                     continue;
                 }
 
+                $carbLimit = $settings->dinner_carb_limit_g;
+
+                if ($meal === 'dinner'
+                    && $carbLimit !== null
+                    && $this->nutritionOf($recipe)->isComplete()
+                    && $this->nutritionOf($recipe)->carbsG > $carbLimit
+                    && $this->hasLowCarbAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe, $carbLimit)) {
+                    continue;
+                }
+
                 $evaluation = $this->evaluate($recipe, $choice['cook_servings'], $available);
 
                 if (($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::UsePantry
@@ -367,6 +385,7 @@ final class SuggestMenuAction
                     $available,
                     $usage,
                     $settings,
+                    $meal,
                 );
 
                 if ($drinkPick !== null) {
@@ -414,6 +433,7 @@ final class SuggestMenuAction
                     'tipo' => $recipe->course->value,
                     'cocina' => $recipe->cuisine->value,
                     'diet_tags' => $recipe->diet_tags ?? [],
+                    'nutricion' => $this->nutritionOf($recipe)->toArray(),
                     'minutos' => $recipe->prep_minutes,
                     'despensa_cobertura' => $evaluation['cobertura'],
                     'despensa_aprovechamiento' => $evaluation['aprovechamiento'],
@@ -437,6 +457,8 @@ final class SuggestMenuAction
             'dias_activos' => $days,
             'criterio' => ($settings->menu_strategy ?? MenuStrategy::Balanced)->value,
             'perfil' => ($settings->diet_profile ?? DietProfile::Balanced)->value,
+            'objetivo_kcal_dia' => $settings->daily_calorie_target,
+            'limite_carbohidratos_cena_g' => $settings->dinner_carb_limit_g,
             'cocina_preferida' => RecipeCuisine::Peruvian->value,
             'presupuesto_semanal' => $budget?->weeklyTarget,
             'despensa' => array_map(static fn (PantryStock $item): array => [
@@ -469,6 +491,7 @@ Reglas:
 - Prefiere recetas que usen los productos de `habitos`; no es obligatorio, pero ayuda a cubrir lo que el usuario declaró.
 - Según `criterio`: `use_pantry` prioriza `despensa_aprovechamiento` y reparte la despensa entre recetas; no elijas una receta con aprovechamiento 0 si otra candidata usa despensa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
 - Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
+- `nutricion` es aproximada y por porción; no la recalcules ni la inventes. Si `nutricion.is_complete` es false, no la uses para decidir el objetivo. Si `objetivo_kcal_dia` no es null, reparte el objetivo entre las comidas activas y evita que un día quede muy por encima. Si `limite_carbohidratos_cena_g` no es null, prefiere cenas con `carbs_g` por debajo del límite; si no hay alternativa, elige la de menos carbohidratos.
 - No repitas la misma receta más de dos veces en la semana ni en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
 - No expliques nada fuera del JSON.
 
@@ -668,6 +691,7 @@ PROMPT;
         array $available,
         array $usage,
         MealPlanSettings $settings,
+        string $meal,
     ): ?array {
         if ($drinkId > 0 && $drinkId !== $mainId) {
             $drink = $this->findCandidate($candidates, $drinkId);
@@ -682,7 +706,7 @@ PROMPT;
             }
         }
 
-        return $this->chooseDrink($mainId, $candidates, $available, $usage, $settings);
+        return $this->chooseDrink($mainId, $candidates, $available, $usage, $settings, $meal);
     }
 
     /**
@@ -710,6 +734,7 @@ PROMPT;
         array $available,
         array $usage,
         MealPlanSettings $settings,
+        string $meal,
     ): ?array {
         $drinks = array_values(array_filter(
             $candidates,
@@ -748,9 +773,9 @@ PROMPT;
             }
         }
 
-        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage): int {
-            $scoreA = $this->scoreRecipe($a['evaluation'], $strategy, $usage[(int) $a['recipe']->id] ?? 0, $a['recipe'], $profile);
-            $scoreB = $this->scoreRecipe($b['evaluation'], $strategy, $usage[(int) $b['recipe']->id] ?? 0, $b['recipe'], $profile);
+        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage, $meal, $settings): int {
+            $scoreA = $this->scoreRecipe($a['evaluation'], $strategy, $usage[(int) $a['recipe']->id] ?? 0, $a['recipe'], $profile, $meal, $settings);
+            $scoreB = $this->scoreRecipe($b['evaluation'], $strategy, $usage[(int) $b['recipe']->id] ?? 0, $b['recipe'], $profile, $meal, $settings);
 
             return $scoreB <=> $scoreA ?: $a['recipe']->name <=> $b['recipe']->name;
         });
@@ -839,6 +864,20 @@ PROMPT;
             }
         }
 
+        $limit = $settings->dinner_carb_limit_g;
+
+        if ($meal === 'dinner' && $limit !== null) {
+            $lowCarb = array_values(array_filter(
+                $candidates,
+                fn (Recipe $recipe): bool => $this->nutritionOf($recipe)->isComplete()
+                    && $this->nutritionOf($recipe)->carbsG <= $limit,
+            ));
+
+            if ($lowCarb !== []) {
+                $candidates = $lowCarb;
+            }
+        }
+
         $usable = array_values(array_filter(
             $candidates,
             fn (Recipe $recipe): bool => $this->canUseRecipe((int) $recipe->id, $date, $meal, $usage, $slotRecipe),
@@ -878,13 +917,15 @@ PROMPT;
             }
         }
 
-        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage): int {
+        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage, $meal, $settings): int {
             $scoreA = $this->scoreRecipe(
                 $a['evaluation'],
                 $strategy,
                 $usage[(int) $a['recipe']->id] ?? 0,
                 $a['recipe'],
                 $profile,
+                $meal,
+                $settings,
             );
             $scoreB = $this->scoreRecipe(
                 $b['evaluation'],
@@ -892,6 +933,8 @@ PROMPT;
                 $usage[(int) $b['recipe']->id] ?? 0,
                 $b['recipe'],
                 $profile,
+                $meal,
+                $settings,
             );
 
             return $scoreB <=> $scoreA ?: $a['recipe']->name <=> $b['recipe']->name;
@@ -915,6 +958,8 @@ PROMPT;
         int $occurrences,
         Recipe $recipe,
         DietProfile $profile,
+        string $meal,
+        MealPlanSettings $settings,
     ): float {
         $varietyPenalty = $occurrences * 6.0;
         $dietBonus = match ($profile) {
@@ -932,7 +977,7 @@ PROMPT;
             }
         }
 
-        return $dietBonus + $habitBonus + $cuisineBonus + match ($strategy) {
+        return $dietBonus + $habitBonus + $cuisineBonus + $this->nutritionScore($recipe, $meal, $settings) + match ($strategy) {
             MenuStrategy::UsePantry => $evaluation['aprovechamiento'] * 6.0
                 + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
@@ -944,6 +989,85 @@ PROMPT;
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
                 - $varietyPenalty,
         };
+    }
+
+    private function nutritionOf(Recipe $recipe): Nutrition
+    {
+        $recipeId = (int) $recipe->id;
+
+        return $this->nutritionByRecipe[$recipeId] ??= $this->nutritionCalculator->perServing($recipe);
+    }
+
+    private function nutritionScore(Recipe $recipe, string $meal, MealPlanSettings $settings): float
+    {
+        $nutrition = $this->nutritionOf($recipe);
+
+        if (! $nutrition->isComplete()) {
+            return 0.0;
+        }
+
+        $score = 0.0;
+        $target = $settings->daily_calorie_target;
+        $meals = max(1, count($settings->meal_types));
+        $share = $target !== null ? $target / $meals : null;
+
+        if ($share !== null) {
+            $delta = $nutrition->kcal - $share;
+            $score += $delta > 0 ? -min(6.0, $delta / 80.0) : 1.5;
+        }
+
+        $limit = $settings->dinner_carb_limit_g;
+
+        if ($meal === 'dinner' && $limit !== null) {
+            $score += $nutrition->carbsG <= $limit
+                ? 5.0
+                : -min(10.0, ($nutrition->carbsG - $limit) / 5.0);
+        }
+
+        $profile = $settings->diet_profile ?? DietProfile::Balanced;
+
+        if ($profile === DietProfile::HighProtein) {
+            $score += min(3.0, $nutrition->proteinG / 15.0);
+        }
+
+        if ($profile === DietProfile::Light && $share !== null && $nutrition->kcal <= $share) {
+            $score += 2.0;
+        }
+
+        return $score;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function hasLowCarbAlternative(
+        array $candidates,
+        int $exceptId,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+        int $limit,
+    ): bool {
+        foreach ($candidates as $recipe) {
+            $recipeId = (int) $recipe->id;
+
+            if ($recipe->course === RecipeCourse::Drink
+                || $recipeId === $exceptId
+                || ! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
+                continue;
+            }
+
+            $nutrition = $this->nutritionOf($recipe);
+
+            if ($nutrition->isComplete() && $nutrition->carbsG <= $limit) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

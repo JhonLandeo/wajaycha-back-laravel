@@ -37,6 +37,8 @@ class UpdateMealPlanSettingsRequest extends FormRequest
             'available_equipment.*' => ['string', 'distinct', Rule::enum(KitchenEquipment::class)],
             'diet_profile' => ['sometimes', Rule::enum(DietProfile::class)],
             'new_recipes_per_week' => ['sometimes', 'integer', 'between:0,5'],
+            'daily_calorie_target' => ['sometimes', 'nullable', 'integer', 'between:800,5000'],
+            'dinner_carb_limit_g' => ['sometimes', 'nullable', 'integer', 'between:0,300'],
         ];
     }
 
@@ -50,6 +52,8 @@ class UpdateMealPlanSettingsRequest extends FormRequest
             'meal_types.required' => 'Elige al menos una comida.',
             'plan_weekdays.required' => 'Elige al menos un día para planificar.',
             'plan_weekdays.*.between' => 'Los días deben estar entre lunes y domingo.',
+            'daily_calorie_target.between' => 'Indica un objetivo entre 800 y 5000 kcal.',
+            'dinner_carb_limit_g.between' => 'Indica un límite entre 0 y 300 g de carbohidratos.',
         ];
     }
 }

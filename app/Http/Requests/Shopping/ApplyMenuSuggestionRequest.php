@@ -20,7 +20,7 @@ class ApplyMenuSuggestionRequest extends FormRequest
     {
         return [
             'week_start' => ['required', 'date_format:Y-m-d'],
-            'entries' => ['required', 'array', 'max:63'],
+            'entries' => ['present', 'array', 'max:63'],
             'entries.*' => ['array'],
         ];
     }

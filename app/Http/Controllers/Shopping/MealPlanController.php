@@ -7,19 +7,22 @@ namespace App\Http\Controllers\Shopping;
 use App\Actions\Shopping\ApplyMenuSuggestionAction;
 use App\Actions\Shopping\BuildMenuShoppingListAction;
 use App\Actions\Shopping\BuildMenuSpendingAction;
+use App\Actions\Shopping\ChatAdjustMenuPreviewAction;
 use App\Actions\Shopping\SaveMealPlanEntryAction;
+use App\Actions\Shopping\SuggestMealAlternativeAction;
 use App\Actions\Shopping\SuggestMenuAction;
 use App\Actions\Shopping\UpdateMealEntryStatusAction;
 use App\Enums\MealEntryStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shopping\ApplyMenuSuggestionRequest;
+use App\Http\Requests\Shopping\SendPreviewMenuChatRequest;
 use App\Http\Requests\Shopping\StoreMealPlanEntryRequest;
+use App\Http\Requests\Shopping\SuggestMealAlternativeRequest;
 use App\Http\Requests\Shopping\UpdateMealEntryStatusRequest;
 use App\Http\Requests\Shopping\UpdateMealPlanSettingsRequest;
 use App\Models\MealPlanEntry;
-use App\Models\MealPlanSettings;
-use App\Models\Recipe;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
+use App\Services\Shopping\MealPlanPresenter;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -35,6 +38,9 @@ final class MealPlanController extends Controller
         private readonly SuggestMenuAction $suggestMenu,
         private readonly ApplyMenuSuggestionAction $applySuggestion,
         private readonly UpdateMealEntryStatusAction $updateStatusAction,
+        private readonly MealPlanPresenter $presenter,
+        private readonly SuggestMealAlternativeAction $alternativeSuggestion,
+        private readonly ChatAdjustMenuPreviewAction $previewChatAction,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -67,14 +73,55 @@ final class MealPlanController extends Controller
         return response()->json([
             'source' => $preview['source'],
             'data' => [
-                'week' => $this->weekPayload($preview['week']),
-                'settings' => $this->settingsPayload($settings),
+                'week' => $this->presenter->week($preview['week']),
+                'settings' => $this->presenter->settings($settings),
                 'entries' => $preview['entries']
-                    ->map(fn (MealPlanEntry $entry): array => $this->entryPayload($entry))
+                    ->map(fn (MealPlanEntry $entry): array => $this->presenter->entry($entry))
                     ->values()
                     ->all(),
             ],
         ]);
+    }
+
+    public function alternativeSuggestion(SuggestMealAlternativeRequest $request): JsonResponse
+    {
+        $week = \App\DTOs\Shopping\PlanningWeek::forWeekStarting(
+            CarbonImmutable::parse((string) $request->validated('week_start'), 'America/Lima'),
+            CarbonImmutable::now(),
+        );
+
+        $entry = $this->alternativeSuggestion->execute(
+            (int) Auth::id(),
+            $week->startsOn->toDateString(),
+            (string) $request->validated('date'),
+            (string) $request->validated('meal'),
+            (array) $request->validated('entries'),
+        );
+
+        if ($entry === null) {
+            return response()->json([
+                'message' => 'No encontramos otra opción para esa comida.',
+            ], 422);
+        }
+
+        return response()->json(['data' => $entry]);
+    }
+
+    public function previewChat(SendPreviewMenuChatRequest $request): JsonResponse
+    {
+        $week = \App\DTOs\Shopping\PlanningWeek::forWeekStarting(
+            CarbonImmutable::parse((string) $request->validated('week_start'), 'America/Lima'),
+            CarbonImmutable::now(),
+        );
+
+        $result = $this->previewChatAction->execute(
+            (int) Auth::id(),
+            $week->startsOn->toDateString(),
+            (string) $request->validated('message'),
+            (array) $request->validated('entries'),
+        );
+
+        return response()->json(['data' => $result]);
     }
 
     public function applySuggestion(ApplyMenuSuggestionRequest $request): JsonResponse
@@ -104,16 +151,18 @@ final class MealPlanController extends Controller
             'available_equipment' => $request->validated('available_equipment', $settings->available_equipment),
             'diet_profile' => $request->validated('diet_profile', $settings->diet_profile->value),
             'new_recipes_per_week' => $request->validated('new_recipes_per_week', $settings->new_recipes_per_week),
+            'daily_calorie_target' => $request->validated('daily_calorie_target', $settings->daily_calorie_target),
+            'dinner_carb_limit_g' => $request->validated('dinner_carb_limit_g', $settings->dinner_carb_limit_g),
         ]);
 
-        return response()->json(['data' => $this->settingsPayload($updated)]);
+        return response()->json(['data' => $this->presenter->settings($updated)]);
     }
 
     public function saveEntry(StoreMealPlanEntryRequest $request): JsonResponse
     {
         $entry = $this->saveEntry->execute((int) Auth::id(), $request->validated());
 
-        return response()->json(['data' => $this->entryPayload($entry)]);
+        return response()->json(['data' => $this->presenter->entry($entry)]);
     }
 
     public function updateStatus(UpdateMealEntryStatusRequest $request, int $entry): JsonResponse
@@ -129,7 +178,7 @@ final class MealPlanController extends Controller
             MealEntryStatus::from((string) $request->validated('status')),
         );
 
-        return response()->json(['data' => $this->entryPayload($updated)]);
+        return response()->json(['data' => $this->presenter->entry($updated)]);
     }
 
     public function clearWeek(Request $request): JsonResponse
@@ -185,9 +234,9 @@ final class MealPlanController extends Controller
         $entries = $this->repository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
 
         return [
-            'week' => $this->weekPayload($week),
-            'settings' => $this->settingsPayload($settings),
-            'entries' => $entries->map(fn (MealPlanEntry $entry): array => $this->entryPayload($entry))->values()->all(),
+            'week' => $this->presenter->week($week),
+            'settings' => $this->presenter->settings($settings),
+            'entries' => $entries->map(fn (MealPlanEntry $entry): array => $this->presenter->entry($entry))->values()->all(),
         ];
     }
 
@@ -212,100 +261,5 @@ final class MealPlanController extends Controller
             : $asOf;
 
         return \App\DTOs\Shopping\PlanningWeek::forWeekStarting($start, $asOf);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function weekPayload(\App\DTOs\Shopping\PlanningWeek $week): array
-    {
-        return [
-            'starts_on' => $week->startsOn->toDateString(),
-            'ends_on' => $week->endsOn->toDateString(),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function settingsPayload(MealPlanSettings $settings): array
-    {
-        return [
-            'household_size' => (int) $settings->household_size,
-            'meal_types' => $settings->meal_types,
-            'plan_weekdays' => $settings->plan_weekdays,
-            'excluded_terms' => $settings->excluded_terms ?? [],
-            'max_prep_minutes' => $settings->max_prep_minutes,
-            'menu_strategy' => $settings->menu_strategy->value,
-            'menu_strategy_label' => $settings->menu_strategy->label(),
-            'available_equipment' => $settings->available_equipment,
-            'diet_profile' => $settings->diet_profile->value,
-            'diet_profile_label' => $settings->diet_profile->label(),
-            'new_recipes_per_week' => (int) $settings->new_recipes_per_week,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function recipePayload(Recipe $recipe): array
-    {
-        return [
-            'id' => (int) $recipe->id,
-            'name' => $recipe->name,
-            'base_servings' => (int) $recipe->base_servings,
-            'prep_minutes' => $recipe->prep_minutes,
-            'meal_types' => $recipe->meal_types,
-            'course' => $recipe->course->value,
-            'course_label' => $recipe->course->label(),
-            'origin' => $recipe->origin->value,
-            'origin_label' => $recipe->origin->label(),
-            'cuisine' => $recipe->cuisine->value,
-            'cuisine_label' => $recipe->cuisine->label(),
-            'required_equipment' => $recipe->required_equipment ?? [],
-            'diet_tags' => $recipe->diet_tags ?? [],
-            'instructions' => $recipe->instructions,
-            'ingredients' => $recipe->ingredients
-                ->map(static fn ($ingredient): array => [
-                    'product_id' => (int) $ingredient->product_id,
-                    'product_name' => (string) $ingredient->product->name,
-                    'quantity' => (float) $ingredient->quantity,
-                    'unit' => (string) $ingredient->unit,
-                    'is_optional' => (bool) $ingredient->is_optional,
-                ])
-                ->values()
-                ->all(),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function entryPayload(MealPlanEntry $entry): array
-    {
-        return [
-            'id' => (int) $entry->id,
-            'plan_date' => $entry->plan_date->toDateString(),
-            'meal_type' => $entry->meal_type->value,
-            'meal_type_label' => $entry->meal_type->label(),
-            'kind' => $entry->kind->value,
-            'kind_label' => $entry->kind->label(),
-            'status' => $entry->status->value,
-            'status_label' => $entry->status->label(),
-            'recipe_id' => $entry->recipe_id,
-            'recipe' => $entry->recipe === null ? null : $this->recipePayload($entry->recipe),
-            'drink_recipe_id' => $entry->drink_recipe_id,
-            'drink_recipe' => $entry->drinkRecipe === null ? null : $this->recipePayload($entry->drinkRecipe),
-            'servings' => (int) $entry->servings,
-            'cook_servings' => (int) $entry->cook_servings,
-            'leftover_of_entry_id' => $entry->leftover_of_entry_id,
-            'leftover_from' => $entry->leftoverOf === null ? null : [
-                'id' => (int) $entry->leftoverOf->id,
-                'plan_date' => $entry->leftoverOf->plan_date->toDateString(),
-                'meal_type' => $entry->leftoverOf->meal_type->value,
-                'recipe_name' => $entry->leftoverOf->recipe?->name,
-            ],
-            'notes' => $entry->notes,
-        ];
     }
 }

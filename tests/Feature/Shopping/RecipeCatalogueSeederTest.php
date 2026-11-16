@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
+use App\Services\Shopping\NutritionCalculator;
 use Database\Seeders\ProductCatalogueSeeder;
 use Database\Seeders\RecipeCatalogueSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -44,4 +45,10 @@ it('seeds the shared recipe catalogue idempotently and maps ingredients to produ
 
     expect(Recipe::whereNull('user_id')->count())->toBe($count)
         ->and(RecipeIngredient::count())->toBe($ingredients);
+
+    $calculator = app(NutritionCalculator::class);
+    $partial = Recipe::with('ingredients.product')->get()
+        ->filter(fn (Recipe $recipe): bool => ! $calculator->perServing($recipe)->isComplete());
+
+    expect($partial->pluck('name')->all())->toBe([]);
 });

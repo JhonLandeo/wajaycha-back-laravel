@@ -23,6 +23,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property array<int, string>|null $available_equipment
  * @property \App\Enums\DietProfile $diet_profile
  * @property int $new_recipes_per_week
+ * @property int|null $daily_calorie_target
+ * @property int|null $dinner_carb_limit_g
  * @property-read User $user
  */
 class MealPlanSettings extends Model
@@ -41,6 +43,8 @@ class MealPlanSettings extends Model
         'available_equipment',
         'diet_profile',
         'new_recipes_per_week',
+        'daily_calorie_target',
+        'dinner_carb_limit_g',
     ];
 
     protected $casts = [
@@ -53,6 +57,8 @@ class MealPlanSettings extends Model
         'available_equipment' => 'array',
         'diet_profile' => \App\Enums\DietProfile::class,
         'new_recipes_per_week' => 'integer',
+        'daily_calorie_target' => 'integer',
+        'dinner_carb_limit_g' => 'integer',
     ];
 
     public function user(): BelongsTo

@@ -170,6 +170,8 @@ final class GeneratePantryRecipesAction
             'comidas_activas' => $settings->meal_types,
             'tiempo_maximo' => $settings->max_prep_minutes,
             'perfil' => ($settings->diet_profile ?? DietProfile::Balanced)->value,
+            'objetivo_kcal_dia' => $settings->daily_calorie_target,
+            'limite_carbohidratos_cena_g' => $settings->dinner_carb_limit_g,
             'equipamiento_disponible' => $settings->available_equipment,
             'no_incluir' => $settings->excluded_terms,
             'despensa' => $pantryList,
@@ -194,6 +196,7 @@ Reglas:
 - Cada receta debe llevar: `name`, `meal_types` (subconjunto de `comidas_activas`), `course` (`main` o `drink`), `prep_minutes`, `equipment` (subconjunto de `equipamiento_disponible`; si es null, no pidas equipamiento especial), `instructions` con los pasos de preparación en texto claro e `ingredients` con `producto_id`, `quantity` y `unit` compatible con la unidad del producto.
 - `base_servings` no se envía: el backend usa el número de personas.
 - No uses productos de `no_incluir` en el nombre ni en los ingredientes. Respeta el tiempo máximo.
+- Si propones una receta para `dinner` y `limite_carbohidratos_cena_g` no es null, evita ingredientes con muchos carbohidratos; el backend calcula los macros desde los productos.
 - No expliques nada fuera del JSON.
 
 Contexto:

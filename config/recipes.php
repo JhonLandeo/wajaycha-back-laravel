@@ -453,7 +453,7 @@ return [
             'meal_types' => ['lunch', 'dinner'],
             'prep_minutes' => 45,
             'ingredients' => [
-                ['product' => 'rocoto', 'quantity' => 2, 'unit' => 'unidad'],
+                ['product' => 'rocoto', 'quantity' => 0.3, 'unit' => 'kg'],
                 ['product' => 'carne-de-res', 'quantity' => 0.3, 'unit' => 'kg'],
                 ['product' => 'queso-fresco', 'quantity' => 0.1, 'unit' => 'kg'],
                 ['product' => 'huevos', 'quantity' => 2, 'unit' => 'unidad'],

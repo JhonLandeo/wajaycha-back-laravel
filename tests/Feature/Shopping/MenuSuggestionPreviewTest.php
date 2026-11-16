@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\MealPlanEntry;
+use App\Models\MenuChatMessage;
 use App\Models\PantryItem;
 use App\Models\Product;
 use App\Models\Recipe;
@@ -140,6 +141,77 @@ it('keeps AI recipe drafts out of the database until the preview is applied', fu
 
     expect($recipe->name)->toBe('Pollo al limón')
         ->and(MealPlanEntry::query()->where('user_id', $user->id)->sole()->recipe_id)->toBe($recipe->id);
+});
+
+it('keeps an AI draft out of the database when the preview chat adjusts it', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $product = Product::factory()->create(['name' => 'Pollo', 'unit' => 'kg']);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $entry = [
+        'id' => 1,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'recipe_id' => 999999,
+        'recipe' => [
+            'id' => 999999,
+            'name' => 'Pollo al limón',
+            'base_servings' => 2,
+            'meal_types' => ['lunch'],
+            'course' => 'main',
+            'origin' => 'ai',
+            'cuisine' => 'peruvian',
+            'required_equipment' => ['stove'],
+            'diet_tags' => [],
+            'instructions' => '1. Cocina el pollo. 2. Añade limón.',
+            'ingredients' => [[
+                'product_id' => $product->id,
+                'product_name' => 'Pollo',
+                'quantity' => 0.5,
+                'unit' => 'kg',
+                'is_optional' => false,
+            ]],
+        ],
+        'drink_recipe_id' => null,
+        'drink_recipe' => null,
+        'servings' => 2,
+        'cook_servings' => 2,
+        'leftover_of_entry_id' => null,
+        'notes' => null,
+    ];
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode([
+                'reply' => 'La propuesta queda igual.',
+                'operations' => [],
+            ])]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/menu/suggest/chat', [
+        'week_start' => '2026-11-09',
+        'message' => '¿qué te parece?',
+        'entries' => [$entry],
+    ], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.origin', 'ai');
+
+    expect(Recipe::query()->where('origin', 'ai')->count())->toBe(0)
+        ->and(MealPlanEntry::query()->count())->toBe(0)
+        ->and(MenuChatMessage::query()->count())->toBe(0);
 });
 
 it('skips the AI recipe generation when the weekly limit is zero', function () {
