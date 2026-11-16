@@ -41,6 +41,7 @@ class UpdateMealPlanSettingsRequest extends FormRequest
             'dinner_carb_limit_g' => ['sometimes', 'nullable', 'integer', 'between:0,300'],
             'dinner_max_prep_minutes' => ['sometimes', 'nullable', 'integer', 'between:1,120'],
             'dinner_calorie_limit' => ['sometimes', 'nullable', 'integer', 'between:200,2000'],
+            'consider_pantry_in_ai_recipes' => ['sometimes', 'boolean'],
         ];
     }
 

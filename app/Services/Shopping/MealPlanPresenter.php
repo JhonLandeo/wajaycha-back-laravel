@@ -54,6 +54,7 @@ final class MealPlanPresenter
             'dinner_carb_limit_g' => $settings->dinner_carb_limit_g,
             'dinner_max_prep_minutes' => $settings->dinner_max_prep_minutes,
             'dinner_calorie_limit' => $settings->dinner_calorie_limit,
+            'consider_pantry_in_ai_recipes' => (bool) $settings->consider_pantry_in_ai_recipes,
         ];
     }
 

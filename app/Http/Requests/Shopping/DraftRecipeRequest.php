@@ -20,6 +20,7 @@ class DraftRecipeRequest extends FormRequest
     {
         return [
             'idea' => ['nullable', 'string', 'max:300'],
+            'use_pantry' => ['sometimes', 'boolean'],
         ];
     }
 }

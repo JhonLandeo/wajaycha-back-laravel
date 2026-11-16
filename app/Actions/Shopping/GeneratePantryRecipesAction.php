@@ -63,10 +63,11 @@ final class GeneratePantryRecipesAction
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
         $habits = $this->shoppingRepository->activeHabitsFor($userId);
         $existing = $this->recipeRepository->allForUser($userId);
+        $considerPantry = (bool) $settings->consider_pantry_in_ai_recipes;
 
         try {
             $response = $this->gateway->generateJson([
-                ['parts' => [['text' => $this->prompt($week, $settings, $products, $pantry, $habits, $existing, $remaining)]]],
+                ['parts' => [['text' => $this->prompt($week, $settings, $products, $pantry, $habits, $existing, $remaining, $considerPantry)]]],
             ], ['temperature' => 0.6]);
         } catch (Throwable $e) {
             report($e);
@@ -131,6 +132,7 @@ final class GeneratePantryRecipesAction
         array $habits,
         $existing,
         int $limit,
+        bool $considerPantry,
     ): string {
         $today = $week->asOf->setTimezone('America/Lima')->toDateString();
 
@@ -174,7 +176,6 @@ final class GeneratePantryRecipesAction
             'limite_carbohidratos_cena_g' => $settings->dinner_carb_limit_g,
             'equipamiento_disponible' => $settings->available_equipment,
             'no_incluir' => $settings->excluded_terms,
-            'despensa' => $pantryList,
             'habitos' => array_map(static fn ($habit): array => [
                 'producto_id' => (int) $habit->product_id,
                 'producto' => (string) $habit->product?->name,
@@ -185,12 +186,20 @@ final class GeneratePantryRecipesAction
             'recetas_existentes' => $existingList,
         ];
 
+        if ($considerPantry) {
+            $context['despensa'] = $pantryList;
+        }
+
+        $pantryRule = $considerPantry
+            ? '- Prioriza los ingredientes de la despensa, sobre todo los que vencen pronto, y los productos que las recetas existentes no usan.'
+            : '- No priorices la despensa. Respeta el nombre y el acompañamiento tradicional de cada plato; no sustituyas arroz, papa o yuca por quinoa solo porque existe en el catálogo. No uses el mismo producto base en todas las recetas propuestas.';
+
         return <<<PROMPT
 Eres un cocinero peruano que arma recetas con lo que hay en casa. Propón hasta {$limit} recetas nuevas de cocina peruana y devuelve solo JSON válido.
 
 Reglas:
 - Usa únicamente `producto_id` del catálogo entregado. No inventes productos ni ids.
-- Prioriza los ingredientes de la despensa, sobre todo los que vencen pronto, y los productos que las recetas existentes no usan.
+{$pantryRule}
 - Prefiere los productos de `habitos` cuando encajen en la receta; no es obligatorio.
 - No repitas una receta existente ni una combinación ya propuesta.
 - Cada receta debe llevar: `name`, `meal_types` (subconjunto de `comidas_activas`), `course` (`main` o `drink`), `prep_minutes`, `equipment` (subconjunto de `equipamiento_disponible`; si es null, no pidas equipamiento especial), `instructions` con los pasos de preparación en texto claro e `ingredients` con `producto_id`, `quantity` y `unit` compatible con la unidad del producto.

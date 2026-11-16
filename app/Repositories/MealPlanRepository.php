@@ -10,6 +10,7 @@ use App\Models\MealPlanSettings;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 final class MealPlanRepository implements MealPlanRepositoryContract
 {
@@ -127,6 +128,55 @@ final class MealPlanRepository implements MealPlanRepositoryContract
             ->where('user_id', $userId)
             ->whereDate('plan_date', $date->toDateString())
             ->delete();
+    }
+
+    public function leftoversReferencing(int $userId, array $sourceEntryIds): Collection
+    {
+        if ($sourceEntryIds === []) {
+            return new Collection;
+        }
+
+        return MealPlanEntry::query()
+            ->where('user_id', $userId)
+            ->whereIn('leftover_of_entry_id', $sourceEntryIds)
+            ->get();
+    }
+
+    public function swapDays(int $userId, CarbonImmutable $dateA, CarbonImmutable $dateB): void
+    {
+        if ($dateA->isSameDay($dateB)) {
+            return;
+        }
+
+        DB::transaction(function () use ($userId, $dateA, $dateB): void {
+            $temporary = $this->temporaryDateFor($userId);
+
+            MealPlanEntry::query()
+                ->where('user_id', $userId)
+                ->where('plan_date', $dateA->toDateString())
+                ->update(['plan_date' => $temporary->toDateString()]);
+
+            MealPlanEntry::query()
+                ->where('user_id', $userId)
+                ->where('plan_date', $dateB->toDateString())
+                ->update(['plan_date' => $dateA->toDateString()]);
+
+            MealPlanEntry::query()
+                ->where('user_id', $userId)
+                ->where('plan_date', $temporary->toDateString())
+                ->update(['plan_date' => $dateB->toDateString()]);
+        });
+    }
+
+    private function temporaryDateFor(int $userId): CarbonImmutable
+    {
+        $temporary = CarbonImmutable::parse('1900-01-01', 'America/Lima');
+
+        while (MealPlanEntry::query()->where('user_id', $userId)->where('plan_date', $temporary->toDateString())->exists()) {
+            $temporary = $temporary->addDay();
+        }
+
+        return $temporary;
     }
 
     public function leftoverServingsUsed(int $sourceEntryId, ?int $exceptEntryId = null): int

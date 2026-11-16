@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int|null $dinner_carb_limit_g
  * @property int|null $dinner_max_prep_minutes
  * @property int|null $dinner_calorie_limit
+ * @property bool $consider_pantry_in_ai_recipes
  * @property-read User $user
  */
 class MealPlanSettings extends Model
@@ -49,6 +50,7 @@ class MealPlanSettings extends Model
         'dinner_carb_limit_g',
         'dinner_max_prep_minutes',
         'dinner_calorie_limit',
+        'consider_pantry_in_ai_recipes',
     ];
 
     protected $casts = [
@@ -65,6 +67,7 @@ class MealPlanSettings extends Model
         'dinner_carb_limit_g' => 'integer',
         'dinner_max_prep_minutes' => 'integer',
         'dinner_calorie_limit' => 'integer',
+        'consider_pantry_in_ai_recipes' => 'boolean',
     ];
 
     public function user(): BelongsTo

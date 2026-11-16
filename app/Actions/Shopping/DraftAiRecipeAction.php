@@ -33,7 +33,7 @@ final class DraftAiRecipeAction
     /**
      * @return array<string, mixed>|null
      */
-    public function execute(int $userId, ?string $idea): ?array
+    public function execute(int $userId, ?string $idea, bool $usePantry = false): ?array
     {
         $settings = $this->mealPlanRepository->settingsFor($userId);
         $products = $this->shoppingRepository->listProductsFor($userId);
@@ -41,7 +41,7 @@ final class DraftAiRecipeAction
 
         try {
             $response = $this->gateway->generateJson([
-                ['parts' => [['text' => $this->prompt($settings, $products, $pantry, $idea)]]],
+                ['parts' => [['text' => $this->prompt($settings, $products, $pantry, $idea, $usePantry)]]],
             ], ['temperature' => 0.7]);
         } catch (Throwable $e) {
             report($e);
@@ -95,6 +95,7 @@ final class DraftAiRecipeAction
         array $products,
         array $pantry,
         ?string $idea,
+        bool $usePantry,
     ): string {
         $today = CarbonImmutable::now()->setTimezone('America/Lima')->toDateString();
 
@@ -124,23 +125,33 @@ final class DraftAiRecipeAction
         }
 
         $context = [
-            'idea' => $idea !== null && trim($idea) !== '' ? trim($idea) : 'Una receta para aprovechar la despensa.',
+            'idea' => $idea !== null && trim($idea) !== ''
+                ? trim($idea)
+                : ($usePantry ? 'Una receta para aprovechar la despensa.' : 'Una receta peruana tradicional.'),
             'personas' => (int) $settings->household_size,
             'comidas_activas' => $settings->meal_types,
             'tiempo_maximo' => $settings->max_prep_minutes,
             'equipamiento_disponible' => $settings->available_equipment,
             'perfil' => ($settings->diet_profile ?? DietProfile::Balanced)->value,
             'no_incluir' => $settings->excluded_terms,
-            'despensa' => $pantryList,
             'productos' => $productList,
         ];
+
+        if ($usePantry) {
+            $context['despensa'] = $pantryList;
+        }
+
+        $pantryRule = $usePantry
+            ? '- Prioriza la despensa; usa sus productos sin cambiar la identidad tradicional del plato.'
+            : '- La idea manda. Respeta la receta tradicional y su acompañamiento; no sustituyas arroz, papa o yuca por quinoa solo porque existe en el catálogo.';
 
         return <<<PROMPT
 Eres un cocinero peruano. Propón una receta de cocina peruana usando solo productos del catálogo y devuelve solo JSON válido.
 
 Reglas:
 - Usa únicamente `producto_id` del catálogo. No inventes productos ni ids.
-- Prioriza la despensa; evita los productos de `no_incluir`.
+{$pantryRule}
+- Evita los productos de `no_incluir`.
 - Elige una o más `meal_types` de `comidas_activas`, respeta el tiempo máximo y el equipamiento disponible.
 - `instructions` debe traer los pasos de preparación en texto claro, listos para editar.
 - `diet_tags` solo acepta `vegetarian`, `vegan`, `high_protein` o `light`; si el perfil es vegetariano o vegano, incluye la etiqueta correspondiente.

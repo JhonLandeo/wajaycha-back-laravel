@@ -43,4 +43,15 @@ interface MealPlanRepositoryContract
 
     /** Servings already claimed by leftover entries of a source entry. */
     public function leftoverServingsUsed(int $sourceEntryId, ?int $exceptEntryId = null): int;
+
+    /**
+     * Entries on other days that point to one of the given source entries.
+     *
+     * @param  array<int, int>  $sourceEntryIds
+     * @return Collection<int, MealPlanEntry>
+     */
+    public function leftoversReferencing(int $userId, array $sourceEntryIds): Collection;
+
+    /** Intercambia todas las entradas de dos fechas del mismo usuario. */
+    public function swapDays(int $userId, CarbonImmutable $dateA, CarbonImmutable $dateB): void;
 }

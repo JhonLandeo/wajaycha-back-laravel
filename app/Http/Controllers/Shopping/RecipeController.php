@@ -47,7 +47,11 @@ final class RecipeController extends Controller
 
     public function draft(DraftRecipeRequest $request, DraftAiRecipeAction $action): JsonResponse
     {
-        $draft = $action->execute((int) Auth::id(), $request->validated('idea'));
+        $draft = $action->execute(
+            (int) Auth::id(),
+            $request->validated('idea'),
+            (bool) $request->validated('use_pantry', false),
+        );
 
         if ($draft === null) {
             return response()->json([

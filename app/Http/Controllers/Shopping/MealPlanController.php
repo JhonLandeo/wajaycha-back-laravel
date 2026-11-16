@@ -11,6 +11,7 @@ use App\Actions\Shopping\ChatAdjustMenuPreviewAction;
 use App\Actions\Shopping\SaveMealPlanEntryAction;
 use App\Actions\Shopping\SuggestMealAlternativeAction;
 use App\Actions\Shopping\SuggestMenuAction;
+use App\Actions\Shopping\SwapMenuDaysAction;
 use App\Actions\Shopping\UpdateMealEntryStatusAction;
 use App\Enums\MealEntryStatus;
 use App\Http\Controllers\Controller;
@@ -18,6 +19,7 @@ use App\Http\Requests\Shopping\ApplyMenuSuggestionRequest;
 use App\Http\Requests\Shopping\SendPreviewMenuChatRequest;
 use App\Http\Requests\Shopping\StoreMealPlanEntryRequest;
 use App\Http\Requests\Shopping\SuggestMealAlternativeRequest;
+use App\Http\Requests\Shopping\SwapMenuDaysRequest;
 use App\Http\Requests\Shopping\UpdateMealEntryStatusRequest;
 use App\Http\Requests\Shopping\UpdateMealPlanSettingsRequest;
 use App\Models\MealPlanEntry;
@@ -41,6 +43,7 @@ final class MealPlanController extends Controller
         private readonly MealPlanPresenter $presenter,
         private readonly SuggestMealAlternativeAction $alternativeSuggestion,
         private readonly ChatAdjustMenuPreviewAction $previewChatAction,
+        private readonly SwapMenuDaysAction $swapMenuDaysAction,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -155,6 +158,7 @@ final class MealPlanController extends Controller
             'dinner_carb_limit_g' => $request->validated('dinner_carb_limit_g', $settings->dinner_carb_limit_g),
             'dinner_max_prep_minutes' => $request->validated('dinner_max_prep_minutes', $settings->dinner_max_prep_minutes),
             'dinner_calorie_limit' => $request->validated('dinner_calorie_limit', $settings->dinner_calorie_limit),
+            'consider_pantry_in_ai_recipes' => $request->validated('consider_pantry_in_ai_recipes', $settings->consider_pantry_in_ai_recipes),
         ]);
 
         return response()->json(['data' => $this->presenter->settings($updated)]);
@@ -181,6 +185,18 @@ final class MealPlanController extends Controller
         );
 
         return response()->json(['data' => $this->presenter->entry($updated)]);
+    }
+
+    public function swapDays(SwapMenuDaysRequest $request): JsonResponse
+    {
+        $this->swapMenuDaysAction->execute(
+            (int) Auth::id(),
+            (string) $request->validated('week_start'),
+            (string) $request->validated('date_a'),
+            (string) $request->validated('date_b'),
+        );
+
+        return response()->json(['status' => 'swapped']);
     }
 
     public function clearWeek(Request $request): JsonResponse

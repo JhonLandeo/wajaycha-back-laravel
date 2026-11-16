@@ -72,3 +72,82 @@ it('returns a validation error when the AI cannot produce a valid recipe', funct
         ->assertStatus(422)
         ->assertJsonPath('message', 'No pudimos generar una receta. Intenta con otra idea.');
 });
+
+it('no manda la despensa al borrador si el usuario no la activa', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $product = Product::factory()->create(['name' => 'Pollo', 'unit' => 'kg']);
+
+    $recipe = [
+        'name' => 'Seco de pollo',
+        'meal_types' => ['lunch'],
+        'course' => 'main',
+        'prep_minutes' => 25,
+        'equipment' => ['stove'],
+        'diet_tags' => [],
+        'instructions' => '1. Cocina el pollo.',
+        'ingredients' => [
+            ['producto_id' => $product->id, 'quantity' => 0.5, 'unit' => 'kg'],
+        ],
+    ];
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode(['recipe' => $recipe])]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/recipes/draft', [
+        'idea' => 'seco de pollo',
+    ], $headers)->assertOk();
+
+    Http::assertSent(function ($request): bool {
+        $payload = json_decode($request->body(), true);
+
+        return ! str_contains((string) ($payload['contents'][0]['parts'][0]['text'] ?? ''), '"despensa"');
+    });
+});
+
+it('manda la despensa al borrador cuando el usuario la activa', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $product = Product::factory()->create(['name' => 'Pollo', 'unit' => 'kg']);
+
+    $recipe = [
+        'name' => 'Seco de pollo',
+        'meal_types' => ['lunch'],
+        'course' => 'main',
+        'prep_minutes' => 25,
+        'equipment' => ['stove'],
+        'diet_tags' => [],
+        'instructions' => '1. Cocina el pollo.',
+        'ingredients' => [
+            ['producto_id' => $product->id, 'quantity' => 0.5, 'unit' => 'kg'],
+        ],
+    ];
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode(['recipe' => $recipe])]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/recipes/draft', [
+        'idea' => 'seco de pollo',
+        'use_pantry' => true,
+    ], $headers)->assertOk();
+
+    Http::assertSent(function ($request): bool {
+        $payload = json_decode($request->body(), true);
+
+        return str_contains((string) ($payload['contents'][0]['parts'][0]['text'] ?? ''), '"despensa"');
+    });
+});
