@@ -123,7 +123,7 @@ it('keeps AI recipe drafts out of the database until the preview is applied', fu
         ]);
     });
 
-    $preview = $this->postJson('/api/shopping/menu/suggest/preview?week_start=2026-11-09&include_new_recipes=1', [], $headers)
+    $preview = $this->postJson('/api/shopping/menu/suggest/preview?week_start=2026-11-09', [], $headers)
         ->assertOk()
         ->assertJsonPath('data.entries.0.recipe.origin', 'ai')
         ->json('data.entries');
@@ -142,7 +142,7 @@ it('keeps AI recipe drafts out of the database until the preview is applied', fu
         ->and(MealPlanEntry::query()->where('user_id', $user->id)->sole()->recipe_id)->toBe($recipe->id);
 });
 
-it('skips the AI recipe generation unless the user opts in', function () {
+it('skips the AI recipe generation when the weekly limit is zero', function () {
     [$user, $headers] = $this->userWithAuth();
     previewRecipe($user->id);
 
@@ -151,6 +151,7 @@ it('skips the AI recipe generation unless the user opts in', function () {
         'meal_types' => ['lunch'],
         'plan_weekdays' => [1],
         'excluded_terms' => [],
+        'new_recipes_per_week' => 0,
     ], $headers)->assertOk();
 
     config([
