@@ -123,7 +123,7 @@ it('keeps AI recipe drafts out of the database until the preview is applied', fu
         ]);
     });
 
-    $preview = $this->postJson('/api/shopping/menu/suggest/preview?week_start=2026-11-09', [], $headers)
+    $preview = $this->postJson('/api/shopping/menu/suggest/preview?week_start=2026-11-09&include_new_recipes=1', [], $headers)
         ->assertOk()
         ->assertJsonPath('data.entries.0.recipe.origin', 'ai')
         ->json('data.entries');
@@ -140,4 +140,32 @@ it('keeps AI recipe drafts out of the database until the preview is applied', fu
 
     expect($recipe->name)->toBe('Pollo al limón')
         ->and(MealPlanEntry::query()->where('user_id', $user->id)->sole()->recipe_id)->toBe($recipe->id);
+});
+
+it('skips the AI recipe generation unless the user opts in', function () {
+    [$user, $headers] = $this->userWithAuth();
+    previewRecipe($user->id);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode(['days' => []])]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/menu/suggest/preview?week_start=2026-11-09', [], $headers)
+        ->assertOk();
+
+    Http::assertSentCount(1);
 });

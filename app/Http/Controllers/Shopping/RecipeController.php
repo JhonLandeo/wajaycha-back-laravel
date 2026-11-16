@@ -7,12 +7,14 @@ namespace App\Http\Controllers\Shopping;
 use App\Actions\Shopping\DraftAiRecipeAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shopping\DraftRecipeRequest;
+use App\Http\Requests\Shopping\SetRecipeEnabledRequest;
 use App\Http\Requests\Shopping\StoreRecipeRequest;
 use App\Http\Requests\Shopping\UpdateRecipeRequest;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
 use App\Repositories\Contracts\RecipeRepositoryContract;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 final class RecipeController extends Controller
@@ -21,12 +23,25 @@ final class RecipeController extends Controller
         private readonly RecipeRepositoryContract $repository,
     ) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $recipes = $this->repository->allForUser((int) Auth::id());
+        $userId = (int) Auth::id();
+        $manage = $request->boolean('manage');
+        $recipes = $manage
+            ? $this->repository->allForUserForManagement($userId)
+            : $this->repository->allForUser($userId);
+        $states = $manage ? $this->repository->userStatesFor($userId) : [];
 
         return response()->json([
-            'data' => $recipes->map(fn (Recipe $recipe): array => $this->present($recipe))->values()->all(),
+            'data' => $recipes
+                ->map(fn (Recipe $recipe): array => $this->present(
+                    $recipe,
+                    $manage
+                        ? ($recipe->user_id === null ? ($states[(int) $recipe->id] ?? true) : (bool) $recipe->is_active)
+                        : null,
+                ))
+                ->values()
+                ->all(),
         ]);
     }
 
@@ -56,10 +71,23 @@ final class RecipeController extends Controller
 
     public function update(UpdateRecipeRequest $request, int $recipe): JsonResponse
     {
-        $model = $this->repository->findEditableForUser($recipe, (int) Auth::id());
+        $userId = (int) Auth::id();
+        $model = $this->repository->findEditableForUser($recipe, $userId);
 
         if ($model === null) {
-            abort(404);
+            $global = $this->repository->findGlobal($recipe);
+
+            if ($global === null) {
+                abort(404);
+            }
+
+            $copy = $this->repository->create(
+                $userId,
+                $this->recipeData($request),
+                $this->ingredientsData($request),
+            );
+
+            return response()->json(['data' => $this->present($copy), 'copied' => true]);
         }
 
         $updated = $this->repository->update(
@@ -69,6 +97,24 @@ final class RecipeController extends Controller
         );
 
         return response()->json(['data' => $this->present($updated)]);
+    }
+
+    public function setEnabled(SetRecipeEnabledRequest $request, int $recipe): JsonResponse
+    {
+        $userId = (int) Auth::id();
+        $model = $this->repository->findAnyForUser($recipe, $userId);
+
+        if ($model === null) {
+            abort(404);
+        }
+
+        $enabled = (bool) $request->validated('enabled');
+        $this->repository->setUserEnabled($userId, $model, $enabled);
+        $model->refresh();
+
+        return response()->json([
+            'data' => $this->present($model, $model->user_id === null ? $enabled : (bool) $model->is_active),
+        ]);
     }
 
     public function destroy(int $recipe): JsonResponse
@@ -139,7 +185,7 @@ final class RecipeController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function present(Recipe $recipe): array
+    private function present(Recipe $recipe, ?bool $isEnabled = null): array
     {
         return [
             'id' => (int) $recipe->id,
@@ -157,6 +203,7 @@ final class RecipeController extends Controller
             'prep_minutes' => $recipe->prep_minutes,
             'instructions' => $recipe->instructions,
             'is_active' => (bool) $recipe->is_active,
+            'is_enabled' => $isEnabled ?? ($recipe->user_id === null ? true : (bool) $recipe->is_active),
             'is_global' => $recipe->user_id === null,
             'ingredients' => $recipe->ingredients
                 ->map(static fn (RecipeIngredient $ingredient): array => [

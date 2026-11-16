@@ -18,6 +18,28 @@ interface RecipeRepositoryContract
     public function allForUser(int $userId): Collection;
 
     /**
+     * Recetario de gestión: catálogo global + recetas propias, incluidas las
+     * inactivas y las desactivadas por el usuario. No es la lista que ve la IA.
+     *
+     * @return Collection<int, Recipe>
+     */
+    public function allForUserForManagement(int $userId): Collection;
+
+    /**
+     * Estado por usuario de las recetas globales, keyed by recipe id.
+     *
+     * @return array<int, bool>
+     */
+    public function userStatesFor(int $userId): array;
+
+    public function findGlobal(int $id): ?Recipe;
+
+    public function findAnyForUser(int $id, int $userId): ?Recipe;
+
+    /** Activa o desactiva una receta propia; oculta una global para el usuario. */
+    public function setUserEnabled(int $userId, Recipe $recipe, bool $enabled): void;
+
+    /**
      * Una receta visible para lectura (global o propia), o null.
      */
     public function findForUser(int $id, int $userId): ?Recipe;

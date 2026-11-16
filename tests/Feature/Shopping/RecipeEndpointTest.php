@@ -131,18 +131,26 @@ it('updates the user recipe and replaces its ingredients', function () {
     expect($recipe->fresh()->ingredients()->count())->toBe(1);
 });
 
-it('never edits or deletes a global recipe or another user recipe', function () {
-    [, $headers] = $this->userWithAuth();
-    $global = Recipe::factory()->global()->create();
+it('copies a global recipe on edit and never edits or deletes it in place', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $global = Recipe::factory()->global()->create(['name' => 'Receta global']);
     [$other] = $this->userWithAuth();
     $foreign = Recipe::factory()->create(['user_id' => $other->id]);
     $product = Product::factory()->create(['unit' => 'kg']);
 
     $payload = recipePayload($product, ['name' => 'Intento ajeno']);
 
-    $this->putJson("/api/shopping/recipes/{$global->id}", $payload, $headers)->assertStatus(404);
+    $this->putJson("/api/shopping/recipes/{$global->id}", $payload, $headers)
+        ->assertOk()
+        ->assertJsonPath('copied', true)
+        ->assertJsonPath('data.name', 'Intento ajeno');
+
+    expect($global->fresh()->name)->toBe('Receta global')
+        ->and(Recipe::where('user_id', $user->id)->where('name', 'Intento ajeno')->exists())->toBeTrue();
+
     $this->deleteJson("/api/shopping/recipes/{$global->id}", [], $headers)->assertStatus(404);
-    $this->putJson("/api/shopping/recipes/{$foreign->id}", $payload, $headers)->assertStatus(404);
+    $foreignPayload = recipePayload($product, ['name' => 'Intento ajeno 2']);
+    $this->putJson("/api/shopping/recipes/{$foreign->id}", $foreignPayload, $headers)->assertStatus(404);
     $this->deleteJson("/api/shopping/recipes/{$foreign->id}", [], $headers)->assertStatus(404);
 });
 
@@ -158,4 +166,36 @@ it('deletes a user recipe and its ingredients', function () {
 
     expect(Recipe::find($recipe->id))->toBeNull()
         ->and(RecipeIngredient::where('recipe_id', $recipe->id)->exists())->toBeFalse();
+});
+
+it('toggles a recipe and hides global recipes from the active catalogue', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$other, $otherHeaders] = $this->userWithAuth();
+
+    $global = Recipe::factory()->global()->create(['name' => 'Global activa']);
+    $private = Recipe::factory()->create(['user_id' => $user->id, 'name' => 'Propia activa']);
+
+    $this->patchJson("/api/shopping/recipes/{$private->id}/enabled", ['enabled' => false], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.is_enabled', false);
+
+    $this->patchJson("/api/shopping/recipes/{$global->id}/enabled", ['enabled' => false], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.is_enabled', false);
+
+    $this->getJson('/api/shopping/recipes', $headers)
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+
+    $managed = $this->getJson('/api/shopping/recipes?manage=1', $headers)
+        ->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->json('data');
+
+    expect(collect($managed)->every(fn (array $recipe): bool => $recipe['is_enabled'] === false))->toBeTrue();
+
+    $this->getJson('/api/shopping/recipes', $otherHeaders)
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.name', 'Global activa');
 });

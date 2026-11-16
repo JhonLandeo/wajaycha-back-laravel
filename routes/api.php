@@ -126,6 +126,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('shopping/recipes/draft', [\App\Http\Controllers\Shopping\RecipeController::class, 'draft']);
     Route::post('shopping/recipes', [\App\Http\Controllers\Shopping\RecipeController::class, 'store']);
     Route::put('shopping/recipes/{recipe}', [\App\Http\Controllers\Shopping\RecipeController::class, 'update']);
+    Route::patch('shopping/recipes/{recipe}/enabled', [\App\Http\Controllers\Shopping\RecipeController::class, 'setEnabled']);
     Route::delete('shopping/recipes/{recipe}', [\App\Http\Controllers\Shopping\RecipeController::class, 'destroy']);
 
     Route::get('shopping/weekly-plan', [\App\Http\Controllers\Shopping\WeeklyPlanController::class, 'show']);

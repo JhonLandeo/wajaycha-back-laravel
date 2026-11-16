@@ -7,6 +7,7 @@ namespace App\Repositories;
 use App\Enums\RecipeOrigin;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
+use App\Models\RecipeUserState;
 use App\Repositories\Contracts\RecipeRepositoryContract;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
@@ -21,9 +22,36 @@ final class RecipeRepository implements RecipeRepositoryContract
                 $query->whereNull('user_id')->orWhere('user_id', $userId);
             })
             ->where('is_active', true)
+            ->whereNotExists(static function ($query) use ($userId): void {
+                $query->select(DB::raw(1))
+                    ->from('recipe_user_states')
+                    ->whereColumn('recipe_user_states.recipe_id', 'recipes.id')
+                    ->where('recipe_user_states.user_id', $userId)
+                    ->where('recipe_user_states.is_enabled', false);
+            })
             ->with(['ingredients.product'])
             ->orderBy('name')
             ->get();
+    }
+
+    public function allForUserForManagement(int $userId): Collection
+    {
+        return Recipe::query()
+            ->where(static function ($query) use ($userId): void {
+                $query->whereNull('user_id')->orWhere('user_id', $userId);
+            })
+            ->with(['ingredients.product'])
+            ->orderBy('name')
+            ->get();
+    }
+
+    public function userStatesFor(int $userId): array
+    {
+        return RecipeUserState::query()
+            ->where('user_id', $userId)
+            ->pluck('is_enabled', 'recipe_id')
+            ->map(static fn ($enabled): bool => (bool) $enabled)
+            ->all();
     }
 
     public function findForUser(int $id, int $userId): ?Recipe
@@ -38,6 +66,46 @@ final class RecipeRepository implements RecipeRepositoryContract
             ->first();
 
         return $recipe;
+    }
+
+    public function findGlobal(int $id): ?Recipe
+    {
+        /** @var Recipe|null $recipe */
+        $recipe = Recipe::query()
+            ->whereKey($id)
+            ->whereNull('user_id')
+            ->with(['ingredients.product'])
+            ->first();
+
+        return $recipe;
+    }
+
+    public function findAnyForUser(int $id, int $userId): ?Recipe
+    {
+        /** @var Recipe|null $recipe */
+        $recipe = Recipe::query()
+            ->whereKey($id)
+            ->where(static function ($query) use ($userId): void {
+                $query->whereNull('user_id')->orWhere('user_id', $userId);
+            })
+            ->with(['ingredients.product'])
+            ->first();
+
+        return $recipe;
+    }
+
+    public function setUserEnabled(int $userId, Recipe $recipe, bool $enabled): void
+    {
+        if ($recipe->user_id === $userId) {
+            $recipe->update(['is_active' => $enabled]);
+
+            return;
+        }
+
+        RecipeUserState::query()->updateOrCreate(
+            ['user_id' => $userId, 'recipe_id' => $recipe->id],
+            ['is_enabled' => $enabled],
+        );
     }
 
     public function findEditableForUser(int $id, int $userId): ?Recipe

@@ -67,7 +67,7 @@ final class SuggestMenuAction
      *
      * @return array{source: 'ai'|'fallback', week: PlanningWeek, entries: \Illuminate\Database\Eloquent\Collection<int, \App\Models\MealPlanEntry>}
      */
-    public function preview(int $userId, string $weekStart): array
+    public function preview(int $userId, string $weekStart, bool $includeNewRecipes = false): array
     {
         $asOf = CarbonImmutable::now();
         $week = PlanningWeek::forWeekStarting(
@@ -78,7 +78,7 @@ final class SuggestMenuAction
         DB::beginTransaction();
 
         try {
-            $source = $this->execute($userId, $week->startsOn->toDateString());
+            $source = $this->execute($userId, $week->startsOn->toDateString(), $includeNewRecipes);
             $entries = $this->mealPlanRepository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
 
             return ['source' => $source, 'week' => $week, 'entries' => $entries];
@@ -90,7 +90,7 @@ final class SuggestMenuAction
     /**
      * @return 'ai'|'fallback'
      */
-    public function execute(int $userId, string $weekStart): string
+    public function execute(int $userId, string $weekStart, bool $includeNewRecipes = true): string
     {
         $asOf = CarbonImmutable::now();
         $week = PlanningWeek::forWeekStarting(CarbonImmutable::parse($weekStart, 'America/Lima'), $asOf);
@@ -101,12 +101,14 @@ final class SuggestMenuAction
             return 'fallback';
         }
 
-        // La IA puede proponer recetas nuevas con productos del catálogo antes
-        // de armar la semana. Si falla, el plan sigue con el recetario actual.
-        try {
-            $this->recipeGenerator->execute($userId, $week->startsOn->toDateString());
-        } catch (Throwable $e) {
-            report($e);
+        // La generación de recetas nuevas es opt-in: suma una segunda llamada
+        // de IA. Si falla, el plan sigue con el recetario actual.
+        if ($includeNewRecipes) {
+            try {
+                $this->recipeGenerator->execute($userId, $week->startsOn->toDateString());
+            } catch (Throwable $e) {
+                report($e);
+            }
         }
 
         $meals = $settings->meal_types;
@@ -423,11 +425,6 @@ final class SuggestMenuAction
                     'despensa_aprovechamiento' => $evaluation['aprovechamiento'],
                     'vence_pronto' => $evaluation['vence_pronto'],
                     'faltantes' => $evaluation['faltantes'],
-                    'ingredientes' => $recipe->ingredients
-                        ->map(static fn ($ingredient): string => (string) $ingredient->product->name)
-                        ->filter()
-                        ->values()
-                        ->all(),
                 ];
             }
         }

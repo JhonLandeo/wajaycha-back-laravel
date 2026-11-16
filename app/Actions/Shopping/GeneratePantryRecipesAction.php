@@ -162,11 +162,6 @@ final class GeneratePantryRecipesAction
         $existingList = $existing->map(static fn (Recipe $recipe): array => [
             'nombre' => $recipe->name,
             'comidas' => $recipe->meal_types,
-            'ingredientes' => $recipe->ingredients
-                ->map(static fn ($ingredient): string => (string) $ingredient->product->name)
-                ->filter()
-                ->values()
-                ->all(),
         ])->values()->all();
 
         $context = [

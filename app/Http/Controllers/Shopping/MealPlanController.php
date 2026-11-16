@@ -49,7 +49,7 @@ final class MealPlanController extends Controller
     {
         $userId = (int) Auth::id();
         $week = $this->weekFrom($request);
-        $source = $this->suggestMenu->execute($userId, $week->startsOn->toDateString());
+        $source = $this->suggestMenu->execute($userId, $week->startsOn->toDateString(), $request->boolean('include_new_recipes', true));
 
         return response()->json([
             'data' => $this->menuPayload($userId, $week),
@@ -61,7 +61,7 @@ final class MealPlanController extends Controller
     {
         $userId = (int) Auth::id();
         $week = $this->weekFrom($request);
-        $preview = $this->suggestMenu->preview($userId, $week->startsOn->toDateString());
+        $preview = $this->suggestMenu->preview($userId, $week->startsOn->toDateString(), $request->boolean('include_new_recipes'));
         $settings = $this->repository->settingsFor($userId);
 
         return response()->json([
