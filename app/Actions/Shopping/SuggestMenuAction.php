@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Shopping;
 
+use App\DTOs\Prices\PriceContext;
 use App\DTOs\Shopping\Nutrition;
 use App\DTOs\Shopping\PantryStock;
 use App\DTOs\Shopping\PlanningWeek;
@@ -17,10 +18,13 @@ use App\Models\MealPlanSettings;
 use App\Models\Recipe;
 use App\Repositories\Contracts\FoodBudgetRepositoryContract;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
+use App\Repositories\Contracts\PriceRepositoryContract;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
 use App\Services\AI\OpenCodeGateway;
+use App\Services\Prices\PriceSourceRegistry;
 use App\Services\Shopping\MenuCalendar;
 use App\Services\Shopping\MenuCandidateFilter;
+use App\Services\Shopping\MenuPriceEstimator;
 use App\Services\Shopping\NutritionCalculator;
 use App\Services\Shopping\PantryPriority;
 use App\Services\Shopping\UnitConverter;
@@ -57,6 +61,10 @@ final class SuggestMenuAction
     /** @var array<int, \App\DTOs\Shopping\Nutrition> */
     private array $nutritionByRecipe = [];
 
+    private ?PriceContext $priceContext = null;
+
+    private ?CarbonImmutable $priceAsOf = null;
+
     public function __construct(
         private readonly MealPlanRepositoryContract $mealPlanRepository,
         private readonly ShoppingRepositoryContract $shoppingRepository,
@@ -64,6 +72,9 @@ final class SuggestMenuAction
         private readonly MenuCandidateFilter $candidateFilter,
         private readonly NutritionCalculator $nutritionCalculator,
         private readonly PantryPriority $pantryPriority,
+        private readonly PriceRepositoryContract $priceRepository,
+        private readonly PriceSourceRegistry $priceRegistry,
+        private readonly MenuPriceEstimator $priceEstimator,
         private readonly GeneratePantryRecipesAction $recipeGenerator,
         private readonly MenuCalendar $calendar,
         private readonly OpenCodeGateway $gateway,
@@ -161,6 +172,11 @@ final class SuggestMenuAction
             static fn ($habit): int => (int) $habit->product_id,
             $this->habits,
         );
+
+        $this->priceAsOf = $asOf;
+        $this->priceContext = ($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::SaveMoney
+            ? $this->priceContextFor($candidates, $asOf)
+            : null;
 
         $available = $this->pantryAvailabilityByProduct($pantry, $asOf);
         $priorityOrder = $this->pantryPriority->orderedProductIds($pantry, $asOf);
@@ -366,6 +382,7 @@ final class SuggestMenuAction
         }
 
         $profile = $settings->diet_profile ?? DietProfile::Balanced;
+        $strategy = $settings->menu_strategy ?? MenuStrategy::Balanced;
         $selected = [];
         foreach ($days as $date) {
             foreach ($meals as $meal) {
@@ -429,6 +446,21 @@ final class SuggestMenuAction
                 }
 
                 $evaluation = $this->evaluate($recipe, $choice['cook_servings'], $available);
+
+                if ($strategy === MenuStrategy::SaveMoney
+                    && $this->hasCheaperAlternative(
+                        $candidates[$meal] ?? [],
+                        $recipeId,
+                        $evaluation['costo_centavos'],
+                        $choice['cook_servings'],
+                        $available,
+                        $date,
+                        $meal,
+                        $usage,
+                        $slotRecipe,
+                    )) {
+                    continue;
+                }
 
                 if (($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::UsePantry
                     && $evaluation['aprovechamiento'] <= 0.0
@@ -520,6 +552,11 @@ final class SuggestMenuAction
                     'despensa_aprovechamiento' => $evaluation['aprovechamiento'],
                     'vence_pronto' => $evaluation['vence_pronto'],
                     'faltantes' => $evaluation['faltantes'],
+                    'costo_faltantes' => $evaluation['costo_centavos'] !== null
+                        ? round($evaluation['costo_centavos'] / 100, 2)
+                        : null,
+                    'costo_completo' => $evaluation['costo_completo'],
+                    'productos_sin_precio' => $evaluation['costo_sin_precio'],
                 ];
             }
         }
@@ -590,7 +627,7 @@ Reglas:
 - `tipo` es `main` (plato principal), `drink` (bebida) o `side` (acompañamiento). El `recipe_id` nunca es una `drink`: la bebida va en `drink_recipe_id`. Si el catálogo tiene una bebida para esa comida, úsala como acompañamiento; en el desayuno es lo esperado.
 - `drink_recipe_id` debe ser distinto de `recipe_id`, estar en el catálogo y ser una `drink`.
 - Prefiere recetas que usen los productos de `habitos`; no es obligatorio, pero ayuda a cubrir lo que el usuario declaró.
-- Según `criterio`: `use_pantry` empieza por el producto de `despensa` con `prioridad` más baja; si una receta lo usa, elígela aunque falten otros ingredientes, porque los faltantes se compran. No elijas una receta que ignore ese producto si otra candidata lo usa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
+- Según `criterio`: `use_pantry` empieza por el producto de `despensa` con `prioridad` más baja; si una receta lo usa, elígela aunque falten otros ingredientes, porque los faltantes se compran. No elijas una receta que ignore ese producto si otra candidata lo usa. `save_money` minimiza `costo_faltantes` en soles; no elijas una receta cara si hay una más barata. `costo_completo = false` significa que falta precio, no que sea gratis. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
 - `productos` es la lista compacta de ingredientes de cada receta. Reutiliza productos base entre comidas del mismo día: si el desayuno ya usa quinua, arroz, lentejas o un producto similar, prefiere un almuerzo o cena que use el mismo producto para cocinarlo una sola vez.
 - La cena ya viene filtrada hasta `limite_maximo_cena`; prefiere `limite_minutos_cena` y usa el margen de cinco minutos solo si no hay otra cena. Prefiere recetas `light`. Si `limite_calorias_cena` no es null, elige una cena por debajo y evita platos de fondo pesados si hay una opción ligera.
 - En `save_money`, si el almuerzo es compatible con la cena, cocina para dos comidas (cook_servings = porciones del almuerzo + personas de la cena) y deja la cena vacía; el backend la convertirá en sobras del almuerzo. Para que sea sobra, el almuerzo debe ser `light` y no llevar pescado fresco ni mariscos.
@@ -665,7 +702,10 @@ PROMPT;
      *     cobertura: float,
      *     aprovechamiento: float,
      *     faltantes: array<int, string>,
-     *     vence_pronto: bool
+     *     vence_pronto: bool,
+     *     costo_centavos: int|null,
+     *     costo_completo: bool,
+     *     costo_sin_precio: int
      * }
      */
     private function evaluate(Recipe $recipe, int $cookServings, array $available): array
@@ -701,12 +741,22 @@ PROMPT;
             }
         }
 
+        $cost = $this->priceEstimator->estimate(
+            $requirements,
+            $available,
+            $this->priceContext,
+            $this->priceAsOf ?? CarbonImmutable::now(),
+        );
+
         return [
             'requirements' => $requirements,
             'cobertura' => $needed > 0.0 ? round(min(1.0, $covered / $needed), 3) : 0.0,
             'aprovechamiento' => round($aprovechamiento, 3),
             'faltantes' => array_values(array_unique($faltantes)),
             'vence_pronto' => $expiresSoon,
+            'costo_centavos' => $cost['cost_cents'],
+            'costo_completo' => $cost['complete'],
+            'costo_sin_precio' => $cost['unpriced'],
         ];
     }
 
@@ -790,7 +840,10 @@ PROMPT;
      *         cobertura: float,
      *         aprovechamiento: float,
      *         faltantes: array<int, string>,
-     *         vence_pronto: bool
+     *         vence_pronto: bool,
+     *         costo_centavos: int|null,
+     *         costo_completo: bool,
+     *         costo_sin_precio: int
      *     }
      * }|null
      */
@@ -836,7 +889,10 @@ PROMPT;
      *         cobertura: float,
      *         aprovechamiento: float,
      *         faltantes: array<int, string>,
-     *         vence_pronto: bool
+     *         vence_pronto: bool,
+     *         costo_centavos: int|null,
+     *         costo_completo: bool,
+     *         costo_sin_precio: int
      *     }
      * }|null
      */
@@ -932,7 +988,10 @@ PROMPT;
      *         cobertura: float,
      *         aprovechamiento: float,
      *         faltantes: array<int, string>,
-     *         vence_pronto: bool
+     *         vence_pronto: bool,
+     *         costo_centavos: int|null,
+     *         costo_completo: bool,
+     *         costo_sin_precio: int
      *     }
      * }|null
      */
@@ -1095,7 +1154,10 @@ PROMPT;
      *     cobertura: float,
      *     aprovechamiento: float,
      *     faltantes: array<int, string>,
-     *     vence_pronto: bool
+     *     vence_pronto: bool,
+     *     costo_centavos: int|null,
+     *     costo_completo: bool,
+     *     costo_sin_precio: int
      * }  $evaluation
      * @param  array<int, true>  $sharedProductIds
      */
@@ -1166,7 +1228,8 @@ PROMPT;
                 + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
                 - $varietyPenalty,
-            MenuStrategy::SaveMoney => $evaluation['cobertura'] * 8.0
+            MenuStrategy::SaveMoney => $this->saveMoneyCostScore($evaluation)
+                + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 1.0 : 0.0)
                 - $varietyPenalty,
             MenuStrategy::Balanced => $evaluation['cobertura'] * 4.0
@@ -1237,6 +1300,26 @@ PROMPT;
         }
 
         return $eligible;
+    }
+
+    /**
+     * @param  array{costo_centavos: int|null, costo_completo: bool, costo_sin_precio: int}  $evaluation
+     */
+    private function saveMoneyCostScore(array $evaluation): float
+    {
+        $cost = $evaluation['costo_centavos'];
+
+        if ($cost === null) {
+            return -4.0;
+        }
+
+        $score = -min(12.0, $cost / 100.0);
+
+        if (! $evaluation['costo_completo']) {
+            $score -= 3.0;
+        }
+
+        return $score;
     }
 
     private function nutritionOf(Recipe $recipe): Nutrition
@@ -1447,6 +1530,46 @@ PROMPT;
         }
 
         return true;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function hasCheaperAlternative(
+        array $candidates,
+        int $exceptId,
+        ?int $costCents,
+        int $cookServings,
+        array $available,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+    ): bool {
+        foreach ($candidates as $recipe) {
+            $recipeId = (int) $recipe->id;
+
+            if ($recipeId === $exceptId
+                || $recipe->course === RecipeCourse::Drink
+                || ! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
+                continue;
+            }
+
+            $alternative = $this->evaluate($recipe, $cookServings, $available)['costo_centavos'];
+
+            if ($alternative === null) {
+                continue;
+            }
+
+            if ($costCents === null || $alternative + 100 < $costCents) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1712,6 +1835,42 @@ PROMPT;
         }
 
         return $created;
+    }
+
+    /**
+     * @param  array<string, array<int, Recipe>>  $candidates
+     */
+    private function priceContextFor(array $candidates, CarbonImmutable $asOf): ?PriceContext
+    {
+        try {
+            $productIds = [];
+
+            foreach ($candidates as $recipes) {
+                foreach ($recipes as $recipe) {
+                    foreach ($recipe->ingredients as $ingredient) {
+                        $productIds[(int) $ingredient->product_id] = true;
+                    }
+                }
+            }
+
+            if ($productIds === []) {
+                return null;
+            }
+
+            $policies = $this->priceRegistry->enabledPolicies();
+
+            return new PriceContext(
+                quotes: $this->priceRepository->quotesFor(
+                    array_keys($productIds),
+                    $this->priceRegistry->cutoffsFor($asOf),
+                ),
+                policies: $policies,
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ConsumptionHabit;
 use App\Models\MealPlanEntry;
 use App\Models\PantryItem;
+use App\Models\PriceObservation;
 use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
@@ -1188,4 +1189,48 @@ it('enfoca la generación en la cena cuando faltan cenas para la semana', functi
 
     expect(Recipe::query()->where('origin', 'ai')->where('name', 'Cena nueva de quince minutos')->exists())->toBeTrue()
         ->and(collect($entries)->every(fn (array $entry): bool => $entry['meal_type'] === 'dinner'))->toBeTrue();
+});
+
+it('en modo ahorro prefiere la receta con faltantes mas baratos', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$cheapRecipe, $cheapProduct] = suggestionRecipe($user->id, 'Receta barata', 'lunch');
+    [$expensiveRecipe, $expensiveProduct] = suggestionRecipe($user->id, 'Receta cara', 'lunch');
+    $cheapRecipe->update(['prep_minutes' => 20]);
+    $expensiveRecipe->update(['prep_minutes' => 20]);
+
+    PriceObservation::factory()->create([
+        'product_id' => $cheapProduct->id,
+        'source' => 'inei',
+        'price_kind' => 'retail',
+        'unit' => 'kg',
+        'unit_price' => '5.0000',
+        'period_start' => '2026-11-01',
+        'period_end' => '2026-11-09',
+        'observed_at' => now(),
+    ]);
+    PriceObservation::factory()->create([
+        'product_id' => $expensiveProduct->id,
+        'source' => 'inei',
+        'price_kind' => 'retail',
+        'unit' => 'kg',
+        'unit_price' => '20.0000',
+        'period_start' => '2026-11-01',
+        'period_end' => '2026-11-09',
+        'observed_at' => now(),
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'save_money',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Receta barata');
 });
