@@ -94,7 +94,9 @@ it('uses the AI choice and turns its extra portions into leftovers', function ()
 
 it('falls back to a deterministic week when the AI is unavailable', function () {
     [$user, $headers] = $this->userWithAuth();
-    suggestionRecipe($user->id);
+    suggestionRecipe($user->id, 'Receta A');
+    suggestionRecipe($user->id, 'Receta B');
+    suggestionRecipe($user->id, 'Receta C');
 
     $this->putJson('/api/shopping/menu/settings', [
         'household_size' => 2,
@@ -298,10 +300,12 @@ it('rejects an AI suggestion that repeats the same recipe on consecutive days', 
     expect($names)->toBe(['Receta A', 'Receta B']);
 });
 
-it('caps a recipe at two occurrences when another candidate is available', function () {
+it('uses every recipe at most once when the AI keeps insisting on the same one', function () {
     [$user, $headers] = $this->userWithAuth();
     [$recipeA] = suggestionRecipe($user->id, 'Receta A');
     [$recipeB] = suggestionRecipe($user->id, 'Receta B');
+    [$recipeC] = suggestionRecipe($user->id, 'Receta C');
+    [$recipeD] = suggestionRecipe($user->id, 'Receta D');
 
     $this->putJson('/api/shopping/menu/settings', [
         'household_size' => 2,
@@ -340,8 +344,9 @@ it('caps a recipe at two occurrences when another candidate is available', funct
         ->with('recipe')
         ->get();
 
-    expect($entries->where('recipe_id', $recipeA->id))->toHaveCount(2)
-        ->and($entries->where('recipe_id', $recipeB->id))->toHaveCount(2);
+    foreach ([$recipeA, $recipeB, $recipeC, $recipeD] as $recipe) {
+        expect($entries->where('recipe_id', $recipe->id))->toHaveCount(1);
+    }
 });
 
 it('does not propose days that already passed in the current week', function () {
@@ -728,4 +733,70 @@ it('always allows a no-cook recipe even when the user only declares a stove', fu
     $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
         ->assertOk()
         ->assertJsonPath('data.entries.0.recipe.name', 'Ensalada de fruta');
+});
+
+it('does not collapse a light profile to the only light recipe', function () {
+    [$user, $headers] = $this->userWithAuth();
+    suggestionRecipe($user->id, 'Ligera', 'lunch', 'main', [], ['light']);
+    suggestionRecipe($user->id, 'Normal A');
+    suggestionRecipe($user->id, 'Normal B');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3],
+        'excluded_terms' => [],
+        'diet_profile' => 'light',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $entries = $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'fallback')
+        ->assertJsonCount(3, 'data.entries')
+        ->json('data.entries');
+
+    $names = array_column($entries, 'recipe');
+
+    expect($names[0]['name'])->toBe('Ligera')
+        ->and(array_filter($names, static fn (array $recipe): bool => $recipe['name'] === 'Ligera'))->toHaveCount(1);
+});
+
+it('accepts an AI choice without the light tag when a light recipe exists', function () {
+    [$user, $headers] = $this->userWithAuth();
+    suggestionRecipe($user->id, 'Ligera', 'lunch', 'main', [], ['light']);
+    [$normal] = suggestionRecipe($user->id, 'Normal');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'diet_profile' => 'light',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    $aiJson = json_encode([
+        'days' => [
+            ['date' => '2026-11-09', 'meals' => ['lunch' => ['recipe_id' => $normal->id, 'cook_servings' => 2]]],
+        ],
+    ]);
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => $aiJson]]]]],
+        ]),
+    ]);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'ai')
+        ->assertJsonPath('data.entries.0.recipe.name', 'Normal');
 });

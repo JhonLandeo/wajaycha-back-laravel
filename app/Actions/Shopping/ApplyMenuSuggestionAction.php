@@ -62,6 +62,7 @@ final class ApplyMenuSuggestionAction
         }
 
         $normalized = $this->normalize($entries, $days, $meals);
+        $this->assertNoRepeatedRecipes($normalized);
 
         DB::transaction(function () use ($userId, $week, $settings, $productsById, $normalized, &$existingNames): void {
             $recipeMap = [];
@@ -173,6 +174,33 @@ final class ApplyMenuSuggestionAction
                 ]);
             }
         });
+    }
+
+    /**
+     * Una semana no repite el mismo plato principal. Las sobras quedan fuera:
+     * comparten `recipe_id` con la comida que las produjo y eso es intencional.
+     *
+     * @param  array<int, array<string, mixed>>  $normalized
+     */
+    private function assertNoRepeatedRecipes(array $normalized): void
+    {
+        $seen = [];
+
+        foreach ($normalized as $entry) {
+            if ($entry['kind'] !== MealEntryKind::Recipe || $entry['recipe_id'] === null) {
+                continue;
+            }
+
+            $recipeId = (int) $entry['recipe_id'];
+
+            if (isset($seen[$recipeId])) {
+                throw ValidationException::withMessages([
+                    'entries' => 'La propuesta repite una receta en la semana. Quita una de las dos o pide otra opción.',
+                ]);
+            }
+
+            $seen[$recipeId] = true;
+        }
     }
 
     /**

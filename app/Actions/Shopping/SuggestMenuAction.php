@@ -42,7 +42,7 @@ use Throwable;
  */
 final class SuggestMenuAction
 {
-    private const MAX_RECIPE_OCCURRENCES = 2;
+    private const MAX_RECIPE_OCCURRENCES = 1;
 
     /** @var array<int, \App\Models\ConsumptionHabit> */
     private array $habits = [];
@@ -321,8 +321,7 @@ final class SuggestMenuAction
                 $recipeId = $choice['recipe_id'];
                 $recipe = $byMeal[$meal][$recipeId];
 
-                if (! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)
-                    && $this->hasUsableAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe)) {
+                if (! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
                     continue;
                 }
 
@@ -334,15 +333,12 @@ final class SuggestMenuAction
                     continue;
                 }
 
-                $dietTag = match ($profile) {
-                    DietProfile::HighProtein => 'high_protein',
-                    DietProfile::Light => 'light',
-                    default => null,
-                };
-
-                if ($dietTag !== null
-                    && ! in_array($dietTag, $recipe->diet_tags ?? [], true)
-                    && $this->hasDietAlternative($candidates[$meal] ?? [], $recipeId, $dietTag, $date, $meal, $usage, $slotRecipe)) {
+                // Alto en proteína sigue siendo una preferencia fuerte. Ligero
+                // es solo un bonus de puntaje: con pocas recetas etiquetadas, el
+                // filtro fuerte reducía la semana a un único plato (ADR-0033).
+                if ($profile === DietProfile::HighProtein
+                    && ! in_array('high_protein', $recipe->diet_tags ?? [], true)
+                    && $this->hasDietAlternative($candidates[$meal] ?? [], $recipeId, 'high_protein', $date, $meal, $usage, $slotRecipe)) {
                     continue;
                 }
 
@@ -492,7 +488,7 @@ Reglas:
 - Según `criterio`: `use_pantry` prioriza `despensa_aprovechamiento` y reparte la despensa entre recetas; no elijas una receta con aprovechamiento 0 si otra candidata usa despensa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
 - Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
 - `nutricion` es aproximada y por porción; no la recalcules ni la inventes. Si `nutricion.is_complete` es false, no la uses para decidir el objetivo. Si `objetivo_kcal_dia` no es null, reparte el objetivo entre las comidas activas y evita que un día quede muy por encima. Si `limite_carbohidratos_cena_g` no es null, prefiere cenas con `carbs_g` por debajo del límite; si no hay alternativa, elige la de menos carbohidratos.
-- No repitas la misma receta más de dos veces en la semana ni en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
+- Usa cada receta una sola vez en la semana; no repitas el mismo plato. Tampoco repitas la misma receta en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
 - No expliques nada fuera del JSON.
 
 Contexto:
@@ -852,11 +848,10 @@ PROMPT;
         $strategy = $settings->menu_strategy ?? MenuStrategy::Balanced;
         $profile = $settings->diet_profile ?? DietProfile::Balanced;
 
-        if (in_array($profile, [DietProfile::HighProtein, DietProfile::Light], true)) {
-            $dietTag = $profile === DietProfile::HighProtein ? 'high_protein' : 'light';
+        if ($profile === DietProfile::HighProtein) {
             $withTag = array_values(array_filter(
                 $candidates,
-                static fn (Recipe $recipe): bool => in_array($dietTag, $recipe->diet_tags ?? [], true),
+                static fn (Recipe $recipe): bool => in_array('high_protein', $recipe->diet_tags ?? [], true),
             ));
 
             if ($withTag !== []) {
@@ -883,11 +878,10 @@ PROMPT;
             fn (Recipe $recipe): bool => $this->canUseRecipe((int) $recipe->id, $date, $meal, $usage, $slotRecipe),
         ));
 
-        // Con tres recetas de desayuno y siete días, el tope de dos se agota.
-        // Cuando no queda ninguna que lo respete, se relaja para no dejar el
-        // hueco vacío.
+        // Sin repetir, un hueco se queda vacío en vez de repetir un plato. El
+        // usuario puede completarlo a mano o pedir una receta nueva.
         if ($usable === []) {
-            $usable = $candidates;
+            return null;
         }
 
         // Primero las que todavía no se usaron; después las de una sola
@@ -964,7 +958,7 @@ PROMPT;
         $varietyPenalty = $occurrences * 6.0;
         $dietBonus = match ($profile) {
             DietProfile::HighProtein => in_array('high_protein', $recipe->diet_tags ?? [], true) ? 3.0 : 0.0,
-            DietProfile::Light => in_array('light', $recipe->diet_tags ?? [], true) ? 3.0 : 0.0,
+            DietProfile::Light => in_array('light', $recipe->diet_tags ?? [], true) ? 5.0 : 0.0,
             default => 0.0,
         };
         $habitBonus = 0.0;
@@ -1151,34 +1145,6 @@ PROMPT;
         $previous = CarbonImmutable::parse($date, 'America/Lima')->subDay()->toDateString();
 
         return ($slotRecipe[$previous.'|'.$meal] ?? null) !== $recipeId;
-    }
-
-    /**
-     * @param  array<int, Recipe>  $candidates
-     * @param  array<int, int>  $usage
-     * @param  array<string, int>  $slotRecipe
-     */
-    private function hasUsableAlternative(
-        array $candidates,
-        int $exceptId,
-        string $date,
-        string $meal,
-        array $usage,
-        array $slotRecipe,
-    ): bool {
-        foreach ($candidates as $recipe) {
-            $recipeId = (int) $recipe->id;
-
-            if ($recipeId === $exceptId) {
-                continue;
-            }
-
-            if ($this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

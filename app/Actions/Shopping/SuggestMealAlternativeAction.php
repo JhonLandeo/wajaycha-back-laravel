@@ -26,13 +26,13 @@ use Illuminate\Support\Carbon;
  * Propone otra receta para una comida concreta del preview.
  *
  * No escribe nada: el preview sigue viviendo en el cliente hasta que se aplica
- * (ADR-0027, ADR-0032). La alternativa evita la receta actual y, cuando puede, las que ya
- * aparecen dos veces en la semana; además respeta el perfil, el límite de
+ * (ADR-0027, ADR-0032). La alternativa evita la receta actual y, cuando puede,
+ * las que ya aparecen en la semana; además respeta el perfil, el límite de
  * carbohidratos de la cena y el objetivo calórico declarado (ADR-0031).
  */
 final class SuggestMealAlternativeAction
 {
-    private const MAX_RECIPE_OCCURRENCES = 2;
+    private const MAX_RECIPE_OCCURRENCES = 1;
 
     public function __construct(
         private readonly MealPlanRepositoryContract $mealPlanRepository,
@@ -84,13 +84,13 @@ final class SuggestMealAlternativeAction
         $pool = $this->applyProfilePreference($pool, $settings);
         $pool = $this->applyDinnerCarbPreference($pool, $meal, $settings);
 
-        $notOverused = array_values(array_filter(
+        $pool = array_values(array_filter(
             $pool,
             static fn (Recipe $recipe): bool => ($usage[(int) $recipe->id] ?? 0) < self::MAX_RECIPE_OCCURRENCES,
         ));
 
-        if ($notOverused !== []) {
-            $pool = $notOverused;
+        if ($pool === []) {
+            return null;
         }
 
         $habitProductIds = array_map(
@@ -157,20 +157,16 @@ final class SuggestMealAlternativeAction
      */
     private function applyProfilePreference(array $pool, MealPlanSettings $settings): array
     {
-        $profile = $settings->diet_profile ?? DietProfile::Balanced;
-        $tag = match ($profile) {
-            DietProfile::HighProtein => 'high_protein',
-            DietProfile::Light => 'light',
-            default => null,
-        };
-
-        if ($tag === null) {
+        // Ligero no reemplaza el pool: es un bonus en `score()`, para que una
+        // sola receta etiquetada no convierta la comida en la misma todos los
+        // días (ADR-0033). Alto en proteína conserva su preferencia fuerte.
+        if (($settings->diet_profile ?? DietProfile::Balanced) !== DietProfile::HighProtein) {
             return $pool;
         }
 
         $tagged = array_values(array_filter(
             $pool,
-            static fn (Recipe $recipe): bool => in_array($tag, $recipe->diet_tags ?? [], true),
+            static fn (Recipe $recipe): bool => in_array('high_protein', $recipe->diet_tags ?? [], true),
         ));
 
         return $tagged !== [] ? $tagged : $pool;
@@ -242,8 +238,14 @@ final class SuggestMealAlternativeAction
                 : -min(10.0, ($nutrition->carbsG - $limit) / 5.0);
         }
 
-        if (($settings->diet_profile ?? DietProfile::Balanced) === DietProfile::HighProtein) {
+        $profile = $settings->diet_profile ?? DietProfile::Balanced;
+
+        if ($profile === DietProfile::HighProtein) {
             $score += min(3.0, $nutrition->proteinG / 15.0);
+        }
+
+        if ($profile === DietProfile::Light && in_array('light', $recipe->diet_tags ?? [], true)) {
+            $score += 5.0;
         }
 
         return $score;

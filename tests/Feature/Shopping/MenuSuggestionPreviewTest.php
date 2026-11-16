@@ -48,6 +48,7 @@ function previewRecipe(int $userId): array
 it('previews a week without writing and applies the reviewed entries', function () {
     [$user, $headers] = $this->userWithAuth();
     previewRecipe($user->id);
+    previewRecipe($user->id);
 
     $this->putJson('/api/shopping/menu/settings', [
         'household_size' => 2,
@@ -74,6 +75,42 @@ it('previews a week without writing and applies the reviewed entries', function 
         ->assertJsonPath('status', 'applied');
 
     expect(MealPlanEntry::query()->where('user_id', $user->id)->count())->toBe(2);
+});
+
+it('rejects a proposal that repeats a main recipe in the same week', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = previewRecipe($user->id);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $entry = static fn (int $id, string $date): array => [
+        'id' => $id,
+        'plan_date' => $date,
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'recipe_id' => $recipe->id,
+        'recipe' => null,
+        'drink_recipe_id' => null,
+        'drink_recipe' => null,
+        'servings' => 2,
+        'cook_servings' => 2,
+        'leftover_of_entry_id' => null,
+        'notes' => null,
+    ];
+
+    $this->postJson('/api/shopping/menu/suggest/apply', [
+        'week_start' => '2026-11-09',
+        'entries' => [$entry(1, '2026-11-09'), $entry(2, '2026-11-10')],
+    ], $headers)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('entries');
+
+    expect(MealPlanEntry::query()->count())->toBe(0);
 });
 
 it('keeps AI recipe drafts out of the database until the preview is applied', function () {
