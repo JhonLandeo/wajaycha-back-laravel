@@ -52,6 +52,8 @@ final class MealPlanPresenter
             'new_recipes_per_week' => (int) $settings->new_recipes_per_week,
             'daily_calorie_target' => $settings->daily_calorie_target,
             'dinner_carb_limit_g' => $settings->dinner_carb_limit_g,
+            'dinner_max_prep_minutes' => $settings->dinner_max_prep_minutes,
+            'dinner_calorie_limit' => $settings->dinner_calorie_limit,
         ];
     }
 

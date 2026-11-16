@@ -913,7 +913,7 @@ return [
             'name' => 'Ensalada de pollo y palta',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
-            'prep_minutes' => 25,
+            'prep_minutes' => 20,
             'ingredients' => [
                 ['product' => 'pollo-entero', 'quantity' => 0.3, 'unit' => 'kg'],
                 ['product' => 'palta', 'quantity' => 1, 'unit' => 'unidad'],
@@ -932,7 +932,7 @@ return [
             'name' => 'Pescado a la plancha con verduras',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
-            'prep_minutes' => 25,
+            'prep_minutes' => 20,
             'ingredients' => [
                 ['product' => 'pescado-fresco', 'quantity' => 0.4, 'unit' => 'kg'],
                 ['product' => 'limon', 'quantity' => 0.08, 'unit' => 'kg'],
@@ -972,7 +972,7 @@ return [
             'name' => 'Ensalada de quinua y atún',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
-            'prep_minutes' => 25,
+            'prep_minutes' => 20,
             'ingredients' => [
                 ['product' => 'quinua', 'quantity' => 0.1, 'unit' => 'kg'],
                 ['product' => 'atun-en-lata', 'quantity' => 2, 'unit' => 'unidad'],
@@ -992,7 +992,7 @@ return [
             'name' => 'Sopa de verduras con pescado',
             'base_servings' => 2,
             'meal_types' => ['lunch', 'dinner'],
-            'prep_minutes' => 30,
+            'prep_minutes' => 20,
             'ingredients' => [
                 ['product' => 'pescado-fresco', 'quantity' => 0.3, 'unit' => 'kg'],
                 ['product' => 'zanahoria', 'quantity' => 0.1, 'unit' => 'kg'],

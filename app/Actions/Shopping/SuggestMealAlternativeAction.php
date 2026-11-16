@@ -277,19 +277,39 @@ final class SuggestMealAlternativeAction
      */
     private function applyDinnerCarbPreference(array $pool, string $meal, MealPlanSettings $settings): array
     {
-        $limit = $settings->dinner_carb_limit_g;
-
-        if ($meal !== 'dinner' || $limit === null) {
+        if ($meal !== 'dinner') {
             return $pool;
         }
 
-        $lowCarb = array_values(array_filter(
-            $pool,
-            fn (Recipe $recipe): bool => $this->nutritionCalculator->perServing($recipe)->isComplete()
-                && $this->nutritionCalculator->perServing($recipe)->carbsG <= $limit,
-        ));
+        $limit = $settings->dinner_carb_limit_g;
 
-        return $lowCarb !== [] ? $lowCarb : $pool;
+        if ($limit !== null) {
+            $lowCarb = array_values(array_filter(
+                $pool,
+                fn (Recipe $recipe): bool => $this->nutritionCalculator->perServing($recipe)->isComplete()
+                    && $this->nutritionCalculator->perServing($recipe)->carbsG <= $limit,
+            ));
+
+            if ($lowCarb !== []) {
+                $pool = $lowCarb;
+            }
+        }
+
+        $calorieLimit = $settings->dinner_calorie_limit;
+
+        if ($calorieLimit !== null) {
+            $lowerCalories = array_values(array_filter(
+                $pool,
+                fn (Recipe $recipe): bool => $this->nutritionCalculator->perServing($recipe)->isComplete()
+                    && $this->nutritionCalculator->perServing($recipe)->kcal <= $calorieLimit,
+            ));
+
+            if ($lowerCalories !== []) {
+                $pool = $lowerCalories;
+            }
+        }
+
+        return $pool;
     }
 
     /**
@@ -357,6 +377,20 @@ final class SuggestMealAlternativeAction
 
         if ($profile === DietProfile::Light && in_array('light', $recipe->diet_tags ?? [], true)) {
             $score += 5.0;
+        }
+
+        if ($meal === 'dinner') {
+            if (in_array('light', $recipe->diet_tags ?? [], true)) {
+                $score += 5.0;
+            }
+
+            $calorieLimit = $settings->dinner_calorie_limit;
+
+            if ($calorieLimit !== null) {
+                $score += $nutrition->kcal <= $calorieLimit
+                    ? 3.0
+                    : -min(10.0, ($nutrition->kcal - $calorieLimit) / 50.0);
+            }
         }
 
         return $score;

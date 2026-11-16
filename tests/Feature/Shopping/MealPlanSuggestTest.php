@@ -945,3 +945,65 @@ it('reutiliza un producto base entre comidas del mismo dia', function () {
 
     expect($lunch['recipe']['name'])->toBe('Almuerzo con quinua');
 });
+
+it('excluye una cena que supera el tiempo específico de la cena', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$slow] = suggestionRecipe($user->id, 'Cena lenta', 'dinner');
+    [$fast] = suggestionRecipe($user->id, 'Cena rápida', 'dinner');
+    $slow->update(['prep_minutes' => 25]);
+    $fast->update(['prep_minutes' => 15]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['dinner'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'max_prep_minutes' => 30,
+        'dinner_max_prep_minutes' => 20,
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Cena rápida');
+});
+
+it('prefiere una cena light por debajo del tope de calorías', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$light, $lightProduct] = suggestionRecipe($user->id, 'Cena ligera', 'dinner', 'main', [], ['light']);
+    [$heavy, $heavyProduct] = suggestionRecipe($user->id, 'Cena pesada', 'dinner');
+    $light->update(['prep_minutes' => 20]);
+    $heavy->update(['prep_minutes' => 20]);
+
+    $lightProduct->update([
+        'calories_kcal' => 1200,
+        'protein_g' => 80,
+        'carbs_g' => 40,
+        'fat_g' => 30,
+    ]);
+    $heavyProduct->update([
+        'calories_kcal' => 3600,
+        'protein_g' => 80,
+        'carbs_g' => 300,
+        'fat_g' => 100,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['dinner'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'max_prep_minutes' => 30,
+        'dinner_max_prep_minutes' => 20,
+        'dinner_calorie_limit' => 600,
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Cena ligera');
+});

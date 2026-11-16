@@ -31,7 +31,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
             ]
         );
 
-        return $settings;
+        return $settings->refresh();
     }
 
     public function updateSettings(MealPlanSettings $settings, array $data): MealPlanSettings

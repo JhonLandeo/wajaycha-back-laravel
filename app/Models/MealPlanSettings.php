@@ -25,6 +25,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $new_recipes_per_week
  * @property int|null $daily_calorie_target
  * @property int|null $dinner_carb_limit_g
+ * @property int|null $dinner_max_prep_minutes
+ * @property int|null $dinner_calorie_limit
  * @property-read User $user
  */
 class MealPlanSettings extends Model
@@ -45,6 +47,8 @@ class MealPlanSettings extends Model
         'new_recipes_per_week',
         'daily_calorie_target',
         'dinner_carb_limit_g',
+        'dinner_max_prep_minutes',
+        'dinner_calorie_limit',
     ];
 
     protected $casts = [
@@ -59,6 +63,8 @@ class MealPlanSettings extends Model
         'new_recipes_per_week' => 'integer',
         'daily_calorie_target' => 'integer',
         'dinner_carb_limit_g' => 'integer',
+        'dinner_max_prep_minutes' => 'integer',
+        'dinner_calorie_limit' => 'integer',
     ];
 
     public function user(): BelongsTo

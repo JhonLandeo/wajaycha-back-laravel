@@ -39,6 +39,8 @@ class UpdateMealPlanSettingsRequest extends FormRequest
             'new_recipes_per_week' => ['sometimes', 'integer', 'between:0,5'],
             'daily_calorie_target' => ['sometimes', 'nullable', 'integer', 'between:800,5000'],
             'dinner_carb_limit_g' => ['sometimes', 'nullable', 'integer', 'between:0,300'],
+            'dinner_max_prep_minutes' => ['sometimes', 'nullable', 'integer', 'between:1,120'],
+            'dinner_calorie_limit' => ['sometimes', 'nullable', 'integer', 'between:200,2000'],
         ];
     }
 
@@ -54,6 +56,8 @@ class UpdateMealPlanSettingsRequest extends FormRequest
             'plan_weekdays.*.between' => 'Los días deben estar entre lunes y domingo.',
             'daily_calorie_target.between' => 'Indica un objetivo entre 800 y 5000 kcal.',
             'dinner_carb_limit_g.between' => 'Indica un límite entre 0 y 300 g de carbohidratos.',
+            'dinner_max_prep_minutes.between' => 'Indica un tiempo entre 1 y 120 minutos para la cena.',
+            'dinner_calorie_limit.between' => 'Indica un tope entre 200 y 2000 kcal para la cena.',
         ];
     }
 }

@@ -73,9 +73,13 @@ it('calcula la nutrición por porción desde los productos y la expone en el men
         'excluded_terms' => [],
         'daily_calorie_target' => 1800,
         'dinner_carb_limit_g' => 35,
+        'dinner_max_prep_minutes' => 20,
+        'dinner_calorie_limit' => 600,
     ], $headers)->assertOk()
         ->assertJsonPath('data.daily_calorie_target', 1800)
-        ->assertJsonPath('data.dinner_carb_limit_g', 35);
+        ->assertJsonPath('data.dinner_carb_limit_g', 35)
+        ->assertJsonPath('data.dinner_max_prep_minutes', 20)
+        ->assertJsonPath('data.dinner_calorie_limit', 600);
 
     MealPlanEntry::factory()->create([
         'user_id' => $user->id,

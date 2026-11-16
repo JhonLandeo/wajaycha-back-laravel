@@ -153,6 +153,8 @@ final class MealPlanController extends Controller
             'new_recipes_per_week' => $request->validated('new_recipes_per_week', $settings->new_recipes_per_week),
             'daily_calorie_target' => $request->validated('daily_calorie_target', $settings->daily_calorie_target),
             'dinner_carb_limit_g' => $request->validated('dinner_carb_limit_g', $settings->dinner_carb_limit_g),
+            'dinner_max_prep_minutes' => $request->validated('dinner_max_prep_minutes', $settings->dinner_max_prep_minutes),
+            'dinner_calorie_limit' => $request->validated('dinner_calorie_limit', $settings->dinner_calorie_limit),
         ]);
 
         return response()->json(['data' => $this->presenter->settings($updated)]);

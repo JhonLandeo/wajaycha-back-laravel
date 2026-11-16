@@ -57,9 +57,18 @@ final class MenuCandidateFilter
             }
 
             foreach ($recipe->meal_types as $meal) {
-                if (in_array($meal, $settings->meal_types, true)) {
-                    $byMeal[$meal][] = $recipe;
+                if (! in_array($meal, $settings->meal_types, true)) {
+                    continue;
                 }
+
+                if ($meal === 'dinner'
+                    && $settings->dinner_max_prep_minutes !== null
+                    && $recipe->prep_minutes !== null
+                    && $recipe->prep_minutes > $settings->dinner_max_prep_minutes) {
+                    continue;
+                }
+
+                $byMeal[$meal][] = $recipe;
             }
         }
 

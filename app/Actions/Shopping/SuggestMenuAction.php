@@ -371,6 +371,16 @@ final class SuggestMenuAction
                     continue;
                 }
 
+                $calorieLimit = $settings->dinner_calorie_limit;
+
+                if ($meal === 'dinner'
+                    && $calorieLimit !== null
+                    && $this->nutritionOf($recipe)->isComplete()
+                    && $this->nutritionOf($recipe)->kcal > $calorieLimit
+                    && $this->hasDinnerCalorieAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe, $calorieLimit)) {
+                    continue;
+                }
+
                 $priorityProductId = ($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::UsePantry
                     ? $this->priorityProductFor($candidates[$meal] ?? [], $priorityOrder, $available, $date, $meal, $usage, $slotRecipe)
                     : null;
@@ -454,6 +464,7 @@ final class SuggestMenuAction
                 $recipes[] = [
                     'id' => (int) $recipe->id,
                     'nombre' => $recipe->name,
+                    'comida' => $meal,
                     'comidas' => $recipe->meal_types,
                     'tipo' => $recipe->course->value,
                     'cocina' => $recipe->cuisine->value,
@@ -503,6 +514,8 @@ final class SuggestMenuAction
             'perfil' => ($settings->diet_profile ?? DietProfile::Balanced)->value,
             'objetivo_kcal_dia' => $settings->daily_calorie_target,
             'limite_carbohidratos_cena_g' => $settings->dinner_carb_limit_g,
+            'limite_minutos_cena' => $settings->dinner_max_prep_minutes,
+            'limite_calorias_cena' => $settings->dinner_calorie_limit,
             'cocina_preferida' => RecipeCuisine::Peruvian->value,
             'presupuesto_semanal' => $budget?->weeklyTarget,
             'despensa' => array_map(fn (PantryStock $item): array => [
@@ -537,6 +550,7 @@ Reglas:
 - Prefiere recetas que usen los productos de `habitos`; no es obligatorio, pero ayuda a cubrir lo que el usuario declaró.
 - Según `criterio`: `use_pantry` empieza por el producto de `despensa` con `prioridad` más baja; si una receta lo usa, elígela aunque falten otros ingredientes, porque los faltantes se compran. No elijas una receta que ignore ese producto si otra candidata lo usa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
 - `productos` es la lista compacta de ingredientes de cada receta. Reutiliza productos base entre comidas del mismo día: si el desayuno ya usa quinua, arroz, lentejas o un producto similar, prefiere un almuerzo o cena que use el mismo producto para cocinarlo una sola vez.
+- La cena ya viene filtrada por `limite_minutos_cena`; prefiere recetas `light`. Si `limite_calorias_cena` no es null, elige una cena por debajo y evita platos de fondo pesados si hay una opción ligera.
 - Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
 - `nutricion` es aproximada y por porción; no la recalcules ni la inventes. Si `nutricion.is_complete` es false, no la uses para decidir el objetivo. Si `objetivo_kcal_dia` no es null, reparte el objetivo entre las comidas activas y evita que un día quede muy por encima. Si `limite_carbohidratos_cena_g` no es null, prefiere cenas con `carbs_g` por debajo del límite; si no hay alternativa, elige la de menos carbohidratos.
 - Usa cada receta una sola vez en la semana; no repitas el mismo plato. Tampoco repitas la misma receta en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
@@ -937,6 +951,20 @@ PROMPT;
             }
         }
 
+        $calorieLimit = $settings->dinner_calorie_limit;
+
+        if ($meal === 'dinner' && $calorieLimit !== null) {
+            $lowerCalories = array_values(array_filter(
+                $candidates,
+                fn (Recipe $recipe): bool => $this->nutritionOf($recipe)->isComplete()
+                    && $this->nutritionOf($recipe)->kcal <= $calorieLimit,
+            ));
+
+            if ($lowerCalories !== []) {
+                $candidates = $lowerCalories;
+            }
+        }
+
         if ($strategy === MenuStrategy::UsePantry) {
             $priorityProductId = $this->priorityProductFor($candidates, $priorityOrder, $available, $date, $meal, $usage, $slotRecipe);
 
@@ -1063,8 +1091,24 @@ PROMPT;
         }
 
         $sharedBonus = min(3.0, $sharedBonus);
+        $dinnerBonus = 0.0;
 
-        return $dietBonus + $habitBonus + $cuisineBonus + $sharedBonus + $this->nutritionScore($recipe, $meal, $settings) + match ($strategy) {
+        if ($meal === 'dinner') {
+            if (in_array('light', $recipe->diet_tags ?? [], true)) {
+                $dinnerBonus += 5.0;
+            }
+
+            $calorieLimit = $settings->dinner_calorie_limit;
+            $nutrition = $this->nutritionOf($recipe);
+
+            if ($calorieLimit !== null && $nutrition->isComplete()) {
+                $dinnerBonus += $nutrition->kcal <= $calorieLimit
+                    ? 3.0
+                    : -min(10.0, ($nutrition->kcal - $calorieLimit) / 50.0);
+            }
+        }
+
+        return $dietBonus + $habitBonus + $cuisineBonus + $sharedBonus + $dinnerBonus + $this->nutritionScore($recipe, $meal, $settings) + match ($strategy) {
             MenuStrategy::UsePantry => $evaluation['aprovechamiento'] * 6.0
                 + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
@@ -1234,6 +1278,39 @@ PROMPT;
         }
 
         return $productIds;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function hasDinnerCalorieAlternative(
+        array $candidates,
+        int $exceptId,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+        int $limit,
+    ): bool {
+        foreach ($candidates as $recipe) {
+            $recipeId = (int) $recipe->id;
+
+            if ($recipe->course === RecipeCourse::Drink
+                || $recipeId === $exceptId
+                || ! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
+                continue;
+            }
+
+            $nutrition = $this->nutritionOf($recipe);
+
+            if ($nutrition->isComplete() && $nutrition->kcal <= $limit) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
