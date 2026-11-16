@@ -14,6 +14,7 @@ use App\Repositories\Contracts\RecipeRepositoryContract;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
 use App\Services\AI\OpenCodeGateway;
 use App\Services\Shopping\AiRecipeDraftValidator;
+use App\Services\Shopping\MenuCandidateFilter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use Throwable;
@@ -38,8 +39,16 @@ final class GeneratePantryRecipesAction
         private readonly OpenCodeGateway $gateway,
     ) {}
 
-    public function execute(int $userId, string $weekStart): int
-    {
+    /**
+     * @param  array<int, string>  $focusMeals
+     */
+    public function execute(
+        int $userId,
+        string $weekStart,
+        array $focusMeals = [],
+        bool $ignoreWeeklyLimit = false,
+        ?int $maxRecipes = null,
+    ): int {
         $asOf = CarbonImmutable::now();
         $week = PlanningWeek::forWeekStarting(
             CarbonImmutable::parse($weekStart, 'America/Lima'),
@@ -47,13 +56,15 @@ final class GeneratePantryRecipesAction
         );
 
         $settings = $this->mealPlanRepository->settingsFor($userId);
-        $limit = min(self::MAX_PER_WEEK, max(0, (int) $settings->new_recipes_per_week));
+        $configuredLimit = min(self::MAX_PER_WEEK, max(0, (int) $settings->new_recipes_per_week));
 
-        if ($limit <= 0) {
+        if (! $ignoreWeeklyLimit && $configuredLimit <= 0) {
             return 0;
         }
 
-        $remaining = $limit - $this->recipeRepository->countAiGeneratedSince($userId, $week->startsOn);
+        $remaining = $ignoreWeeklyLimit
+            ? max(1, $maxRecipes ?? self::MAX_PER_WEEK)
+            : $configuredLimit - $this->recipeRepository->countAiGeneratedSince($userId, $week->startsOn);
 
         if ($remaining <= 0) {
             return 0;
@@ -64,10 +75,11 @@ final class GeneratePantryRecipesAction
         $habits = $this->shoppingRepository->activeHabitsFor($userId);
         $existing = $this->recipeRepository->allForUser($userId);
         $considerPantry = (bool) $settings->consider_pantry_in_ai_recipes;
+        $focusMeals = array_values(array_intersect($focusMeals, $settings->meal_types));
 
         try {
             $response = $this->gateway->generateJson([
-                ['parts' => [['text' => $this->prompt($week, $settings, $products, $pantry, $habits, $existing, $remaining, $considerPantry)]]],
+                ['parts' => [['text' => $this->prompt($week, $settings, $products, $pantry, $habits, $existing, $remaining, $considerPantry, $focusMeals)]]],
             ], ['temperature' => 0.6]);
         } catch (Throwable $e) {
             report($e);
@@ -106,6 +118,17 @@ final class GeneratePantryRecipesAction
                 continue;
             }
 
+            if ($focusMeals !== [] && array_intersect($recipe['data']['meal_types'], $focusMeals) === []) {
+                continue;
+            }
+
+            if (in_array('dinner', $recipe['data']['meal_types'], true)
+                && $settings->dinner_max_prep_minutes !== null
+                && $recipe['data']['prep_minutes'] !== null
+                && $recipe['data']['prep_minutes'] > $settings->dinner_max_prep_minutes + MenuCandidateFilter::DINNER_PREP_TOLERANCE_MINUTES) {
+                continue;
+            }
+
             try {
                 $this->recipeRepository->create($userId, $recipe['data'], $recipe['ingredients']);
                 $existingNames[$this->fold($recipe['data']['name'])] = true;
@@ -123,6 +146,7 @@ final class GeneratePantryRecipesAction
      * @param  array<int, \App\DTOs\Shopping\PantryStock>  $pantry
      * @param  array<int, \App\Models\ConsumptionHabit>  $habits
      * @param  \Illuminate\Database\Eloquent\Collection<int, Recipe>  $existing
+     * @param  array<int, string>  $focusMeals
      */
     private function prompt(
         PlanningWeek $week,
@@ -133,6 +157,7 @@ final class GeneratePantryRecipesAction
         $existing,
         int $limit,
         bool $considerPantry,
+        array $focusMeals,
     ): string {
         $today = $week->asOf->setTimezone('America/Lima')->toDateString();
 
@@ -184,11 +209,23 @@ final class GeneratePantryRecipesAction
             ], $habits),
             'productos' => $productList,
             'recetas_existentes' => $existingList,
+            'tiempo_objetivo_cena' => $settings->dinner_max_prep_minutes,
+            'tiempo_maximo_cena' => $settings->dinner_max_prep_minutes !== null
+                ? $settings->dinner_max_prep_minutes + MenuCandidateFilter::DINNER_PREP_TOLERANCE_MINUTES
+                : null,
         ];
+
+        if ($focusMeals !== []) {
+            $context['comidas_foco'] = $focusMeals;
+        }
 
         if ($considerPantry) {
             $context['despensa'] = $pantryList;
         }
+
+        $focusRule = $focusMeals !== []
+            ? '- Todas las recetas deben ser para una de `comidas_foco`. Si incluyes `dinner`, respeta `tiempo_maximo_cena` y `limite_carbohidratos_cena_g`.'
+            : '';
 
         $pantryRule = $considerPantry
             ? '- Prioriza los ingredientes de la despensa, sobre todo los que vencen pronto, y los productos que las recetas existentes no usan.'
@@ -206,6 +243,7 @@ Reglas:
 - `base_servings` no se envía: el backend usa el número de personas.
 - No uses productos de `no_incluir` en el nombre ni en los ingredientes. Respeta el tiempo máximo.
 - Si propones una receta para `dinner` y `limite_carbohidratos_cena_g` no es null, evita ingredientes con muchos carbohidratos; el backend calcula los macros desde los productos.
+{$focusRule}
 - No expliques nada fuera del JSON.
 
 Contexto:

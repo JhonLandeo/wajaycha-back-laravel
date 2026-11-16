@@ -20,6 +20,8 @@ use Illuminate\Support\Str;
  */
 final class MenuCandidateFilter
 {
+    public const DINNER_PREP_TOLERANCE_MINUTES = 5;
+
     public function __construct(
         private readonly RecipeRepositoryContract $recipeRepository,
     ) {}
@@ -64,7 +66,7 @@ final class MenuCandidateFilter
                 if ($meal === 'dinner'
                     && $settings->dinner_max_prep_minutes !== null
                     && $recipe->prep_minutes !== null
-                    && $recipe->prep_minutes > $settings->dinner_max_prep_minutes) {
+                    && $recipe->prep_minutes > $settings->dinner_max_prep_minutes + self::DINNER_PREP_TOLERANCE_MINUTES) {
                     continue;
                 }
 

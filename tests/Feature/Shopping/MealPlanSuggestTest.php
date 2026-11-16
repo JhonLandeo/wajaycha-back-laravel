@@ -950,7 +950,7 @@ it('excluye una cena que supera el tiempo específico de la cena', function () {
     [$user, $headers] = $this->userWithAuth();
     [$slow] = suggestionRecipe($user->id, 'Cena lenta', 'dinner');
     [$fast] = suggestionRecipe($user->id, 'Cena rápida', 'dinner');
-    $slow->update(['prep_minutes' => 25]);
+    $slow->update(['prep_minutes' => 26]);
     $fast->update(['prep_minutes' => 15]);
 
     $this->putJson('/api/shopping/menu/settings', [
@@ -1114,4 +1114,78 @@ it('no usa sobras de un almuerzo con pescado fresco', function () {
         ->json('data.entries');
 
     expect(collect($entries)->firstWhere('meal_type', 'dinner'))->toBeNull();
+});
+
+it('permite hasta cinco minutos extra en la cena cuando no hay otra opción', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$dinner] = suggestionRecipe($user->id, 'Cena de veinte minutos', 'dinner');
+    $dinner->update(['prep_minutes' => 20]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['dinner'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'dinner_max_prep_minutes' => 15,
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Cena de veinte minutos');
+});
+
+it('enfoca la generación en la cena cuando faltan cenas para la semana', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $product = Product::factory()->create(['name' => 'Pollo para foco', 'unit' => 'kg']);
+    [$dinner] = suggestionRecipe($user->id, 'Cena existente', 'dinner');
+    $dinner->update(['prep_minutes' => 20]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['dinner'],
+        'plan_weekdays' => [1, 2],
+        'excluded_terms' => [],
+        'available_equipment' => ['stove'],
+        'dinner_max_prep_minutes' => 15,
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    $recipesJson = json_encode([
+        'recipes' => [[
+            'name' => 'Cena nueva de quince minutos',
+            'meal_types' => ['dinner'],
+            'course' => 'main',
+            'prep_minutes' => 15,
+            'equipment' => ['stove'],
+            'instructions' => '1. Cocina rápido.',
+            'ingredients' => [
+                ['producto_id' => $product->id, 'quantity' => 0.3, 'unit' => 'kg'],
+            ],
+        ]],
+    ]);
+    $daysJson = json_encode(['days' => []]);
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake(function ($request) use ($recipesJson, $daysJson) {
+        $text = str_contains($request->body(), 'cocinero peruano') ? $recipesJson : $daysJson;
+
+        return Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => $text]]]]],
+        ]);
+    });
+
+    $entries = $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonCount(2, 'data.entries')
+        ->json('data.entries');
+
+    expect(Recipe::query()->where('origin', 'ai')->where('name', 'Cena nueva de quince minutos')->exists())->toBeTrue()
+        ->and(collect($entries)->every(fn (array $entry): bool => $entry['meal_type'] === 'dinner'))->toBeTrue();
 });

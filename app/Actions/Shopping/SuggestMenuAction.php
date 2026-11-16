@@ -110,18 +110,51 @@ final class SuggestMenuAction
             return 'fallback';
         }
 
-        // El límite semanal es el único interruptor: 0 no llama a la IA para
-        // recetas; 1–5 suma la generación. Si falla, el plan sigue con el
-        // recetario actual.
+        $meals = $settings->meal_types;
+        $this->nutritionByRecipe = [];
+
+        // Si una comida no tiene suficientes recetas distintas para los días
+        // activos, la generación se enfoca en esas comidas. Así la semana no
+        // queda con huecos solo porque faltaban candidatas.
+        $preCandidates = $this->candidateFilter->forUser($userId, $settings);
+        $focusMeals = $this->focusMealsFor($meals, $preCandidates, $settings, count($days));
+
+        // El límite semanal es el único interruptor normal: 0 no llama a la IA
+        // para recetas; 1–5 suma la generación. Si queda un hueco, la segunda
+        // llamada de abajo puede ignorar el límite.
         try {
-            $this->recipeGenerator->execute($userId, $week->startsOn->toDateString());
+            $this->recipeGenerator->execute($userId, $week->startsOn->toDateString(), $focusMeals);
         } catch (Throwable $e) {
             report($e);
         }
 
-        $meals = $settings->meal_types;
         $this->nutritionByRecipe = [];
         $candidates = $this->candidateFilter->forUser($userId, $settings);
+        $missing = [];
+
+        foreach ($focusMeals as $meal) {
+            $needed = count($days) - count($this->eligibleCandidates($candidates[$meal] ?? [], $settings, $meal));
+
+            if ($needed > 0) {
+                $missing[$meal] = $needed;
+            }
+        }
+
+        if ($missing !== []) {
+            try {
+                $this->recipeGenerator->execute(
+                    $userId,
+                    $week->startsOn->toDateString(),
+                    array_keys($missing),
+                    true,
+                    array_sum($missing),
+                );
+                $this->nutritionByRecipe = [];
+                $candidates = $this->candidateFilter->forUser($userId, $settings);
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
         $this->habits = $this->shoppingRepository->activeHabitsFor($userId);
         $this->habitProductIds = array_map(
@@ -521,6 +554,9 @@ final class SuggestMenuAction
             'objetivo_kcal_dia' => $settings->daily_calorie_target,
             'limite_carbohidratos_cena_g' => $settings->dinner_carb_limit_g,
             'limite_minutos_cena' => $settings->dinner_max_prep_minutes,
+            'limite_maximo_cena' => $settings->dinner_max_prep_minutes !== null
+                ? $settings->dinner_max_prep_minutes + MenuCandidateFilter::DINNER_PREP_TOLERANCE_MINUTES
+                : null,
             'limite_calorias_cena' => $settings->dinner_calorie_limit,
             'cocina_preferida' => RecipeCuisine::Peruvian->value,
             'presupuesto_semanal' => $budget?->weeklyTarget,
@@ -556,7 +592,7 @@ Reglas:
 - Prefiere recetas que usen los productos de `habitos`; no es obligatorio, pero ayuda a cubrir lo que el usuario declaró.
 - Según `criterio`: `use_pantry` empieza por el producto de `despensa` con `prioridad` más baja; si una receta lo usa, elígela aunque falten otros ingredientes, porque los faltantes se compran. No elijas una receta que ignore ese producto si otra candidata lo usa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
 - `productos` es la lista compacta de ingredientes de cada receta. Reutiliza productos base entre comidas del mismo día: si el desayuno ya usa quinua, arroz, lentejas o un producto similar, prefiere un almuerzo o cena que use el mismo producto para cocinarlo una sola vez.
-- La cena ya viene filtrada por `limite_minutos_cena`; prefiere recetas `light`. Si `limite_calorias_cena` no es null, elige una cena por debajo y evita platos de fondo pesados si hay una opción ligera.
+- La cena ya viene filtrada hasta `limite_maximo_cena`; prefiere `limite_minutos_cena` y usa el margen de cinco minutos solo si no hay otra cena. Prefiere recetas `light`. Si `limite_calorias_cena` no es null, elige una cena por debajo y evita platos de fondo pesados si hay una opción ligera.
 - En `save_money`, si el almuerzo es compatible con la cena, cocina para dos comidas (cook_servings = porciones del almuerzo + personas de la cena) y deja la cena vacía; el backend la convertirá en sobras del almuerzo. Para que sea sobra, el almuerzo debe ser `light` y no llevar pescado fresco ni mariscos.
 - Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
 - `nutricion` es aproximada y por porción; no la recalcules ni la inventes. Si `nutricion.is_complete` es false, no la uses para decidir el objetivo. Si `objetivo_kcal_dia` no es null, reparte el objetivo entre las comidas activas y evita que un día quede muy por encima. Si `limite_carbohidratos_cena_g` no es null, prefiere cenas con `carbs_g` por debajo del límite; si no hay alternativa, elige la de menos carbohidratos.
@@ -1113,6 +1149,16 @@ PROMPT;
                     ? 3.0
                     : -min(10.0, ($nutrition->kcal - $calorieLimit) / 50.0);
             }
+
+            $targetMinutes = $settings->dinner_max_prep_minutes;
+
+            if ($targetMinutes !== null && $recipe->prep_minutes !== null) {
+                $delay = $recipe->prep_minutes - $targetMinutes;
+
+                if ($delay > 0) {
+                    $dinnerBonus -= min(4.0, $delay * 0.8);
+                }
+            }
         }
 
         return $dietBonus + $habitBonus + $cuisineBonus + $sharedBonus + $dinnerBonus + $this->nutritionScore($recipe, $meal, $settings) + match ($strategy) {
@@ -1127,6 +1173,70 @@ PROMPT;
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
                 - $varietyPenalty,
         };
+    }
+
+    /**
+     * @param  array<int, string>  $meals
+     * @param  array<string, array<int, Recipe>>  $candidates
+     * @return array<int, string>
+     */
+    private function focusMealsFor(array $meals, array $candidates, MealPlanSettings $settings, int $days): array
+    {
+        $focus = [];
+
+        foreach ($meals as $meal) {
+            if (count($this->eligibleCandidates($candidates[$meal] ?? [], $settings, $meal)) < $days) {
+                $focus[] = $meal;
+            }
+        }
+
+        return $focus;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $recipes
+     * @return array<int, Recipe>
+     */
+    private function eligibleCandidates(array $recipes, MealPlanSettings $settings, string $meal): array
+    {
+        $eligible = $recipes;
+
+        if (($settings->diet_profile ?? DietProfile::Balanced) === DietProfile::HighProtein) {
+            $tagged = array_values(array_filter(
+                $eligible,
+                static fn (Recipe $recipe): bool => in_array('high_protein', $recipe->diet_tags ?? [], true),
+            ));
+
+            if ($tagged !== []) {
+                $eligible = $tagged;
+            }
+        }
+
+        if ($meal !== 'dinner') {
+            return $eligible;
+        }
+
+        $carbLimit = $settings->dinner_carb_limit_g;
+
+        if ($carbLimit !== null) {
+            $eligible = array_values(array_filter(
+                $eligible,
+                fn (Recipe $recipe): bool => ! $this->nutritionOf($recipe)->isComplete()
+                    || $this->nutritionOf($recipe)->carbsG <= $carbLimit,
+            ));
+        }
+
+        $calorieLimit = $settings->dinner_calorie_limit;
+
+        if ($calorieLimit !== null) {
+            $eligible = array_values(array_filter(
+                $eligible,
+                fn (Recipe $recipe): bool => ! $this->nutritionOf($recipe)->isComplete()
+                    || $this->nutritionOf($recipe)->kcal <= $calorieLimit,
+            ));
+        }
+
+        return $eligible;
     }
 
     private function nutritionOf(Recipe $recipe): Nutrition

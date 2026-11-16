@@ -391,6 +391,16 @@ final class SuggestMealAlternativeAction
                     ? 3.0
                     : -min(10.0, ($nutrition->kcal - $calorieLimit) / 50.0);
             }
+
+            $targetMinutes = $settings->dinner_max_prep_minutes;
+
+            if ($targetMinutes !== null && $recipe->prep_minutes !== null) {
+                $delay = $recipe->prep_minutes - $targetMinutes;
+
+                if ($delay > 0) {
+                    $score -= min(4.0, $delay * 0.8);
+                }
+            }
         }
 
         return $score;
