@@ -13,6 +13,7 @@ use App\Http\Requests\Shopping\UpdateRecipeRequest;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
 use App\Repositories\Contracts\RecipeRepositoryContract;
+use App\Services\Shopping\NutritionCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,6 +22,7 @@ final class RecipeController extends Controller
 {
     public function __construct(
         private readonly RecipeRepositoryContract $repository,
+        private readonly NutritionCalculator $nutrition,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -209,6 +211,7 @@ final class RecipeController extends Controller
             'is_active' => (bool) $recipe->is_active,
             'is_enabled' => $isEnabled ?? ($recipe->user_id === null ? true : (bool) $recipe->is_active),
             'is_global' => $recipe->user_id === null,
+            'nutrition' => $this->nutrition->perServing($recipe)->toArray(),
             'ingredients' => $recipe->ingredients
                 ->map(static fn (RecipeIngredient $ingredient): array => [
                     'id' => (int) $ingredient->id,

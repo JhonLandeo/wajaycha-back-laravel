@@ -304,6 +304,30 @@ final class ApplyMenuSuggestionAction
     ): int {
         $isAi = $summary !== null && ($summary['origin'] ?? null) === 'ai';
 
+        if ($isAi) {
+            // Una receta IA que ya vive en el recetario no es un borrador:
+            // reutilízala por id. Un borrador de una sugerencia tiene un id
+            // temporal que ya no existe o apunta a otro plato.
+            $lookupId = $oldId > 0 ? $oldId : (int) ($summary['id'] ?? 0);
+            $existing = $lookupId > 0 ? $this->recipeRepository->findForUser($lookupId, $userId) : null;
+
+            if ($existing !== null && $existing->name === (string) ($summary['name'] ?? '')) {
+                if (! in_array($meal, $existing->meal_types, true)) {
+                    throw ValidationException::withMessages(['entries' => 'Una receta de la propuesta ya no está disponible.']);
+                }
+
+                if ($role === 'main' && $existing->course === RecipeCourse::Drink) {
+                    throw ValidationException::withMessages(['entries' => 'Una bebida no puede ser el plato principal.']);
+                }
+
+                if ($role === 'drink' && $existing->course !== RecipeCourse::Drink) {
+                    throw ValidationException::withMessages(['entries' => 'La bebida elegida no es una bebida.']);
+                }
+
+                return (int) $existing->id;
+            }
+        }
+
         if (! $isAi) {
             // Una alternativa para un hueco vacío puede traer un id temporal
             // negativo; la receta real viaja en el resumen.

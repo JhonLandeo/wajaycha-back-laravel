@@ -279,3 +279,43 @@ it('skips the AI recipe generation when the weekly limit is zero', function () {
 
     Http::assertSentCount(1);
 });
+
+it('aplica una receta IA que ya existe sin intentar crearla de nuevo', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe, $product] = previewRecipe($user->id);
+    $recipe->update(['origin' => 'ai']);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $entry = [
+        'id' => 1,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'recipe_id' => $recipe->id,
+        'recipe' => [
+            'id' => $recipe->id,
+            'name' => $recipe->name,
+            'origin' => 'ai',
+        ],
+        'drink_recipe_id' => null,
+        'drink_recipe' => null,
+        'servings' => 2,
+        'cook_servings' => 2,
+        'leftover_of_entry_id' => null,
+        'notes' => null,
+    ];
+
+    $this->postJson('/api/shopping/menu/suggest/apply', [
+        'week_start' => '2026-11-09',
+        'entries' => [$entry],
+    ], $headers)->assertOk();
+
+    expect(Recipe::query()->where('origin', 'ai')->count())->toBe(1)
+        ->and(MealPlanEntry::query()->where('user_id', $user->id)->sole()->recipe_id)->toBe($recipe->id);
+});
