@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property float|null $protein_g
  * @property float|null $carbs_g
  * @property float|null $fat_g
+ * @property int|null $shelf_life_days
  * @property bool $is_active
  */
 class Product extends Model
@@ -39,6 +40,7 @@ class Product extends Model
         'protein_g',
         'carbs_g',
         'fat_g',
+        'shelf_life_days',
         'is_active',
     ];
 
@@ -47,6 +49,7 @@ class Product extends Model
         'protein_g' => 'float',
         'carbs_g' => 'float',
         'fat_g' => 'float',
+        'shelf_life_days' => 'integer',
         'is_active' => 'boolean',
     ];
 }

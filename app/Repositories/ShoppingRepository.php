@@ -154,6 +154,8 @@ final class ShoppingRepository implements ShoppingRepositoryContract
                 quantity: $available,
                 expiresOn: $expiresOn !== null ? CarbonImmutable::parse($expiresOn) : null,
                 productName: (string) $item->product?->name,
+                acquiredOn: $item->acquired_on !== null ? CarbonImmutable::parse($item->acquired_on) : null,
+                shelfLifeDays: $item->product?->shelf_life_days,
             );
         }
 

@@ -8,6 +8,7 @@ use App\DTOs\Shopping\Nutrition;
 use App\DTOs\Shopping\PantryStock;
 use App\DTOs\Shopping\PlanningWeek;
 use App\Enums\DietProfile;
+use App\Enums\MealEntryKind;
 use App\Enums\MenuStrategy;
 use App\Enums\RecipeCourse;
 use App\Enums\RecipeCuisine;
@@ -21,6 +22,7 @@ use App\Services\AI\OpenCodeGateway;
 use App\Services\Shopping\MenuCalendar;
 use App\Services\Shopping\MenuCandidateFilter;
 use App\Services\Shopping\NutritionCalculator;
+use App\Services\Shopping\PantryPriority;
 use App\Services\Shopping\UnitConverter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +63,7 @@ final class SuggestMenuAction
         private readonly FoodBudgetRepositoryContract $foodBudgetRepository,
         private readonly MenuCandidateFilter $candidateFilter,
         private readonly NutritionCalculator $nutritionCalculator,
+        private readonly PantryPriority $pantryPriority,
         private readonly GeneratePantryRecipesAction $recipeGenerator,
         private readonly MenuCalendar $calendar,
         private readonly OpenCodeGateway $gateway,
@@ -127,13 +130,14 @@ final class SuggestMenuAction
         );
 
         $available = $this->pantryAvailabilityByProduct($pantry, $asOf);
+        $priorityOrder = $this->pantryPriority->orderedProductIds($pantry, $asOf);
         $usage = [];
         $slotRecipe = [];
 
-        $selected = $this->fromAi($week, $settings, $days, $meals, $candidates, $pantry, $available, $usage, $slotRecipe);
+        $selected = $this->fromAi($week, $settings, $days, $meals, $candidates, $pantry, $available, $usage, $slotRecipe, $priorityOrder);
         $source = $selected === [] ? 'fallback' : 'ai';
 
-        DB::transaction(function () use ($userId, $week, $settings, $days, $meals, $candidates, $selected, &$available, &$usage, &$slotRecipe): void {
+        DB::transaction(function () use ($userId, $week, $settings, $days, $meals, $candidates, $selected, &$available, &$usage, &$slotRecipe, $priorityOrder): void {
             $this->mealPlanRepository->clearWeek($userId, $week->startsOn, $week->endsOn);
 
             $created = [];
@@ -159,6 +163,8 @@ final class SuggestMenuAction
             $created = $this->scheduleLeftovers($userId, $settings, $days, $meals, $created);
 
             foreach ($days as $date) {
+                $sharedProductIds = $this->sharedProductIdsForDate($created, $date);
+
                 foreach ($meals as $meal) {
                     $key = $date.'|'.$meal;
                     if (isset($created[$key])) {
@@ -173,6 +179,8 @@ final class SuggestMenuAction
                         $date,
                         $meal,
                         $settings,
+                        $priorityOrder,
+                        $sharedProductIds,
                     );
 
                     if ($pick === null) {
@@ -186,6 +194,10 @@ final class SuggestMenuAction
                     $usage[$recipeId] = ($usage[$recipeId] ?? 0) + 1;
                     $slotRecipe[$key] = $recipeId;
 
+                    foreach (array_keys($pick['evaluation']['requirements']) as $productId) {
+                        $sharedProductIds[$productId] = true;
+                    }
+
                     $drinkPick = $this->chooseDrink(
                         $recipeId,
                         $candidates[$meal] ?? [],
@@ -193,6 +205,7 @@ final class SuggestMenuAction
                         $usage,
                         $settings,
                         $meal,
+                        $sharedProductIds,
                     );
 
                     $drinkId = null;
@@ -201,6 +214,10 @@ final class SuggestMenuAction
                         $this->deplete($available, $drinkPick['evaluation']['requirements']);
                         $drinkId = (int) $drinkPick['recipe']->id;
                         $usage[$drinkId] = ($usage[$drinkId] ?? 0) + 1;
+
+                        foreach (array_keys($drinkPick['evaluation']['requirements']) as $productId) {
+                            $sharedProductIds[$productId] = true;
+                        }
                     }
 
                     $selected[$key] = [
@@ -235,6 +252,7 @@ final class SuggestMenuAction
      * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
      * @param  array<int, int>  $usage
      * @param  array<string, int>  $slotRecipe
+     * @param  array<int, int>  $priorityOrder
      * @return array<string, array{recipe_id: int, drink_recipe_id: int|null, cook_servings: int}>
      */
     private function fromAi(
@@ -247,10 +265,11 @@ final class SuggestMenuAction
         array &$available,
         array &$usage,
         array &$slotRecipe,
+        array $priorityOrder,
     ): array {
         try {
             $response = $this->gateway->generateJson([
-                ['parts' => [['text' => $this->prompt($week, $settings, $days, $meals, $candidates, $pantry, $available)]]],
+                ['parts' => [['text' => $this->prompt($week, $settings, $days, $meals, $candidates, $pantry, $available, $priorityOrder)]]],
             ], ['temperature' => 0.4]);
         } catch (Throwable $e) {
             report($e);
@@ -352,6 +371,14 @@ final class SuggestMenuAction
                     continue;
                 }
 
+                $priorityProductId = ($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::UsePantry
+                    ? $this->priorityProductFor($candidates[$meal] ?? [], $priorityOrder, $available, $date, $meal, $usage, $slotRecipe)
+                    : null;
+
+                if ($priorityProductId !== null && ! $this->recipeUsesProduct($recipe, $priorityProductId)) {
+                    continue;
+                }
+
                 $evaluation = $this->evaluate($recipe, $choice['cook_servings'], $available);
 
                 if (($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::UsePantry
@@ -404,6 +431,7 @@ final class SuggestMenuAction
      * @param  array<string, array<int, Recipe>>  $candidates
      * @param  array<int, PantryStock>  $pantry
      * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $priorityOrder
      */
     private function prompt(
         PlanningWeek $week,
@@ -413,6 +441,7 @@ final class SuggestMenuAction
         array $candidates,
         array $pantry,
         array $available,
+        array $priorityOrder,
     ): string {
         $budget = $this->foodBudgetRepository->snapshotFor($settings->user_id, CarbonImmutable::now());
         $today = $week->asOf->setTimezone('America/Lima')->toDateString();
@@ -429,6 +458,12 @@ final class SuggestMenuAction
                     'tipo' => $recipe->course->value,
                     'cocina' => $recipe->cuisine->value,
                     'diet_tags' => $recipe->diet_tags ?? [],
+                    'productos' => $recipe->ingredients
+                        ->map(static fn ($ingredient): string => (string) $ingredient->product->name)
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all(),
                     'nutricion' => $this->nutritionOf($recipe)->toArray(),
                     'minutos' => $recipe->prep_minutes,
                     'despensa_cobertura' => $evaluation['cobertura'],
@@ -439,11 +474,24 @@ final class SuggestMenuAction
             }
         }
 
+        $priorityDays = $this->pantryPriority->daysLeftByProduct($pantry, $week->asOf);
+        $priorityPosition = array_flip($priorityOrder);
+
         $visiblePantry = array_values(array_filter(
             $pantry,
-            static fn (PantryStock $item): bool => $item->unit !== null
-                && $item->quantity > 0.0
-                && ($item->expiresOn === null || $item->expiresOn->toDateString() >= $today),
+            function (PantryStock $item) use ($today, $week): bool {
+                if ($item->unit === null || $item->quantity <= 0.0) {
+                    return false;
+                }
+
+                if ($item->expiresOn !== null && $item->expiresOn->toDateString() < $today) {
+                    return false;
+                }
+
+                $daysLeft = $this->pantryPriority->daysLeft($item, $week->asOf);
+
+                return $daysLeft === null || $daysLeft >= 0;
+            },
         ));
 
         $context = [
@@ -457,11 +505,13 @@ final class SuggestMenuAction
             'limite_carbohidratos_cena_g' => $settings->dinner_carb_limit_g,
             'cocina_preferida' => RecipeCuisine::Peruvian->value,
             'presupuesto_semanal' => $budget?->weeklyTarget,
-            'despensa' => array_map(static fn (PantryStock $item): array => [
+            'despensa' => array_map(fn (PantryStock $item): array => [
                 'producto' => $item->productName,
                 'cantidad' => $item->quantity,
                 'unidad' => $item->unit?->value,
                 'vence' => $item->expiresOn?->toDateString(),
+                'dias_para_vencer' => $priorityDays[$item->productId] ?? null,
+                'prioridad' => isset($priorityPosition[$item->productId]) ? $priorityPosition[$item->productId] + 1 : null,
             ], $visiblePantry),
             'habitos' => array_map(static fn ($habit): array => [
                 'producto_id' => (int) $habit->product_id,
@@ -485,7 +535,8 @@ Reglas:
 - `tipo` es `main` (plato principal), `drink` (bebida) o `side` (acompañamiento). El `recipe_id` nunca es una `drink`: la bebida va en `drink_recipe_id`. Si el catálogo tiene una bebida para esa comida, úsala como acompañamiento; en el desayuno es lo esperado.
 - `drink_recipe_id` debe ser distinto de `recipe_id`, estar en el catálogo y ser una `drink`.
 - Prefiere recetas que usen los productos de `habitos`; no es obligatorio, pero ayuda a cubrir lo que el usuario declaró.
-- Según `criterio`: `use_pantry` prioriza `despensa_aprovechamiento` y reparte la despensa entre recetas; no elijas una receta con aprovechamiento 0 si otra candidata usa despensa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
+- Según `criterio`: `use_pantry` empieza por el producto de `despensa` con `prioridad` más baja; si una receta lo usa, elígela aunque falten otros ingredientes, porque los faltantes se compran. No elijas una receta que ignore ese producto si otra candidata lo usa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
+- `productos` es la lista compacta de ingredientes de cada receta. Reutiliza productos base entre comidas del mismo día: si el desayuno ya usa quinua, arroz, lentejas o un producto similar, prefiere un almuerzo o cena que use el mismo producto para cocinarlo una sola vez.
 - Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
 - `nutricion` es aproximada y por porción; no la recalcules ni la inventes. Si `nutricion.is_complete` es false, no la uses para decidir el objetivo. Si `objetivo_kcal_dia` no es null, reparte el objetivo entre las comidas activas y evita que un día quede muy por encima. Si `limite_carbohidratos_cena_g` no es null, prefiere cenas con `carbs_g` por debajo del límite; si no hay alternativa, elige la de menos carbohidratos.
 - Usa cada receta una sola vez en la semana; no repitas el mismo plato. Tampoco repitas la misma receta en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
@@ -509,7 +560,6 @@ PROMPT;
     {
         $local = $asOf->setTimezone('America/Lima');
         $today = $local->toDateString();
-        $threshold = $local->addDays(self::EXPIRING_SOON_DAYS)->toDateString();
         $available = [];
 
         foreach ($pantry as $stock) {
@@ -518,6 +568,12 @@ PROMPT;
             }
 
             if ($stock->expiresOn !== null && $stock->expiresOn->toDateString() < $today) {
+                continue;
+            }
+
+            $daysLeft = $this->pantryPriority->daysLeft($stock, $local);
+
+            if ($daysLeft !== null && $daysLeft < 0) {
                 continue;
             }
 
@@ -530,7 +586,7 @@ PROMPT;
             $available[$productId] ??= ['quantity' => 0.0, 'unit' => $stock->unit, 'expiresSoon' => false];
             $available[$productId]['quantity'] = round($available[$productId]['quantity'] + $stock->quantity, 3);
 
-            if ($stock->expiresOn !== null && $stock->expiresOn->toDateString() <= $threshold) {
+            if ($daysLeft !== null && $daysLeft <= self::EXPIRING_SOON_DAYS) {
                 $available[$productId]['expiresSoon'] = true;
             }
         }
@@ -669,6 +725,7 @@ PROMPT;
      * @param  array<int, Recipe>  $candidates
      * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
      * @param  array<int, int>  $usage
+     * @param  array<int, true>  $sharedProductIds
      * @return array{
      *     recipe: Recipe,
      *     evaluation: array{
@@ -688,6 +745,7 @@ PROMPT;
         array $usage,
         MealPlanSettings $settings,
         string $meal,
+        array $sharedProductIds = [],
     ): ?array {
         if ($drinkId > 0 && $drinkId !== $mainId) {
             $drink = $this->findCandidate($candidates, $drinkId);
@@ -702,7 +760,7 @@ PROMPT;
             }
         }
 
-        return $this->chooseDrink($mainId, $candidates, $available, $usage, $settings, $meal);
+        return $this->chooseDrink($mainId, $candidates, $available, $usage, $settings, $meal, $sharedProductIds);
     }
 
     /**
@@ -713,6 +771,7 @@ PROMPT;
      * @param  array<int, Recipe>  $candidates
      * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
      * @param  array<int, int>  $usage
+     * @param  array<int, true>  $sharedProductIds
      * @return array{
      *     recipe: Recipe,
      *     evaluation: array{
@@ -731,6 +790,7 @@ PROMPT;
         array $usage,
         MealPlanSettings $settings,
         string $meal,
+        array $sharedProductIds = [],
     ): ?array {
         $drinks = array_values(array_filter(
             $candidates,
@@ -769,9 +829,9 @@ PROMPT;
             }
         }
 
-        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage, $meal, $settings): int {
-            $scoreA = $this->scoreRecipe($a['evaluation'], $strategy, $usage[(int) $a['recipe']->id] ?? 0, $a['recipe'], $profile, $meal, $settings);
-            $scoreB = $this->scoreRecipe($b['evaluation'], $strategy, $usage[(int) $b['recipe']->id] ?? 0, $b['recipe'], $profile, $meal, $settings);
+        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage, $meal, $settings, $sharedProductIds): int {
+            $scoreA = $this->scoreRecipe($a['evaluation'], $strategy, $usage[(int) $a['recipe']->id] ?? 0, $a['recipe'], $profile, $meal, $settings, $sharedProductIds);
+            $scoreB = $this->scoreRecipe($b['evaluation'], $strategy, $usage[(int) $b['recipe']->id] ?? 0, $b['recipe'], $profile, $meal, $settings, $sharedProductIds);
 
             return $scoreB <=> $scoreA ?: $a['recipe']->name <=> $b['recipe']->name;
         });
@@ -806,6 +866,8 @@ PROMPT;
      * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
      * @param  array<int, int>  $usage
      * @param  array<string, int>  $slotRecipe
+     * @param  array<int, int>  $priorityOrder
+     * @param  array<int, true>  $sharedProductIds
      * @return array{
      *     recipe: Recipe,
      *     evaluation: array{
@@ -825,6 +887,8 @@ PROMPT;
         string $date,
         string $meal,
         MealPlanSettings $settings,
+        array $priorityOrder,
+        array $sharedProductIds,
     ): ?array {
         if ($candidates === []) {
             return null;
@@ -873,6 +937,21 @@ PROMPT;
             }
         }
 
+        if ($strategy === MenuStrategy::UsePantry) {
+            $priorityProductId = $this->priorityProductFor($candidates, $priorityOrder, $available, $date, $meal, $usage, $slotRecipe);
+
+            if ($priorityProductId !== null) {
+                $withPriority = array_values(array_filter(
+                    $candidates,
+                    fn (Recipe $recipe): bool => $this->recipeUsesProduct($recipe, $priorityProductId),
+                ));
+
+                if ($withPriority !== []) {
+                    $candidates = $withPriority;
+                }
+            }
+        }
+
         $usable = array_values(array_filter(
             $candidates,
             fn (Recipe $recipe): bool => $this->canUseRecipe((int) $recipe->id, $date, $meal, $usage, $slotRecipe),
@@ -911,7 +990,7 @@ PROMPT;
             }
         }
 
-        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage, $meal, $settings): int {
+        usort($evaluated, function (array $a, array $b) use ($strategy, $profile, $usage, $meal, $settings, $sharedProductIds): int {
             $scoreA = $this->scoreRecipe(
                 $a['evaluation'],
                 $strategy,
@@ -920,6 +999,7 @@ PROMPT;
                 $profile,
                 $meal,
                 $settings,
+                $sharedProductIds,
             );
             $scoreB = $this->scoreRecipe(
                 $b['evaluation'],
@@ -929,6 +1009,7 @@ PROMPT;
                 $profile,
                 $meal,
                 $settings,
+                $sharedProductIds,
             );
 
             return $scoreB <=> $scoreA ?: $a['recipe']->name <=> $b['recipe']->name;
@@ -945,6 +1026,7 @@ PROMPT;
      *     faltantes: array<int, string>,
      *     vence_pronto: bool
      * }  $evaluation
+     * @param  array<int, true>  $sharedProductIds
      */
     private function scoreRecipe(
         array $evaluation,
@@ -954,6 +1036,7 @@ PROMPT;
         DietProfile $profile,
         string $meal,
         MealPlanSettings $settings,
+        array $sharedProductIds = [],
     ): float {
         $varietyPenalty = $occurrences * 6.0;
         $dietBonus = match ($profile) {
@@ -971,7 +1054,17 @@ PROMPT;
             }
         }
 
-        return $dietBonus + $habitBonus + $cuisineBonus + $this->nutritionScore($recipe, $meal, $settings) + match ($strategy) {
+        $sharedBonus = 0.0;
+
+        foreach ($recipe->ingredients as $ingredient) {
+            if (isset($sharedProductIds[(int) $ingredient->product_id])) {
+                $sharedBonus += 1.5;
+            }
+        }
+
+        $sharedBonus = min(3.0, $sharedBonus);
+
+        return $dietBonus + $habitBonus + $cuisineBonus + $sharedBonus + $this->nutritionScore($recipe, $meal, $settings) + match ($strategy) {
             MenuStrategy::UsePantry => $evaluation['aprovechamiento'] * 6.0
                 + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
@@ -1062,6 +1155,85 @@ PROMPT;
         }
 
         return false;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $candidates
+     * @param  array<int, int>  $priorityOrder
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     */
+    private function priorityProductFor(
+        array $candidates,
+        array $priorityOrder,
+        array $available,
+        string $date,
+        string $meal,
+        array $usage,
+        array $slotRecipe,
+    ): ?int {
+        foreach ($priorityOrder as $productId) {
+            if (($available[$productId]['quantity'] ?? 0.0) <= 0.0) {
+                continue;
+            }
+
+            foreach ($candidates as $recipe) {
+                if ($recipe->course === RecipeCourse::Drink
+                    || ! $this->canUseRecipe((int) $recipe->id, $date, $meal, $usage, $slotRecipe)) {
+                    continue;
+                }
+
+                if ($this->recipeUsesProduct($recipe, $productId)) {
+                    return $productId;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function recipeUsesProduct(Recipe $recipe, int $productId): bool
+    {
+        foreach ($recipe->ingredients as $ingredient) {
+            if ((int) $ingredient->product_id === $productId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Productos que ya se están usando en otra comida del mismo día. Se usan
+     * para preferir recetas que compartan una base y cocinarla una sola vez.
+     *
+     * @param  array<string, \App\Models\MealPlanEntry>  $created
+     * @return array<int, true>
+     */
+    private function sharedProductIdsForDate(array $created, string $date): array
+    {
+        $productIds = [];
+
+        foreach ($created as $key => $entry) {
+            if (! str_starts_with($key, $date.'|') || $entry->kind !== MealEntryKind::Recipe) {
+                continue;
+            }
+
+            if ($entry->recipe !== null) {
+                foreach (array_keys($this->requirementsFor($entry->recipe, (int) $entry->cook_servings)) as $productId) {
+                    $productIds[$productId] = true;
+                }
+            }
+
+            if ($entry->drinkRecipe !== null) {
+                foreach (array_keys($this->requirementsFor($entry->drinkRecipe, (int) $entry->servings)) as $productId) {
+                    $productIds[$productId] = true;
+                }
+            }
+        }
+
+        return $productIds;
     }
 
     /**

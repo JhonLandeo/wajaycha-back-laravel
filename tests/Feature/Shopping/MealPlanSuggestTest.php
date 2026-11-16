@@ -800,3 +800,148 @@ it('accepts an AI choice without the light tag when a light recipe exists', func
         ->assertJsonPath('source', 'ai')
         ->assertJsonPath('data.entries.0.recipe.name', 'Normal');
 });
+
+it('uses the priority pantry product even when the recipe has missing ingredients', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$carapulcra, $papaSeca] = suggestionRecipe($user->id, 'Carapulcra de prueba', 'lunch');
+    $carapulcra->update(['prep_minutes' => 50]);
+
+    $carne = Product::factory()->create(['name' => 'Carne de cerdo '.fake()->unique()->word(), 'unit' => 'kg']);
+    RecipeIngredient::factory()->create([
+        'recipe_id' => $carapulcra->id,
+        'product_id' => $carne->id,
+        'quantity' => 0.4,
+        'unit' => 'kg',
+        'is_optional' => false,
+    ]);
+    suggestionRecipe($user->id, 'Receta sin despensa');
+
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $papaSeca->id,
+        'quantity' => 0.5,
+        'unit' => 'kg',
+        'expires_on' => null,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'use_pantry',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('source', 'fallback')
+        ->assertJsonPath('data.entries.0.recipe.name', 'Carapulcra de prueba');
+});
+
+it('prioriza el producto de despensa que vence primero', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$first] = suggestionRecipe($user->id, 'Receta que vence primero', 'lunch');
+    [$second, $secondProduct] = suggestionRecipe($user->id, 'Receta que vence despues', 'lunch');
+
+    $firstProduct = $first->ingredients()->with('product')->first()?->product;
+    expect($firstProduct)->not->toBeNull();
+
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $firstProduct->id,
+        'quantity' => 0.5,
+        'unit' => 'kg',
+        'expires_on' => '2026-11-11',
+    ]);
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $secondProduct->id,
+        'quantity' => 0.5,
+        'unit' => 'kg',
+        'expires_on' => '2026-11-20',
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'use_pantry',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Receta que vence primero');
+});
+
+it('reutiliza un producto base entre comidas del mismo dia', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $quinoa = Product::factory()->create(['name' => 'Quinua compartida', 'unit' => 'kg']);
+    $rice = Product::factory()->create(['name' => 'Arroz distinto', 'unit' => 'kg']);
+
+    $breakfast = Recipe::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Desayuno con quinua',
+        'meal_types' => ['breakfast'],
+        'base_servings' => 2,
+    ]);
+    RecipeIngredient::factory()->create([
+        'recipe_id' => $breakfast->id,
+        'product_id' => $quinoa->id,
+        'quantity' => 0.1,
+        'unit' => 'kg',
+        'is_optional' => false,
+    ]);
+
+    $lunchShared = Recipe::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Almuerzo con quinua',
+        'meal_types' => ['lunch'],
+        'base_servings' => 2,
+    ]);
+    RecipeIngredient::factory()->create([
+        'recipe_id' => $lunchShared->id,
+        'product_id' => $quinoa->id,
+        'quantity' => 0.1,
+        'unit' => 'kg',
+        'is_optional' => false,
+    ]);
+
+    $lunchOther = Recipe::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Almuerzo con arroz',
+        'meal_types' => ['lunch'],
+        'base_servings' => 2,
+    ]);
+    RecipeIngredient::factory()->create([
+        'recipe_id' => $lunchOther->id,
+        'product_id' => $rice->id,
+        'quantity' => 0.1,
+        'unit' => 'kg',
+        'is_optional' => false,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['breakfast', 'lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $entries = $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->json('data.entries');
+
+    $lunch = collect($entries)->firstWhere('meal_type', 'lunch');
+
+    expect($lunch['recipe']['name'])->toBe('Almuerzo con quinua');
+});

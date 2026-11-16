@@ -23,5 +23,7 @@ final class PantryStock
         public readonly float $quantity,
         public readonly ?CarbonImmutable $expiresOn,
         public readonly string $productName = '',
+        public readonly ?CarbonImmutable $acquiredOn = null,
+        public readonly ?int $shelfLifeDays = null,
     ) {}
 }

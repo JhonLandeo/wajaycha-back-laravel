@@ -43,6 +43,7 @@ class ProductCatalogueSeeder extends Seeder
                 'protein_g' => $item['protein_g'] ?? null,
                 'carbs_g' => $item['carbs_g'] ?? null,
                 'fat_g' => $item['fat_g'] ?? null,
+                'shelf_life_days' => $item['shelf_life_days'] ?? null,
                 'is_active' => true,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -53,7 +54,7 @@ class ProductCatalogueSeeder extends Seeder
         Product::upsert(
             $rows,
             uniqueBy: ['slug'],
-            update: ['name', 'unit', 'calories_kcal', 'protein_g', 'carbs_g', 'fat_g', 'is_active'],
+            update: ['name', 'unit', 'calories_kcal', 'protein_g', 'carbs_g', 'fat_g', 'shelf_life_days', 'is_active'],
         );
     }
 }

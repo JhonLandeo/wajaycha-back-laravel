@@ -36,3 +36,12 @@ it('never touches a user-owned product', function () {
         ->and($mine->user_id)->toBe($user->id)
         ->and($mine->name)->toBe('Mi producto casero');
 });
+
+it('siembra la vida útil de los perecederos y deja los secos sin fecha estimada', function () {
+    (new ProductCatalogueSeeder)->run();
+
+    expect(Product::where('slug', 'pollo-entero')->sole()->shelf_life_days)->toBe(3)
+        ->and(Product::where('slug', 'pescado-fresco')->sole()->shelf_life_days)->toBe(2)
+        ->and(Product::where('slug', 'arroz')->sole()->shelf_life_days)->toBeNull()
+        ->and(Product::where('slug', 'lentejas')->sole()->shelf_life_days)->toBeNull();
+});

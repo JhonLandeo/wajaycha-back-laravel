@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Actions\Shopping;
 
+use App\DTOs\Shopping\PantryStock;
 use App\DTOs\Shopping\PlanningWeek;
 use App\Enums\DietProfile;
 use App\Enums\MealEntryKind;
 use App\Enums\MealEntryStatus;
 use App\Enums\MealType;
+use App\Enums\MenuStrategy;
 use App\Enums\RecipeCourse;
 use App\Enums\RecipeCuisine;
 use App\Models\MealPlanSettings;
@@ -19,6 +21,7 @@ use App\Services\Shopping\MealPlanPresenter;
 use App\Services\Shopping\MenuCalendar;
 use App\Services\Shopping\MenuCandidateFilter;
 use App\Services\Shopping\NutritionCalculator;
+use App\Services\Shopping\PantryPriority;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 
@@ -39,6 +42,7 @@ final class SuggestMealAlternativeAction
         private readonly ShoppingRepositoryContract $shoppingRepository,
         private readonly MenuCandidateFilter $candidateFilter,
         private readonly NutritionCalculator $nutritionCalculator,
+        private readonly PantryPriority $pantryPriority,
         private readonly MenuCalendar $calendar,
         private readonly MealPlanPresenter $presenter,
     ) {}
@@ -93,14 +97,18 @@ final class SuggestMealAlternativeAction
             return null;
         }
 
+        $pool = $this->applyPantryPriority($pool, $userId, $asOf, $settings);
+
         $habitProductIds = array_map(
             static fn ($habit): int => (int) $habit->product_id,
             $this->shoppingRepository->activeHabitsFor($userId),
         );
 
-        usort($pool, function (Recipe $a, Recipe $b) use ($usage, $settings, $meal, $habitProductIds): int {
-            $scoreA = $this->score($a, $usage, $settings, $meal, $habitProductIds);
-            $scoreB = $this->score($b, $usage, $settings, $meal, $habitProductIds);
+        $sharedProductIds = $this->sharedProductIdsFromEntries($entries, $date, $meal);
+
+        usort($pool, function (Recipe $a, Recipe $b) use ($usage, $settings, $meal, $habitProductIds, $sharedProductIds): int {
+            $scoreA = $this->score($a, $usage, $settings, $meal, $habitProductIds, $sharedProductIds);
+            $scoreB = $this->score($b, $usage, $settings, $meal, $habitProductIds, $sharedProductIds);
 
             return $scoreB <=> $scoreA ?: $a->name <=> $b->name;
         });
@@ -176,6 +184,97 @@ final class SuggestMealAlternativeAction
      * @param  array<int, Recipe>  $pool
      * @return array<int, Recipe>
      */
+    private function applyPantryPriority(
+        array $pool,
+        int $userId,
+        CarbonImmutable $asOf,
+        MealPlanSettings $settings,
+    ): array {
+        if (($settings->menu_strategy ?? MenuStrategy::Balanced) !== MenuStrategy::UsePantry) {
+            return $pool;
+        }
+
+        $pantry = $this->shoppingRepository->pantryStockFor($userId);
+        $priorityOrder = $this->pantryPriority->orderedProductIds($pantry, $asOf);
+
+        foreach ($priorityOrder as $productId) {
+            if (! $this->hasStock($pantry, $productId)) {
+                continue;
+            }
+
+            $withPriority = array_values(array_filter(
+                $pool,
+                fn (Recipe $recipe): bool => $this->recipeUsesProduct($recipe, $productId),
+            ));
+
+            if ($withPriority !== []) {
+                return $withPriority;
+            }
+        }
+
+        return $pool;
+    }
+
+    /**
+     * @param  array<int, PantryStock>  $pantry
+     */
+    private function hasStock(array $pantry, int $productId): bool
+    {
+        foreach ($pantry as $stock) {
+            if ($stock->productId === $productId && $stock->unit !== null && $stock->quantity > 0.0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function recipeUsesProduct(Recipe $recipe, int $productId): bool
+    {
+        foreach ($recipe->ingredients as $ingredient) {
+            if ((int) $ingredient->product_id === $productId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, mixed>  $entries
+     * @return array<int, true>
+     */
+    private function sharedProductIdsFromEntries(array $entries, string $date, string $meal): array
+    {
+        $productIds = [];
+
+        foreach ($entries as $entry) {
+            if (! is_array($entry)
+                || (string) ($entry['plan_date'] ?? '') !== $date
+                || (string) ($entry['meal_type'] ?? '') === $meal) {
+                continue;
+            }
+
+            foreach ([$entry['recipe'] ?? null, $entry['drink_recipe'] ?? null] as $recipe) {
+                if (! is_array($recipe) || ! isset($recipe['ingredients']) || ! is_array($recipe['ingredients'])) {
+                    continue;
+                }
+
+                foreach ($recipe['ingredients'] as $ingredient) {
+                    if (is_array($ingredient) && isset($ingredient['product_id'])) {
+                        $productIds[(int) $ingredient['product_id']] = true;
+                    }
+                }
+            }
+        }
+
+        return $productIds;
+    }
+
+    /**
+     * @param  array<int, Recipe>  $pool
+     * @return array<int, Recipe>
+     */
     private function applyDinnerCarbPreference(array $pool, string $meal, MealPlanSettings $settings): array
     {
         $limit = $settings->dinner_carb_limit_g;
@@ -196,6 +295,7 @@ final class SuggestMealAlternativeAction
     /**
      * @param  array<int, int>  $usage
      * @param  array<int, int>  $habitProductIds
+     * @param  array<int, true>  $sharedProductIds
      */
     private function score(
         Recipe $recipe,
@@ -203,6 +303,7 @@ final class SuggestMealAlternativeAction
         MealPlanSettings $settings,
         string $meal,
         array $habitProductIds,
+        array $sharedProductIds,
     ): float {
         $nutrition = $this->nutritionCalculator->perServing($recipe);
         $score = -6.0 * ($usage[(int) $recipe->id] ?? 0);
@@ -217,6 +318,16 @@ final class SuggestMealAlternativeAction
                 break;
             }
         }
+
+        $sharedBonus = 0.0;
+
+        foreach ($recipe->ingredients as $ingredient) {
+            if (isset($sharedProductIds[(int) $ingredient->product_id])) {
+                $sharedBonus += 1.5;
+            }
+        }
+
+        $score += min(3.0, $sharedBonus);
 
         if (! $nutrition->isComplete()) {
             return $score;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\MealPlanEntry;
 use App\Models\MenuChatMessage;
+use App\Models\PantryItem;
 use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
@@ -325,4 +326,168 @@ it('ajusta la propuesta por chat sin escribir menú, recetas ni mensajes', funct
     expect(MealPlanEntry::query()->count())->toBe(0)
         ->and(MenuChatMessage::query()->count())->toBe(0)
         ->and(Recipe::query()->where('name', 'Almuerzo alternativo')->exists())->toBeTrue();
+});
+
+it('ofrece como alternativa una receta que usa el producto prioritario de la despensa', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $current = nutritionRecipe($user->id, 'Almuerzo actual', 'lunch', [
+        'calories_kcal' => 3600,
+        'protein_g' => 70,
+        'carbs_g' => 780,
+        'fat_g' => 8,
+    ]);
+    $papaSeca = Product::factory()->create(['name' => 'Papa seca prioritaria', 'unit' => 'kg']);
+    $withPantry = Recipe::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Almuerzo con papa seca',
+        'meal_types' => ['lunch'],
+        'base_servings' => 2,
+    ]);
+    RecipeIngredient::factory()->create([
+        'recipe_id' => $withPantry->id,
+        'product_id' => $papaSeca->id,
+        'quantity' => 0.2,
+        'unit' => 'kg',
+        'is_optional' => false,
+    ]);
+    nutritionRecipe($user->id, 'Almuerzo sin despensa', 'lunch', [
+        'calories_kcal' => 1650,
+        'protein_g' => 270,
+        'carbs_g' => 0,
+        'fat_g' => 60,
+    ]);
+
+    PantryItem::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $papaSeca->id,
+        'quantity' => 0.2,
+        'unit' => 'kg',
+        'expires_on' => null,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'use_pantry',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    $entry = [
+        'id' => 10,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'recipe_id' => $current->id,
+        'recipe' => null,
+        'drink_recipe_id' => null,
+        'drink_recipe' => null,
+        'servings' => 2,
+        'cook_servings' => 2,
+        'leftover_of_entry_id' => null,
+        'notes' => null,
+    ];
+
+    $this->postJson('/api/shopping/menu/suggest/alternative', [
+        'week_start' => '2026-11-09',
+        'date' => '2026-11-09',
+        'meal' => 'lunch',
+        'entries' => [$entry],
+    ], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.recipe.name', 'Almuerzo con papa seca');
+});
+
+it('prefiere una alternativa que reutiliza un producto del mismo dia', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $quinoa = Product::factory()->create(['name' => 'Quinua compartida alternativa', 'unit' => 'kg']);
+    $rice = Product::factory()->create(['name' => 'Arroz alternativo', 'unit' => 'kg']);
+
+    $breakfast = Recipe::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Desayuno con quinua alternativa',
+        'meal_types' => ['breakfast'],
+        'base_servings' => 2,
+    ]);
+    RecipeIngredient::factory()->create([
+        'recipe_id' => $breakfast->id,
+        'product_id' => $quinoa->id,
+        'quantity' => 0.1,
+        'unit' => 'kg',
+        'is_optional' => false,
+    ]);
+
+    $current = nutritionRecipe($user->id, 'Almuerzo actual alternativo', 'lunch', [
+        'calories_kcal' => 3600,
+        'protein_g' => 70,
+        'carbs_g' => 780,
+        'fat_g' => 8,
+    ]);
+
+    $shared = Recipe::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Almuerzo con quinua alternativa',
+        'meal_types' => ['lunch'],
+        'base_servings' => 2,
+    ]);
+    RecipeIngredient::factory()->create([
+        'recipe_id' => $shared->id,
+        'product_id' => $quinoa->id,
+        'quantity' => 0.1,
+        'unit' => 'kg',
+        'is_optional' => false,
+    ]);
+
+    $other = Recipe::factory()->create([
+        'user_id' => $user->id,
+        'name' => 'Almuerzo con arroz alternativo',
+        'meal_types' => ['lunch'],
+        'base_servings' => 2,
+    ]);
+    RecipeIngredient::factory()->create([
+        'recipe_id' => $other->id,
+        'product_id' => $rice->id,
+        'quantity' => 0.1,
+        'unit' => 'kg',
+        'is_optional' => false,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['breakfast', 'lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    $entries = [
+        [
+            'id' => 1,
+            'plan_date' => '2026-11-09',
+            'meal_type' => 'breakfast',
+            'kind' => 'recipe',
+            'recipe_id' => $breakfast->id,
+            'recipe' => ['ingredients' => [['product_id' => $quinoa->id]]],
+            'servings' => 2,
+        ],
+        [
+            'id' => 10,
+            'plan_date' => '2026-11-09',
+            'meal_type' => 'lunch',
+            'kind' => 'recipe',
+            'recipe_id' => $current->id,
+            'recipe' => null,
+            'servings' => 2,
+        ],
+    ];
+
+    $this->postJson('/api/shopping/menu/suggest/alternative', [
+        'week_start' => '2026-11-09',
+        'date' => '2026-11-09',
+        'meal' => 'lunch',
+        'entries' => $entries,
+    ], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.recipe.name', 'Almuerzo con quinua alternativa');
 });
