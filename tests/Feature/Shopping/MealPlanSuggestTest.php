@@ -711,38 +711,21 @@ it('prefers Peruvian recipes over international ones', function () {
         ->assertJsonPath('data.entries.0.recipe.name', 'Peruana');
 });
 
-it('rejects an AI menu that ignores Peruvian recipes when they exist', function () {
+it('always allows a no-cook recipe even when the user only declares a stove', function () {
     [$user, $headers] = $this->userWithAuth();
-    [$international] = suggestionRecipe($user->id, 'Internacional', 'lunch', 'main', [], [], 'international');
-    suggestionRecipe($user->id, 'Peruana', 'lunch', 'main', [], [], 'peruvian');
+    suggestionRecipe($user->id, 'Ensalada de fruta', 'breakfast', 'main', ['no_cook'], ['vegetarian'], 'international');
 
     $this->putJson('/api/shopping/menu/settings', [
         'household_size' => 2,
-        'meal_types' => ['lunch'],
+        'meal_types' => ['breakfast'],
         'plan_weekdays' => [1],
         'excluded_terms' => [],
-        'new_recipes_per_week' => 0,
+        'available_equipment' => ['stove'],
     ], $headers)->assertOk();
 
-    $aiJson = json_encode([
-        'days' => [
-            ['date' => '2026-11-09', 'meals' => ['lunch' => ['recipe_id' => $international->id, 'cook_servings' => 2]]],
-        ],
-    ]);
-
-    config([
-        'services.opencode.api_key' => 'test-key',
-        'services.opencode.base_url' => 'https://opencode.test/go',
-        'services.opencode.model' => 'test-model',
-    ]);
-    Http::fake([
-        'opencode.test/*' => Http::response([
-            'candidates' => [['content' => ['parts' => [['text' => $aiJson]]]]],
-        ]),
-    ]);
+    config(['services.opencode.api_key' => '']);
 
     $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
         ->assertOk()
-        ->assertJsonPath('source', 'fallback')
-        ->assertJsonPath('data.entries.0.recipe.name', 'Peruana');
+        ->assertJsonPath('data.entries.0.recipe.name', 'Ensalada de fruta');
 });

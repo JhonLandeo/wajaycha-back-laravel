@@ -35,7 +35,9 @@ it('seeds the shared recipe catalogue idempotently and maps ingredients to produ
         ->and($arroz->diet_tags)->toContain('high_protein')
         ->and($arroz->cuisine->value)->toBe('peruvian')
         ->and(Recipe::where('slug', 'aji-de-gallina')->where('cuisine', 'peruvian')->exists())->toBeTrue()
-        ->and(Recipe::where('slug', 'avena-con-platano')->where('cuisine', 'international')->exists())->toBeTrue();
+        ->and(Recipe::where('slug', 'avena-con-platano')->where('cuisine', 'international')->exists())->toBeTrue()
+        ->and(Recipe::where('slug', 'pancakes')->where('cuisine', 'international')->exists())->toBeTrue()
+        ->and(Recipe::where('slug', 'ensalada-de-fruta-con-yogur-griego')->exists())->toBeTrue();
 
     $this->seed(ProductCatalogueSeeder::class);
     $this->seed(RecipeCatalogueSeeder::class);

@@ -339,11 +339,6 @@ final class SuggestMenuAction
                     continue;
                 }
 
-                if (($recipe->cuisine ?? RecipeCuisine::Peruvian) === RecipeCuisine::International
-                    && $this->hasCuisineAlternative($candidates[$meal] ?? [], $recipeId, $date, $meal, $usage, $slotRecipe)) {
-                    continue;
-                }
-
                 $evaluation = $this->evaluate($recipe, $choice['cook_servings'], $available);
 
                 if (($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::UsePantry
@@ -845,15 +840,6 @@ PROMPT;
             }
         }
 
-        $peruvian = array_values(array_filter(
-            $candidates,
-            static fn (Recipe $recipe): bool => ($recipe->cuisine ?? RecipeCuisine::Peruvian) === RecipeCuisine::Peruvian,
-        ));
-
-        if ($peruvian !== []) {
-            $candidates = $peruvian;
-        }
-
         $usable = array_values(array_filter(
             $candidates,
             fn (Recipe $recipe): bool => $this->canUseRecipe((int) $recipe->id, $date, $meal, $usage, $slotRecipe),
@@ -959,36 +945,6 @@ PROMPT;
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
                 - $varietyPenalty,
         };
-    }
-
-    /**
-     * @param  array<int, Recipe>  $candidates
-     * @param  array<int, int>  $usage
-     * @param  array<string, int>  $slotRecipe
-     */
-    private function hasCuisineAlternative(
-        array $candidates,
-        int $exceptId,
-        string $date,
-        string $meal,
-        array $usage,
-        array $slotRecipe,
-    ): bool {
-        foreach ($candidates as $recipe) {
-            $recipeId = (int) $recipe->id;
-
-            if ($recipe->course === RecipeCourse::Drink
-                || $recipeId === $exceptId
-                || ! $this->canUseRecipe($recipeId, $date, $meal, $usage, $slotRecipe)) {
-                continue;
-            }
-
-            if (($recipe->cuisine ?? RecipeCuisine::Peruvian) === RecipeCuisine::Peruvian) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

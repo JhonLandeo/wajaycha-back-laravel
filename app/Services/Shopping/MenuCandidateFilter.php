@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Shopping;
 
 use App\Enums\DietProfile;
+use App\Enums\KitchenEquipment;
 use App\Models\MealPlanSettings;
 use App\Models\Recipe;
 use App\Repositories\Contracts\RecipeRepositoryContract;
@@ -74,6 +75,12 @@ final class MenuCandidateFilter
         }
 
         foreach ($recipe->required_equipment ?? [] as $equipment) {
+            // "Sin cocción" no pide equipamiento: siempre está disponible, incluso
+            // cuando el usuario declara que no tiene nada.
+            if ($equipment === KitchenEquipment::NoCook->value) {
+                continue;
+            }
+
             if (! in_array($equipment, $available, true)) {
                 return false;
             }

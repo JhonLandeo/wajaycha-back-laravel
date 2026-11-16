@@ -47,6 +47,7 @@ return [
         ['slug' => 'harina', 'name' => 'Harina', 'unit' => 'kg'],
         ['slug' => 'huevos', 'name' => 'Huevos', 'unit' => 'unidad'],
         ['slug' => 'leche-evaporada', 'name' => 'Leche evaporada', 'unit' => 'unidad'],
+        ['slug' => 'yogur-griego', 'name' => 'Yogur griego', 'unit' => 'unidad'],
         ['slug' => 'queso-fresco', 'name' => 'Queso fresco', 'unit' => 'kg'],
         ['slug' => 'mantequilla', 'name' => 'Mantequilla', 'unit' => 'unidad'],
         ['slug' => 'pan', 'name' => 'Pan', 'unit' => 'unidad'],
