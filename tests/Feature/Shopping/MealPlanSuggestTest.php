@@ -1234,3 +1234,42 @@ it('en modo ahorro prefiere la receta con faltantes mas baratos', function () {
         ->assertOk()
         ->assertJsonPath('data.entries.0.recipe.name', 'Receta barata');
 });
+
+it('prefiere lo que el usuario cocino y evita lo que salto en el historial', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$liked] = suggestionRecipe($user->id, 'Cocinada seguido', 'lunch');
+    [$skipped] = suggestionRecipe($user->id, 'Saltada seguido', 'lunch');
+
+    MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'plan_date' => '2026-10-05',
+        'meal_type' => 'lunch',
+        'recipe_id' => $liked->id,
+        'status' => 'cooked',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+    MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'plan_date' => '2026-10-12',
+        'meal_type' => 'lunch',
+        'recipe_id' => $skipped->id,
+        'status' => 'skipped',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.recipe.name', 'Cocinada seguido');
+});

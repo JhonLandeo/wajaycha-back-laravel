@@ -54,4 +54,12 @@ interface MealPlanRepositoryContract
 
     /** Intercambia todas las entradas de dos fechas del mismo usuario. */
     public function swapDays(int $userId, CarbonImmutable $dateA, CarbonImmutable $dateB): void;
+
+    /**
+     * Entradas aplicadas en una ventana, con su receta e ingredientes, para
+     * construir el perfil de preferencias.
+     *
+     * @return Collection<int, MealPlanEntry>
+     */
+    public function preferenceHistoryFor(int $userId, CarbonImmutable $since, CarbonImmutable $until): Collection;
 }

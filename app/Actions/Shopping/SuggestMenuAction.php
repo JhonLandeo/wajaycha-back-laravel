@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Actions\Shopping;
 
 use App\DTOs\Prices\PriceContext;
+use App\DTOs\Shopping\MenuPreferenceProfile;
 use App\DTOs\Shopping\Nutrition;
 use App\DTOs\Shopping\PantryStock;
 use App\DTOs\Shopping\PlanningWeek;
@@ -24,6 +25,7 @@ use App\Services\AI\OpenCodeGateway;
 use App\Services\Prices\PriceSourceRegistry;
 use App\Services\Shopping\MenuCalendar;
 use App\Services\Shopping\MenuCandidateFilter;
+use App\Services\Shopping\MenuPreferenceProfileBuilder;
 use App\Services\Shopping\MenuPriceEstimator;
 use App\Services\Shopping\NutritionCalculator;
 use App\Services\Shopping\PantryPriority;
@@ -65,6 +67,8 @@ final class SuggestMenuAction
 
     private ?CarbonImmutable $priceAsOf = null;
 
+    private ?MenuPreferenceProfile $preferences = null;
+
     public function __construct(
         private readonly MealPlanRepositoryContract $mealPlanRepository,
         private readonly ShoppingRepositoryContract $shoppingRepository,
@@ -75,6 +79,7 @@ final class SuggestMenuAction
         private readonly PriceRepositoryContract $priceRepository,
         private readonly PriceSourceRegistry $priceRegistry,
         private readonly MenuPriceEstimator $priceEstimator,
+        private readonly MenuPreferenceProfileBuilder $preferenceBuilder,
         private readonly GeneratePantryRecipesAction $recipeGenerator,
         private readonly MenuCalendar $calendar,
         private readonly OpenCodeGateway $gateway,
@@ -123,6 +128,20 @@ final class SuggestMenuAction
 
         $meals = $settings->meal_types;
         $this->nutritionByRecipe = [];
+
+        try {
+            $this->preferences = $this->preferenceBuilder->build(
+                $this->mealPlanRepository->preferenceHistoryFor(
+                    $userId,
+                    $asOf->setTimezone('America/Lima')->startOfDay()->subDays(56),
+                    $asOf->setTimezone('America/Lima')->startOfDay()->subDay(),
+                ),
+                $asOf,
+            );
+        } catch (Throwable $e) {
+            report($e);
+            $this->preferences = MenuPreferenceProfile::empty();
+        }
 
         // Si una comida no tiene suficientes recetas distintas para los días
         // activos, la generación se enfoca en esas comidas. Así la semana no
@@ -596,6 +615,9 @@ final class SuggestMenuAction
                 : null,
             'limite_calorias_cena' => $settings->dinner_calorie_limit,
             'cocina_preferida' => RecipeCuisine::Peruvian->value,
+            'preferencias_aprendidas' => $this->preferences?->hasSignal === true
+                ? $this->preferences->toPromptArray()
+                : null,
             'presupuesto_semanal' => $budget?->weeklyTarget,
             'despensa' => array_map(fn (PantryStock $item): array => [
                 'producto' => $item->productName,
@@ -629,6 +651,7 @@ Reglas:
 - Prefiere recetas que usen los productos de `habitos`; no es obligatorio, pero ayuda a cubrir lo que el usuario declaró.
 - Según `criterio`: `use_pantry` empieza por el producto de `despensa` con `prioridad` más baja; si una receta lo usa, elígela aunque falten otros ingredientes, porque los faltantes se compran. No elijas una receta que ignore ese producto si otra candidata lo usa. `save_money` minimiza `costo_faltantes` en soles; no elijas una receta cara si hay una más barata. `costo_completo = false` significa que falta precio, no que sea gratis. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
 - `productos` es la lista compacta de ingredientes de cada receta. Reutiliza productos base entre comidas del mismo día: si el desayuno ya usa quinua, arroz, lentejas o un producto similar, prefiere un almuerzo o cena que use el mismo producto para cocinarlo una sola vez.
+- `preferencias_aprendidas` es una tendencia suave de las últimas ocho semanas; úsala para desempatar, no para repetir ni excluir recetas. Respeta la variedad y el perfil.
 - La cena ya viene filtrada hasta `limite_maximo_cena`; prefiere `limite_minutos_cena` y usa el margen de cinco minutos solo si no hay otra cena. Prefiere recetas `light`. Si `limite_calorias_cena` no es null, elige una cena por debajo y evita platos de fondo pesados si hay una opción ligera.
 - En `save_money`, si el almuerzo es compatible con la cena, cocina para dos comidas (cook_servings = porciones del almuerzo + personas de la cena) y deja la cena vacía; el backend la convertirá en sobras del almuerzo. Para que sea sobra, el almuerzo debe ser `light` y no llevar pescado fresco ni mariscos.
 - Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
@@ -1223,7 +1246,7 @@ PROMPT;
             }
         }
 
-        return $dietBonus + $habitBonus + $cuisineBonus + $sharedBonus + $dinnerBonus + $this->nutritionScore($recipe, $meal, $settings) + match ($strategy) {
+        return $dietBonus + $habitBonus + $cuisineBonus + $sharedBonus + $dinnerBonus + $this->preferenceScore($recipe, $meal) + $this->nutritionScore($recipe, $meal, $settings) + match ($strategy) {
             MenuStrategy::UsePantry => $evaluation['aprovechamiento'] * 6.0
                 + $evaluation['cobertura'] * 2.0
                 + ($evaluation['vence_pronto'] ? 2.0 : 0.0)
@@ -1320,6 +1343,41 @@ PROMPT;
         }
 
         return $score;
+    }
+
+    private function preferenceScore(Recipe $recipe, string $meal): float
+    {
+        $profile = $this->preferences;
+
+        if ($profile === null || ! $profile->hasSignal) {
+            return 0.0;
+        }
+
+        $recipeId = (int) $recipe->id;
+        $score = ($profile->mealRecipeScores[$meal][$recipeId] ?? 0.0) * 2.0
+            + ($profile->recipeScores[$recipeId] ?? 0.0);
+        $score += ($profile->cuisineScores[$recipe->cuisine->value] ?? 0.0);
+        $tagScore = 0.0;
+
+        foreach ($recipe->diet_tags ?? [] as $tag) {
+            $tagScore += $profile->tagScores[$tag] ?? 0.0;
+        }
+
+        $score += min(1.0, $tagScore * 0.5);
+        $ingredientScore = 0.0;
+
+        foreach ($recipe->ingredients as $ingredient) {
+            $ingredientScore += $profile->ingredientScores[(int) $ingredient->product_id] ?? 0.0;
+        }
+
+        $score += min(1.5, $ingredientScore * 0.3);
+
+        if ($profile->averagePrepMinutes !== null && $recipe->prep_minutes !== null
+            && abs($recipe->prep_minutes - $profile->averagePrepMinutes) <= 10) {
+            $score += 0.5;
+        }
+
+        return max(-2.5, min(4.0, $score));
     }
 
     private function nutritionOf(Recipe $recipe): Nutrition

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Enums\MealEntryKind;
+use App\Enums\MealEntryStatus;
 use App\Models\MealPlanEntry;
 use App\Models\MealPlanSettings;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
@@ -139,6 +140,22 @@ final class MealPlanRepository implements MealPlanRepositoryContract
         return MealPlanEntry::query()
             ->where('user_id', $userId)
             ->whereIn('leftover_of_entry_id', $sourceEntryIds)
+            ->get();
+    }
+
+    public function preferenceHistoryFor(int $userId, CarbonImmutable $since, CarbonImmutable $until): Collection
+    {
+        return MealPlanEntry::query()
+            ->where('user_id', $userId)
+            ->whereBetween('plan_date', [$since->toDateString(), $until->toDateString()])
+            ->whereIn('kind', [MealEntryKind::Recipe->value, MealEntryKind::Leftover->value])
+            ->whereIn('status', [
+                MealEntryStatus::Planned->value,
+                MealEntryStatus::Cooked->value,
+                MealEntryStatus::Leftover->value,
+                MealEntryStatus::Skipped->value,
+            ])
+            ->with(['recipe.ingredients.product'])
             ->get();
     }
 
