@@ -151,3 +151,56 @@ it('manda la despensa al borrador cuando el usuario la activa', function () {
         return str_contains((string) ($payload['contents'][0]['parts'][0]['text'] ?? ''), '"despensa"');
     });
 });
+
+it('crea un producto privado cuando la idea pide uno que no está en el catálogo', function () {
+    [$user, $headers] = $this->userWithAuth();
+
+    $recipe = [
+        'name' => 'Mazamorra de piña',
+        'meal_types' => ['lunch'],
+        'course' => 'main',
+        'prep_minutes' => 25,
+        'equipment' => ['stove'],
+        'diet_tags' => ['vegetarian'],
+        'instructions' => '1. Cocina la piña.',
+        'ingredients' => [
+            [
+                'nuevo_producto' => ['name' => 'Piña', 'unit' => 'unidad'],
+                'quantity' => 1,
+                'unit' => 'unidad',
+            ],
+        ],
+    ];
+
+    config([
+        'services.opencode.api_key' => 'test-key',
+        'services.opencode.base_url' => 'https://opencode.test/go',
+        'services.opencode.model' => 'test-model',
+    ]);
+    Http::fake([
+        'opencode.test/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode(['recipe' => $recipe])]]]]],
+        ]),
+    ]);
+
+    $draft = $this->postJson('/api/shopping/recipes/draft', [
+        'idea' => 'mazamorra de piña',
+    ], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.name', 'Mazamorra de piña')
+        ->assertJsonPath('data.ingredients.0.product_name', 'Piña')
+        ->json('data');
+
+    $product = Product::query()->where('user_id', $user->id)->where('name', 'Piña')->sole();
+
+    expect($product->slug)->toBeNull()
+        ->and($product->unit)->toBe('unidad')
+        ->and($draft['ingredients'][0]['product_id'])->toBe($product->id)
+        ->and(Recipe::query()->count())->toBe(0);
+
+    $this->postJson('/api/shopping/recipes/draft', [
+        'idea' => 'mazamorra de piña',
+    ], $headers)->assertOk();
+
+    expect(Product::query()->where('user_id', $user->id)->where('name', 'Piña')->count())->toBe(1);
+});

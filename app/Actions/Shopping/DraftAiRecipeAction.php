@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Actions\Shopping;
 
 use App\Enums\DietProfile;
+use App\Enums\Unit;
 use App\Models\MealPlanSettings;
 use App\Models\Product;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
 use App\Services\AI\OpenCodeGateway;
 use App\Services\Shopping\AiRecipeDraftValidator;
+use App\Services\Shopping\UnitConverter;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -23,6 +26,8 @@ use Throwable;
  */
 final class DraftAiRecipeAction
 {
+    private const MAX_NEW_PRODUCTS = 3;
+
     public function __construct(
         private readonly MealPlanRepositoryContract $mealPlanRepository,
         private readonly ShoppingRepositoryContract $shoppingRepository,
@@ -54,12 +59,36 @@ final class DraftAiRecipeAction
         }
 
         $productsById = [];
+        $existingByName = [];
+
         foreach ($products as $product) {
             $productsById[(int) $product->id] = $product;
+            $existingByName[$this->fold((string) $product->name)] = $product;
+        }
+
+        $createdProducts = 0;
+        $recipe = $response['recipe'];
+        $ingredients = $recipe['ingredients'] ?? [];
+
+        if (! is_array($ingredients)) {
+            return null;
+        }
+
+        $recipe['ingredients'] = $this->resolveNewProducts(
+            $ingredients,
+            $userId,
+            $settings,
+            $productsById,
+            $existingByName,
+            $createdProducts,
+        );
+
+        if ($recipe['ingredients'] === null) {
+            return null;
         }
 
         $existingNames = [];
-        $draft = $this->validator->validate($response['recipe'], $settings, $productsById, $existingNames);
+        $draft = $this->validator->validate($recipe, $settings, $productsById, $existingNames);
 
         if ($draft === null) {
             return null;
@@ -84,6 +113,100 @@ final class DraftAiRecipeAction
             'instructions' => $draft['data']['instructions'],
             'ingredients' => $ingredients,
         ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $ingredients
+     * @param  array<int, Product>  $productsById
+     * @param  array<string, Product>  $existingByName
+     * @return array<int, mixed>|null
+     */
+    private function resolveNewProducts(
+        array $ingredients,
+        int $userId,
+        MealPlanSettings $settings,
+        array &$productsById,
+        array &$existingByName,
+        int &$createdProducts,
+    ): ?array {
+        $resolved = [];
+
+        foreach ($ingredients as $ingredient) {
+            if (! is_array($ingredient)) {
+                return null;
+            }
+
+            $new = $ingredient['nuevo_producto'] ?? null;
+            $productId = (int) ($ingredient['product_id'] ?? $ingredient['producto_id'] ?? 0);
+
+            if (is_array($new) && ($productId <= 0 || ! isset($productsById[$productId]))) {
+                $name = trim((string) ($new['name'] ?? ''));
+                $unit = Unit::tryFrom((string) ($new['unit'] ?? ''));
+
+                if ($name === '' || mb_strlen($name) > 255 || $unit === null) {
+                    return null;
+                }
+
+                $folded = $this->fold($name);
+
+                foreach ($settings->excluded_terms ?? [] as $term) {
+                    if (str_contains($folded, $this->fold((string) $term))) {
+                        return null;
+                    }
+                }
+
+                $product = $existingByName[$folded] ?? null;
+
+                if ($product === null) {
+                    if ($createdProducts >= self::MAX_NEW_PRODUCTS) {
+                        return null;
+                    }
+
+                    try {
+                        $product = $this->shoppingRepository->createProduct($userId, $name, $unit->value);
+                    } catch (Throwable $e) {
+                        report($e);
+
+                        return null;
+                    }
+
+                    $createdProducts++;
+                    $existingByName[$folded] = $product;
+                }
+
+                $productId = (int) $product->id;
+                $productsById[$productId] = $product;
+
+                $ingredientUnit = Unit::tryFrom((string) ($ingredient['unit'] ?? ''));
+                $productUnit = Unit::tryFrom((string) $product->unit);
+                $quantity = (float) ($ingredient['quantity'] ?? 0);
+
+                if ($ingredientUnit === null
+                    || $productUnit === null
+                    || $quantity <= 0.0
+                    || ! UnitConverter::compatible($ingredientUnit->value, $productUnit->value)) {
+                    return null;
+                }
+
+                unset($ingredient['nuevo_producto']);
+                $ingredient['product_id'] = $productId;
+                $ingredient['quantity'] = UnitConverter::toCanonical(
+                    $quantity,
+                    $ingredientUnit->value,
+                    $productUnit->value,
+                );
+                $ingredient['unit'] = $productUnit->value;
+            }
+
+            $resolved[] = $ingredient;
+        }
+
+        return $resolved;
+    }
+
+    private function fold(string $value): string
+    {
+        return Str::lower(Str::ascii($value));
     }
 
     /**
@@ -149,7 +272,8 @@ final class DraftAiRecipeAction
 Eres un cocinero peruano. Propón una receta de cocina peruana usando solo productos del catálogo y devuelve solo JSON válido.
 
 Reglas:
-- Usa únicamente `producto_id` del catálogo. No inventes productos ni ids.
+- Usa únicamente `producto_id` del catálogo. No inventes ids.
+- Si la idea pide un producto que no está en `productos`, no lo sustituyas ni cambies el nombre del plato: usa `nuevo_producto` con `name` y `unit` (unidad compatible con la cantidad). El backend lo creará como producto privado. Usa como máximo 3 productos nuevos y solo los que pida la idea.
 {$pantryRule}
 - Evita los productos de `no_incluir`.
 - Elige una o más `meal_types` de `comidas_activas`, respeta el tiempo máximo y el equipamiento disponible.
@@ -165,7 +289,7 @@ Contexto:
 ```
 
 Formato exacto:
-{"recipe":{"name":"Pescado con verduras al vapor","meal_types":["lunch"],"course":"main","prep_minutes":25,"equipment":["stove"],"diet_tags":["light"],"instructions":"1. ...","ingredients":[{"producto_id":1,"quantity":0.4,"unit":"kg"}]}}
+{"recipe":{"name":"Mazamorra de piña","meal_types":["lunch"],"course":"main","prep_minutes":25,"equipment":["stove"],"diet_tags":["vegetarian"],"instructions":"1. ...","ingredients":[{"nuevo_producto":{"name":"Piña","unit":"unidad"},"quantity":1,"unit":"unidad"}]}}
 PROMPT;
     }
 
