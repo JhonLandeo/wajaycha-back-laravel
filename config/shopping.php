@@ -29,6 +29,10 @@ return [
 
     'grocery_category_name' => '🛒 Supermercado',
 
+    // Productos que no se usan para dejar sobras de un almuerzo a la cena:
+    // son los más delicados de conservar. La lista es por slug del catálogo.
+    'leftover_unsafe_slugs' => ['pescado-fresco', 'mariscos'],
+
     'catalogue' => [
         ['slug' => 'papa-blanca', 'name' => 'Papa blanca', 'unit' => 'kg', 'calories_kcal' => 770, 'protein_g' => 20, 'carbs_g' => 175, 'fat_g' => 1, 'shelf_life_days' => 30],
         ['slug' => 'papa-amarilla', 'name' => 'Papa amarilla', 'unit' => 'kg', 'calories_kcal' => 900, 'protein_g' => 20, 'carbs_g' => 200, 'fat_g' => 1, 'shelf_life_days' => 30],

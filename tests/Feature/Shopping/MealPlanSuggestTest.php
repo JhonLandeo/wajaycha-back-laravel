@@ -1007,3 +1007,111 @@ it('prefiere una cena light por debajo del tope de calorías', function () {
         ->assertOk()
         ->assertJsonPath('data.entries.0.recipe.name', 'Cena ligera');
 });
+
+it('en modo ahorro la cena es una sobra del almuerzo', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$lunch] = suggestionRecipe($user->id, 'Almuerzo que rinde cena', 'lunch', 'main', [], ['light']);
+    $lunch->update(['meal_types' => ['lunch', 'dinner']]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch', 'dinner'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'save_money',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $entries = $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->json('data.entries');
+
+    $lunchEntry = collect($entries)->firstWhere('meal_type', 'lunch');
+    $dinnerEntry = collect($entries)->firstWhere('meal_type', 'dinner');
+
+    expect($lunchEntry['cook_servings'])->toBe(4)
+        ->and($dinnerEntry['kind'])->toBe('leftover')
+        ->and($dinnerEntry['leftover_of_entry_id'])->toBe($lunchEntry['id'])
+        ->and($dinnerEntry['recipe_id'])->toBe($lunchEntry['recipe_id'])
+        ->and($dinnerEntry['servings'])->toBe(2)
+        ->and($dinnerEntry['cook_servings'])->toBe(0);
+});
+
+it('en modo ahorro reemplaza la cena elegida por sobras del almuerzo', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$lunch] = suggestionRecipe($user->id, 'Almuerzo que reemplaza cena', 'lunch', 'main', [], ['light']);
+    $lunch->update(['meal_types' => ['lunch', 'dinner']]);
+    [$dinner] = suggestionRecipe($user->id, 'Cena que sobra', 'dinner');
+    $dinner->update(['prep_minutes' => 15]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch', 'dinner'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'save_money',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $entries = $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->json('data.entries');
+
+    $lunchEntry = collect($entries)->firstWhere('meal_type', 'lunch');
+    $dinnerEntry = collect($entries)->firstWhere('meal_type', 'dinner');
+
+    expect($dinnerEntry['kind'])->toBe('leftover')
+        ->and($dinnerEntry['recipe_id'])->toBe($lunchEntry['recipe_id'])
+        ->and($dinnerEntry['recipe_id'])->not->toBe($dinner->id);
+});
+
+it('no usa sobras de un almuerzo que no es light', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$lunch] = suggestionRecipe($user->id, 'Almuerzo no light', 'lunch');
+    $lunch->update(['meal_types' => ['lunch', 'dinner']]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch', 'dinner'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'save_money',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $entries = $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->json('data.entries');
+
+    expect(collect($entries)->firstWhere('meal_type', 'dinner'))->toBeNull();
+});
+
+it('no usa sobras de un almuerzo con pescado fresco', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$lunch, $fish] = suggestionRecipe($user->id, 'Almuerzo con pescado', 'lunch', 'main', [], ['light']);
+    $fish->update(['slug' => 'pescado-fresco']);
+    $lunch->update(['meal_types' => ['lunch', 'dinner']]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch', 'dinner'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'menu_strategy' => 'save_money',
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $entries = $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->json('data.entries');
+
+    expect(collect($entries)->firstWhere('meal_type', 'dinner'))->toBeNull();
+});

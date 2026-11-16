@@ -157,6 +157,10 @@ final class SuggestMenuAction
                 $created[$key] = $entry;
             }
 
+            // En ahorro, la cena usa las sobras del almuerzo antes de programar
+            // sobras para otro día. Así la porción extra no se cuenta dos veces.
+            $this->applySaveMoneyLunchLeftovers($userId, $settings, $days, $meals, $created);
+
             // Antes de rellenar, convertir las porciones extra de la IA en sobras.
             // Si se rellenara primero, cada día tendría una receta y ninguna sobra
             // encontraría un hueco.
@@ -239,6 +243,8 @@ final class SuggestMenuAction
                     ]);
                 }
             }
+
+            $this->applySaveMoneyLunchLeftovers($userId, $settings, $days, $meals, $created);
         });
 
         return $source;
@@ -551,6 +557,7 @@ Reglas:
 - Según `criterio`: `use_pantry` empieza por el producto de `despensa` con `prioridad` más baja; si una receta lo usa, elígela aunque falten otros ingredientes, porque los faltantes se compran. No elijas una receta que ignore ese producto si otra candidata lo usa. `save_money` minimiza `faltantes`. `balanced` prioriza variedad y perfil, con la cobertura como desempate; no busca vaciar la despensa.
 - `productos` es la lista compacta de ingredientes de cada receta. Reutiliza productos base entre comidas del mismo día: si el desayuno ya usa quinua, arroz, lentejas o un producto similar, prefiere un almuerzo o cena que use el mismo producto para cocinarlo una sola vez.
 - La cena ya viene filtrada por `limite_minutos_cena`; prefiere recetas `light`. Si `limite_calorias_cena` no es null, elige una cena por debajo y evita platos de fondo pesados si hay una opción ligera.
+- En `save_money`, si el almuerzo es compatible con la cena, cocina para dos comidas (cook_servings = porciones del almuerzo + personas de la cena) y deja la cena vacía; el backend la convertirá en sobras del almuerzo. Para que sea sobra, el almuerzo debe ser `light` y no llevar pescado fresco ni mariscos.
 - Según `perfil`: `vegetarian` y `vegan` ya vienen filtrados por el backend; `high_protein` y `light` prefieren recetas con esa etiqueta en `diet_tags`.
 - `nutricion` es aproximada y por porción; no la recalcules ni la inventes. Si `nutricion.is_complete` es false, no la uses para decidir el objetivo. Si `objetivo_kcal_dia` no es null, reparte el objetivo entre las comidas activas y evita que un día quede muy por encima. Si `limite_carbohidratos_cena_g` no es null, prefiere cenas con `carbs_g` por debajo del límite; si no hay alternativa, elige la de menos carbohidratos.
 - Usa cada receta una sola vez en la semana; no repitas el mismo plato. Tampoco repitas la misma receta en días consecutivos para la misma comida. Respeta el tiempo máximo y el presupuesto semanal si está disponible.
@@ -1313,6 +1320,123 @@ PROMPT;
         return false;
     }
 
+    private function isSafeLeftover(Recipe $recipe): bool
+    {
+        if (! in_array('light', $recipe->diet_tags ?? [], true)) {
+            return false;
+        }
+
+        $unsafe = config('shopping.leftover_unsafe_slugs', []);
+
+        foreach ($recipe->ingredients as $ingredient) {
+            $slug = $ingredient->product->slug;
+
+            if ($slug !== null && in_array($slug, $unsafe, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * En modo ahorro, la cena es una sobra del almuerzo cuando el plato es
+     * compatible con dinner y cabe en los límites de la cena. Así se cocina una
+     * vez y no se compra ni se cocina un segundo plato.
+     *
+     * @param  array<int, string>  $days
+     * @param  array<int, string>  $meals
+     * @param  array<string, \App\Models\MealPlanEntry>  $created
+     */
+    private function applySaveMoneyLunchLeftovers(
+        int $userId,
+        MealPlanSettings $settings,
+        array $days,
+        array $meals,
+        array &$created,
+    ): void {
+        if (($settings->menu_strategy ?? MenuStrategy::Balanced) !== MenuStrategy::SaveMoney
+            || ! in_array('lunch', $meals, true)
+            || ! in_array('dinner', $meals, true)) {
+            return;
+        }
+
+        $household = (int) $settings->household_size;
+
+        foreach ($days as $date) {
+            $lunch = $created[$date.'|lunch'] ?? null;
+
+            if ($lunch === null
+                || $lunch->kind !== MealEntryKind::Recipe
+                || $lunch->recipe === null
+                || ! in_array('dinner', $lunch->recipe->meal_types, true)) {
+                continue;
+            }
+
+            $dinner = $created[$date.'|dinner'] ?? null;
+
+            if ($dinner !== null
+                && in_array($dinner->kind, [MealEntryKind::EatOut, MealEntryKind::Free], true)) {
+                continue;
+            }
+
+            $nutrition = $this->nutritionOf($lunch->recipe);
+
+            if (! $this->isSafeLeftover($lunch->recipe)) {
+                continue;
+            }
+
+            if ($nutrition->isComplete()) {
+                $carbLimit = $settings->dinner_carb_limit_g;
+
+                if ($carbLimit !== null && $nutrition->carbsG > $carbLimit) {
+                    continue;
+                }
+
+                $calorieLimit = $settings->dinner_calorie_limit;
+
+                if ($calorieLimit !== null && $nutrition->kcal > $calorieLimit) {
+                    continue;
+                }
+            }
+
+            foreach ($created as $key => $entry) {
+                if ($entry->leftover_of_entry_id === $lunch->id
+                    && $entry->plan_date->toDateString() !== $date) {
+                    $this->mealPlanRepository->deleteEntry($entry);
+                    unset($created[$key]);
+                }
+            }
+
+            $cookServings = (int) $lunch->servings + $household;
+
+            if ((int) $lunch->cook_servings !== $cookServings) {
+                $lunch->update(['cook_servings' => $cookServings]);
+                $created[$date.'|lunch'] = $lunch;
+            }
+
+            if ($dinner !== null
+                && $dinner->kind === MealEntryKind::Leftover
+                && $dinner->leftover_of_entry_id === $lunch->id) {
+                continue;
+            }
+
+            $leftover = $this->mealPlanRepository->upsertEntry($userId, [
+                'plan_date' => $date,
+                'meal_type' => 'dinner',
+                'kind' => MealEntryKind::Leftover->value,
+                'recipe_id' => $lunch->recipe_id,
+                'drink_recipe_id' => null,
+                'servings' => $household,
+                'cook_servings' => 0,
+                'leftover_of_entry_id' => $lunch->id,
+                'notes' => null,
+            ]);
+
+            $created[$date.'|dinner'] = $leftover;
+        }
+    }
+
     /**
      * @param  array<int, Recipe>  $candidates
      * @param  array<int, int>  $usage
@@ -1448,8 +1572,17 @@ PROMPT;
             }
 
             [$date, $meal] = explode('|', $key);
-            $nextDate = CarbonImmutable::parse($date, 'America/Lima')->addDay()->toDateString();
 
+            if (($settings->menu_strategy ?? MenuStrategy::Balanced) === MenuStrategy::SaveMoney
+                && $meal === 'lunch'
+                && in_array('dinner', $meals, true)
+                && isset($created[$date.'|dinner'])
+                && $created[$date.'|dinner']->kind === MealEntryKind::Leftover
+                && $created[$date.'|dinner']->leftover_of_entry_id === $entry->id) {
+                continue;
+            }
+
+            $nextDate = CarbonImmutable::parse($date, 'America/Lima')->addDay()->toDateString();
             if (! in_array($nextDate, $days, true) || ! in_array($meal, $meals, true) || isset($created[$nextDate.'|'.$meal])) {
                 continue;
             }
