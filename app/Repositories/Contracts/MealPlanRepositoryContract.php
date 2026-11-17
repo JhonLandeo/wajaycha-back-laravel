@@ -55,6 +55,9 @@ interface MealPlanRepositoryContract
     /** Intercambia todas las entradas de dos fechas del mismo usuario. */
     public function swapDays(int $userId, CarbonImmutable $dateA, CarbonImmutable $dateB): void;
 
+    /** Intercambia o mueve una comida entre dos fechas. */
+    public function swapEntries(int $userId, CarbonImmutable $dateA, CarbonImmutable $dateB, \App\Enums\MealType $meal): void;
+
     /**
      * Entradas aplicadas en una ventana, con su receta e ingredientes, para
      * construir el perfil de preferencias.

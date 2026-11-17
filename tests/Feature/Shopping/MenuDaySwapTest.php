@@ -163,3 +163,72 @@ it('rechaza un día que no está activo en la configuración', function () {
         'date_b' => '2026-11-11',
     ], $headers)->assertStatus(422)->assertJsonValidationErrors('dates');
 });
+
+it('intercambia solo una comida entre dos días', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $a = swapRecipe($user->id, 'Almuerzo lunes');
+    $b = swapRecipe($user->id, 'Almuerzo martes');
+    $monday = swapEntry($user->id, $a, '2026-11-09');
+    $tuesday = swapEntry($user->id, $b, '2026-11-10');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $this->postJson('/api/shopping/menu/swap-entries', [
+        'week_start' => '2026-11-09',
+        'date_a' => '2026-11-09',
+        'date_b' => '2026-11-10',
+        'meal_type' => 'lunch',
+    ], $headers)->assertOk()->assertJsonPath('status', 'swapped');
+
+    expect($monday->refresh()->plan_date->toDateString())->toBe('2026-11-10')
+        ->and($tuesday->refresh()->plan_date->toDateString())->toBe('2026-11-09');
+});
+
+it('mueve una comida a un día vacío', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $recipe = swapRecipe($user->id, 'Almuerzo que se mueve');
+    $monday = swapEntry($user->id, $recipe, '2026-11-09');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $this->postJson('/api/shopping/menu/swap-entries', [
+        'week_start' => '2026-11-09',
+        'date_a' => '2026-11-09',
+        'date_b' => '2026-11-10',
+        'meal_type' => 'lunch',
+    ], $headers)->assertOk();
+
+    expect($monday->refresh()->plan_date->toDateString())->toBe('2026-11-10');
+});
+
+it('rechaza mover una comida cocinada o con sobras', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $a = swapRecipe($user->id, 'Cocinada');
+    $b = swapRecipe($user->id, 'Pendiente');
+    swapEntry($user->id, $a, '2026-11-09', 'cooked');
+    swapEntry($user->id, $b, '2026-11-10');
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $this->postJson('/api/shopping/menu/swap-entries', [
+        'week_start' => '2026-11-09',
+        'date_a' => '2026-11-09',
+        'date_b' => '2026-11-10',
+        'meal_type' => 'lunch',
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors('dates');
+});

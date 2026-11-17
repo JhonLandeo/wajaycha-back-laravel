@@ -109,6 +109,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::delete('shopping/menu', [\App\Http\Controllers\Shopping\MealPlanController::class, 'clearWeek']);
     Route::delete('shopping/menu/day', [\App\Http\Controllers\Shopping\MealPlanController::class, 'clearDay']);
     Route::post('shopping/menu/swap-days', [\App\Http\Controllers\Shopping\MealPlanController::class, 'swapDays']);
+    Route::post('shopping/menu/swap-entries', [\App\Http\Controllers\Shopping\MealPlanController::class, 'swapEntries']);
     Route::post('shopping/menu/suggest', [\App\Http\Controllers\Shopping\MealPlanController::class, 'suggest']);
     Route::post('shopping/menu/suggest/preview', [\App\Http\Controllers\Shopping\MealPlanController::class, 'previewSuggestion']);
     Route::post('shopping/menu/suggest/alternative', [\App\Http\Controllers\Shopping\MealPlanController::class, 'alternativeSuggestion']);

@@ -185,6 +185,36 @@ final class MealPlanRepository implements MealPlanRepositoryContract
         });
     }
 
+    public function swapEntries(int $userId, CarbonImmutable $dateA, CarbonImmutable $dateB, \App\Enums\MealType $meal): void
+    {
+        if ($dateA->isSameDay($dateB)) {
+            return;
+        }
+
+        $first = $this->findSlot($userId, $dateA->toDateString(), $meal);
+        $second = $this->findSlot($userId, $dateB->toDateString(), $meal);
+
+        if ($first === null && $second === null) {
+            return;
+        }
+
+        DB::transaction(function () use ($userId, $first, $second, $dateA, $dateB): void {
+            if ($first !== null && $second !== null) {
+                $temporary = $this->temporaryDateFor($userId);
+
+                MealPlanEntry::query()->whereKey($first->id)->update(['plan_date' => $temporary->toDateString()]);
+                MealPlanEntry::query()->whereKey($second->id)->update(['plan_date' => $dateA->toDateString()]);
+                MealPlanEntry::query()->whereKey($first->id)->update(['plan_date' => $dateB->toDateString()]);
+
+                return;
+            }
+
+            $entry = $first ?? $second;
+            $target = $first !== null ? $dateB : $dateA;
+            MealPlanEntry::query()->whereKey($entry->id)->update(['plan_date' => $target->toDateString()]);
+        });
+    }
+
     private function temporaryDateFor(int $userId): CarbonImmutable
     {
         $temporary = CarbonImmutable::parse('1900-01-01', 'America/Lima');
