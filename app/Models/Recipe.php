@@ -31,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property array<int, string> $diet_tags
  * @property int|null $prep_minutes
  * @property string|null $instructions
+ * @property string|null $image_url
  * @property bool $is_active
  * @property-read \Illuminate\Database\Eloquent\Collection<int, RecipeIngredient> $ingredients
  * @property-read User|null $user
@@ -53,6 +54,7 @@ class Recipe extends Model
         'diet_tags',
         'prep_minutes',
         'instructions',
+        'image_url',
         'is_active',
     ];
 

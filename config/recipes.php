@@ -11,6 +11,24 @@ declare(strict_types=1);
  * que todavía no necesita.
  */
 return [
+    /*
+     | Fotos de portada del catálogo. Son URLs públicas de Unsplash y solo se
+     | usan como imagen; el cliente cae a una ilustración local si no cargan.
+     */
+    'images' => [
+        'chicken' => 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?auto=format&fit=crop&w=640&q=70',
+        'beef' => 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=640&q=70',
+        'fish' => 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=640&q=70',
+        'breakfast' => 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=640&q=70',
+        'salad' => 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=640&q=70',
+        'soup' => 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=640&q=70',
+        'pasta' => 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=640&q=70',
+        'rice' => 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=640&q=70',
+        'dessert' => 'https://images.unsplash.com/photo-1551024506-0bccd828d307?auto=format&fit=crop&w=640&q=70',
+        'drink' => 'https://images.unsplash.com/photo-1505252585461-04db1eb84625?auto=format&fit=crop&w=640&q=70',
+        'milk' => 'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=640&q=70',
+        'food' => 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=640&q=70',
+    ],
     'catalogue' => [
         [
             'slug' => 'arroz-con-pollo',

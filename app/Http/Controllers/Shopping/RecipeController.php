@@ -172,6 +172,10 @@ final class RecipeController extends Controller
             $data['origin'] = (string) $validated['origin'];
         }
 
+        if (array_key_exists('image_url', $validated)) {
+            $data['image_url'] = $validated['image_url'] ?: null;
+        }
+
         return $data;
     }
 
@@ -208,6 +212,7 @@ final class RecipeController extends Controller
             'diet_tags' => $recipe->diet_tags ?? [],
             'prep_minutes' => $recipe->prep_minutes,
             'instructions' => $recipe->instructions,
+            'image_url' => $recipe->image_url,
             'is_active' => (bool) $recipe->is_active,
             'is_enabled' => $isEnabled ?? ($recipe->user_id === null ? true : (bool) $recipe->is_active),
             'is_global' => $recipe->user_id === null,

@@ -78,6 +78,7 @@ final class MealPlanPresenter
             'required_equipment' => $recipe->required_equipment ?? [],
             'diet_tags' => $recipe->diet_tags ?? [],
             'instructions' => $recipe->instructions,
+            'image_url' => $recipe->image_url,
             'nutrition' => $this->nutrition->perServing($recipe)->toArray(),
             'ingredients' => $recipe->ingredients
                 ->map(static fn ($ingredient): array => [

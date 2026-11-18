@@ -34,6 +34,7 @@ class RecipeFactory extends Factory
             'diet_tags' => [],
             'prep_minutes' => fake()->numberBetween(15, 45),
             'instructions' => null,
+            'image_url' => null,
             'is_active' => true,
         ];
     }

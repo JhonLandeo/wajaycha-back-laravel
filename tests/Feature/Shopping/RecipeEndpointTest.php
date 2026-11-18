@@ -70,6 +70,21 @@ it('creates a private recipe with a compatible ingredient unit', function () {
     expect($recipe->ingredients()->count())->toBe(1);
 });
 
+it('stores and exposes a public image URL for the recipe', function () {
+    [, $headers] = $this->userWithAuth();
+    $product = Product::factory()->create(['unit' => 'kg']);
+    $image = 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=640';
+
+    $this->postJson('/api/shopping/recipes', recipePayload($product, ['image_url' => $image]), $headers)
+        ->assertCreated()
+        ->assertJsonPath('data.image_url', $image);
+
+    $this->postJson('/api/shopping/recipes', recipePayload($product, [
+        'name' => 'Receta sin foto válida',
+        'image_url' => 'no-es-una-url',
+    ]), $headers)->assertStatus(422)->assertJsonValidationErrors('image_url');
+});
+
 it('rejects an ingredient unit that cannot convert to the product unit', function () {
     [, $headers] = $this->userWithAuth();
     $product = Product::factory()->create(['unit' => 'kg']);

@@ -50,6 +50,7 @@ class StoreRecipeRequest extends FormRequest
             'diet_tags.*' => ['string', 'distinct', Rule::enum(DietTag::class)],
             'prep_minutes' => ['nullable', 'integer', 'between:1,240'],
             'instructions' => ['nullable', 'string', 'max:5000'],
+            'image_url' => ['nullable', 'string', 'url', 'max:2048'],
             'is_active' => ['sometimes', 'boolean'],
             'ingredients' => ['required', 'array', 'min:1'],
             'ingredients.*.product_id' => [
@@ -125,6 +126,7 @@ class StoreRecipeRequest extends FormRequest
             'meal_types.required' => 'Elige al menos una comida.',
             'meal_types.*.in' => 'Las comidas válidas son desayuno, almuerzo y cena.',
             'ingredients.required' => 'Agrega al menos un ingrediente.',
+            'image_url.url' => 'La imagen debe ser una URL pública válida.',
             'ingredients.*.product_id.exists' => 'Algún ingrediente no existe o no está en tu catálogo.',
             'ingredients.*.quantity.gt' => 'Las cantidades deben ser mayores a 0.',
             'ingredients.*.unit.in' => 'La unidad del ingrediente no es válida.',
