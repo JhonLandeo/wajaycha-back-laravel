@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace App\Actions\Transactions;
 
 use App\DTOs\Transactions\TransactionDataDTO;
-use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
 use App\Repositories\Contracts\TransactionRepositoryContract;
+use App\Services\CategorizationService;
 
 final class StoreTransactionAction
 {
     public function __construct(
-        private readonly TransactionRepositoryContract $repository
-    ) {
-    }
+        private readonly TransactionRepositoryContract $repository,
+        private readonly CategorizationService $categorizationService,
+    ) {}
 
     public function execute(TransactionDataDTO $dto): Transaction
     {
@@ -29,14 +29,17 @@ final class StoreTransactionAction
             'is_manual' => $dto->is_manual,
         ];
 
-        if (empty($data['detail_id']) && !empty($dto->detail_description)) {
+        if (empty($data['detail_id']) && ! empty($dto->detail_description)) {
             /** @var Detail $detail */
             $detail = Detail::query()->firstOrCreate([
                 'user_id' => $dto->user_id,
-                'description' => $dto->detail_description
+                'description' => $dto->detail_description,
             ]);
             $data['detail_id'] = $detail->id;
-            GenerateEmbeddingForDetail::dispatch($detail, $dto->category_id);
+
+            if ($dto->category_id) {
+                $this->categorizationService->rememberDetailCategory($detail, $dto->category_id);
+            }
         }
 
         return $this->repository->create($data);

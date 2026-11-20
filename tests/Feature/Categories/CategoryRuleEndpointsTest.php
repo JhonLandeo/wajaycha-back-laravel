@@ -14,16 +14,10 @@ declare(strict_types=1);
  * covered whether the endpoints do what they claim.
  */
 
-use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\CategorizationRule;
 use App\Models\Category;
 use App\Models\Detail;
 use App\Models\User;
-use Illuminate\Support\Facades\Queue;
-
-beforeEach(function () {
-    Queue::fake();
-});
 
 /**
  * @return array{0: User, 1: array<string, string>}
@@ -32,15 +26,6 @@ function ruleOwner(): array
 {
     /** @var \Tests\TestCase $t */
     return test()->userWithAuth();
-}
-
-/**
- * pgvector accepts its text form, which is the only way to seed one here: the factory
- * leaves `embedding` null and nothing else in the suite has ever written one.
- */
-function embeddingOf(float $value): string
-{
-    return '['.implode(',', array_fill(0, 768, $value)).']';
 }
 
 function ruleFor(User $user, Category $category, Detail $detail): CategorizationRule
@@ -104,7 +89,7 @@ it('responde 404 al pedir las reglas de una categoria ajena', function () {
 
 // ------------------------------------------------------------- getSuggestions
 
-it('devuelve vacio cuando la categoria no tiene ningun detail con embedding', function () {
+it('devuelve vacio cuando la categoria no tiene ningun detail asignado', function () {
     [$user, $headers] = ruleOwner();
     $category = Category::factory()->create(['user_id' => $user->id]);
 
@@ -114,30 +99,37 @@ it('devuelve vacio cuando la categoria no tiene ningun detail con embedding', fu
     expect($response->json('data'))->toBe([]);
 });
 
-it('sugiere details sin categorizar y excluye los que ya son regla', function () {
+it('sugiere details parecidos por trigramas y excluye los que ya son regla', function () {
     [$user, $headers] = ruleOwner();
     $category = Category::factory()->create(['user_id' => $user->id]);
 
-    // Gives the category a centroid: a Detail already assigned to it, with a vector.
+    // El ancla define la forma de la categoria: un comercio ya asignado.
     Detail::factory()->create([
         'user_id' => $user->id,
         'description' => 'ANCLA',
+        'entity_clean' => 'bodega el chino',
         'last_used_category_id' => $category->id,
-        'embedding' => embeddingOf(0.10),
     ]);
 
-    $candidate = Detail::factory()->create([
+    Detail::factory()->create([
         'user_id' => $user->id,
         'description' => 'CANDIDATO',
+        'entity_clean' => 'bodega el chino sac',
         'last_used_category_id' => null,
-        'embedding' => embeddingOf(0.11),
+    ]);
+
+    Detail::factory()->create([
+        'user_id' => $user->id,
+        'description' => 'MUY_DISTINTO',
+        'entity_clean' => 'zapateria central',
+        'last_used_category_id' => null,
     ]);
 
     $alreadyRule = Detail::factory()->create([
         'user_id' => $user->id,
         'description' => 'YA_ES_REGLA',
+        'entity_clean' => 'bodega el chino express',
         'last_used_category_id' => null,
-        'embedding' => embeddingOf(0.12),
     ]);
     ruleFor($user, $category, $alreadyRule);
 
@@ -148,6 +140,7 @@ it('sugiere details sin categorizar y excluye los que ya son regla', function ()
     expect($descriptions)->toContain('CANDIDATO');
     expect($descriptions)->not->toContain('YA_ES_REGLA');
     expect($descriptions)->not->toContain('ANCLA');
+    expect($descriptions)->not->toContain('MUY_DISTINTO');
 });
 
 it('responde 404 al pedir sugerencias de una categoria ajena', function () {
@@ -196,7 +189,7 @@ it('reapunta la regla existente en lugar de duplicarla', function () {
     expect((int) $rules->first()->category_id)->toBe($second->id);
 });
 
-it('encola el recalculo del embedding del detail sincronizado', function () {
+it('recuerda la categoria del detail sincronizado', function () {
     [$user, $headers] = ruleOwner();
     $category = Category::factory()->create(['user_id' => $user->id]);
     $detail = Detail::factory()->create(['user_id' => $user->id]);
@@ -204,7 +197,9 @@ it('encola el recalculo del embedding del detail sincronizado', function () {
     $this->postJson("/api/categories/{$category->id}/sync", ['detail_id' => $detail->id], $headers)
         ->assertOk();
 
-    Queue::assertPushed(GenerateEmbeddingForDetail::class);
+    // La regla y la memoria del comercio se escriben juntas: la cascada por
+    // trigramas y la pestaña de sugerencias leen `last_used_category_id`.
+    expect($detail->fresh()->last_used_category_id)->toBe($category->id);
 });
 
 /**

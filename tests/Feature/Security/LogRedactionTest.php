@@ -22,7 +22,6 @@ declare(strict_types=1);
 use App\Actions\Capture\RegisterCapturedTransactionAction;
 use App\DTOs\WhatsApp\ParsedReceiptDTO;
 use App\Models\User;
-use App\Services\EmbeddingService;
 use App\Support\Redact;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
@@ -62,18 +61,6 @@ function capturedLogLines(): ArrayObject
 function loggedTranscript(ArrayObject $lines): string
 {
     return implode("\n", $lines->getArrayCopy());
-}
-
-/** The vector step is the only one that reaches the network. This keeps it home. */
-function stubEmbeddingsWithNothing(): void
-{
-    app()->instance(EmbeddingService::class, new class extends EmbeddingService
-    {
-        public function generate(string $text): ?array
-        {
-            return null;
-        }
-    });
 }
 
 // ------------------------------------------------------------------- Redact
@@ -156,8 +143,6 @@ it('reporta la forma del texto y nunca su contenido', function () {
 // -------------------------------------------------------------- el recorrido
 
 it('no escribe el comercio, el monto ni el mensaje del usuario al registrar una captura', function () {
-    stubEmbeddingsWithNothing();
-
     $user = User::factory()->create();
     $lines = capturedLogLines();
 
@@ -182,8 +167,6 @@ it('no escribe el comercio, el monto ni el mensaje del usuario al registrar una 
 });
 
 it('sigue diciendo lo suficiente para seguir el rastro', function () {
-    stubEmbeddingsWithNothing();
-
     $user = User::factory()->create();
     $lines = capturedLogLines();
 
@@ -239,8 +222,8 @@ it('no escribe el chat id de Telegram cuando el remitente no esta vinculado', fu
  *
  * Everything so far protects the user's data. What follows protects the
  * application's own keys, and the leak is not something anyone wrote: the
- * Telegram Bot API puts the bot token in the URL path and Gemini embeddings
- * still put their key in the query string, so when an outbound call cannot
+ * Telegram Bot API puts the bot token in the URL path and Gemini's API still
+ * puts its key in the query string, so when an outbound call cannot
  * complete at all, the `ConnectionException` Guzzle raises carries the full
  * request URI in its message. Every `Log::error('...: '.$e->getMessage())`
  * then writes a live credential to `storage/logs` and ships it to Sentry as a

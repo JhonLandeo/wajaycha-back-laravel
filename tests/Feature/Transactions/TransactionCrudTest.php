@@ -4,10 +4,8 @@ use App\Models\Category;
 use App\Models\Detail;
 use App\Models\Transaction;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Queue;
 
 it('puede crear una transacción manual con detail_description nuevo', function () {
-    Queue::fake();
     $user = $this->createUserWithCategories();
     $headers = $this->actingAsJwtUser($user);
     $category = Category::where('user_id', $user->id)->first();
@@ -25,12 +23,11 @@ it('puede crear una transacción manual con detail_description nuevo', function 
 
     $response->assertStatus(201);
 
-    Queue::assertPushed(\App\Jobs\GenerateEmbeddingForDetail::class);
-
     // CORRECCIÓN AQUÍ: Cambia 'name' por 'description'
     $this->assertDatabaseHas('details', [
         'description' => 'Compra en supermercado',
         'user_id' => $user->id,
+        'last_used_category_id' => $category->id,
     ]);
 });
 

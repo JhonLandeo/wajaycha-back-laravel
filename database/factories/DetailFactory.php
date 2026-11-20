@@ -21,11 +21,10 @@ class DetailFactory extends Factory
     public function definition(): array
     {
         return [
-            'user_id'        => User::factory(),
-            'description'    => fake()->words(3, true),
+            'user_id' => User::factory(),
+            'description' => fake()->words(3, true),
             'operation_type' => fake()->randomElement(['POS_GENERICO', 'YAPE', 'PLIN', 'TRANSFERENCIA']),
-            'entity_clean'   => fake()->company(),
-            'embedding'      => null,
+            'entity_clean' => fake()->company(),
             'last_used_category_id' => null,
         ];
     }

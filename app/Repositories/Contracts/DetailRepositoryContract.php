@@ -48,12 +48,13 @@ interface DetailRepositoryContract
     ): LengthAwarePaginator;
 
     /**
-     * Uncategorised details closest to what $categoryId already looks like.
+     * Uncategorised details whose merchant text resembles what $categoryId already holds.
      *
-     * The category's shape is the average embedding of the details already assigned to
-     * it, and candidates are ordered by cosine distance from it. A category with no
-     * embedded detail has no shape to compare against, so it yields nothing rather than
-     * an arbitrary ordering — an empty page is the honest answer, not a failure.
+     * The category's shape is the set of `entity_clean`/`description` values of the
+     * details assigned to it, and candidates are ordered by best trigram similarity
+     * against that set. A category with no assigned detail has no shape to compare
+     * against, so it yields nothing rather than an arbitrary ordering — an empty page
+     * is the honest answer, not a failure.
      *
      * Details that are already a rule are excluded: suggesting what the user has
      * already decided is noise.
