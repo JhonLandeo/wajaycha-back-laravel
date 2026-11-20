@@ -29,7 +29,7 @@ it('una inferencia nunca pisa una regla que ya existe', function () {
     $this->service->setRule($this->user->id, $this->detail->id, $this->comida->id);
 
     // Esta es la razon por la que el arreglo NO es cambiar todo a updateOrCreate:
-    // la cascada infiere desde un match vectorial flojo, y esa adivinanza no puede
+    // la cascada infiere desde un match de trigramas flojo, y esa adivinanza no puede
     // sobrescribir lo que el usuario ya decidio.
     $this->service->rememberInferredRule($this->user->id, $this->detail->id, $this->transporte->id);
 

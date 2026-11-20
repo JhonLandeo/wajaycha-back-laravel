@@ -76,16 +76,6 @@ return [
         'user_agent' => env('OPENCODE_USER_AGENT', 'Wajaycha/1.0 (personal finance capture)'),
     ],
 
-    /*
-     * OpenCode Go no expone un endpoint de embeddings. La categorizacion
-     * semantica sigue dependiendo de Gemini; con esto apagada, la captura
-     * funciona igual y solo se pierde el fallback vectorial (las reglas exactas
-     * y por palabra clave siguen resolviendo).
-     */
-    'embeddings' => [
-        'enabled' => (bool) env('EMBEDDINGS_ENABLED', false),
-    ],
-
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY'),
     ],

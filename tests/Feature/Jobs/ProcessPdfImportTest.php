@@ -27,7 +27,6 @@ use App\Models\ReconciliationCandidate;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\CategorizationService;
-use App\Services\EmbeddingService;
 use App\Services\Imports\StatementLineParser;
 use App\Services\Imports\StatementTextExtractor;
 use App\Services\Reconciliation\DuplicateCandidateDetector;
@@ -92,18 +91,16 @@ function pdfJobFakeExtractor(?callable $onExtract = null): StatementTextExtracto
     };
 }
 
-/** A categoriser that answers without reaching Gemini. */
+/** A categoriser that answers without touching the database or any AI. */
 function pdfJobCategorizer(?callable $onFind = null): CategorizationService
 {
-    return new class(app(EmbeddingService::class), $onFind) extends CategorizationService
+    return new class($onFind) extends CategorizationService
     {
         /** @var callable|null */
         private $onFind;
 
-        public function __construct(EmbeddingService $embeddings, ?callable $onFind)
+        public function __construct(?callable $onFind)
         {
-            parent::__construct($embeddings);
-
             $this->onFind = $onFind;
         }
 
@@ -390,10 +387,10 @@ it('hereda la categoria del movimiento con el que se unifico en vez de volver a 
         ->firstOrFail();
 
     // La otra fila es el MISMO movimiento, asi que su categoria no es una
-    // conjetura: es la respuesta, ya pagada. `findCategory()` sale a Gemini por
-    // cada comercio sin regla y un extracto son cientos de lineas — sobre los datos
-    // reales, tres de cada cuatro se unifican, asi que esto es la diferencia entre
-    // una llamada y cuatro.
+    // conjetura: es la respuesta, ya pagada. `findCategory()` recorre la cascada
+    // por cada comercio sin regla y un extracto son cientos de lineas — sobre los
+    // datos reales, tres de cada cuatro se unifican, asi que esto ahorra esa
+    // busqueda en la mayoria de las filas.
     expect($estado->category_id)->toBe($categoria->id)
         ->and($categorizados)->not->toContain('PANA BODE a 060684')
         // La otra linea del extracto no se unifico con nada y si tuvo que salir.

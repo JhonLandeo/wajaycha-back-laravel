@@ -5,20 +5,17 @@ declare(strict_types=1);
 namespace App\Actions\Transactions;
 
 use App\DTOs\Transactions\TransactionDataDTO;
-use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\TransactionTag;
 use App\Repositories\Contracts\TransactionRepositoryContract;
 use App\Services\CategorizationService;
-use App\Services\ClassificationService;
 
 final class UpdateTransactionAction
 {
     public function __construct(
         private readonly TransactionRepositoryContract $repository,
         private readonly CategorizationService $categorizationService,
-        private readonly ClassificationService $classifier
     ) {}
 
     public function execute(TransactionDataDTO $dto): Transaction
@@ -59,7 +56,6 @@ final class UpdateTransactionAction
                     'description' => $dto->detail_description,
                 ]);
                 $updateData['detail_id'] = $detail->id;
-                GenerateEmbeddingForDetail::dispatch($detail, $dto->category_id);
             }
         }
 
@@ -149,8 +145,12 @@ final class UpdateTransactionAction
             // tres y no pertenecer a la misma categoria. Los duplicados reales
             // los une la conciliacion (`matched_transaction_id`), que ademas
             // hereda la categoria al enlazar.
-            if ($detail && $newCategoryId && $this->classifier->isDetailUsefulForLearning($detail->description)) {
-                GenerateEmbeddingForDetail::dispatch($detail, $newCategoryId);
+            //
+            // Lo que si se recuerda es la categoria del comercio. Es la memoria
+            // que alimenta el fallback por trigramas y la pestana de sugerencias;
+            // antes la escribia el job de embeddings, que ya no existe.
+            if ($detail && $newCategoryId) {
+                $this->categorizationService->rememberDetailCategory($detail, $newCategoryId);
             }
         }
     }

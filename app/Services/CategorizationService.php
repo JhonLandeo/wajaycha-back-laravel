@@ -12,16 +12,17 @@ use Illuminate\Support\Str;
 
 class CategorizationService
 {
-    protected EmbeddingService $embeddingService;
+    /**
+     * Similitud mínima para heredar la categoría de un comercio parecido.
+     *
+     * `DetailResolver` usa 0.6 para decidir que dos textos son el MISMO comercio.
+     * Acá el umbral es más bajo a propósito: la pregunta no es "¿es el mismo
+     * local?" sino "¿comparte suficiente vocabulario para caer en la misma
+     * categoría?" — "Bodega El Chino" y "Bodega Don Pepe" no son el mismo
+     * comercio, pero sí la misma clase de gasto.
+     */
+    public const THRESHOLD_TRIGRAM = 0.4;
 
-    const THRESHOLD_VECTOR = 0.15;
-
-    public function __construct(EmbeddingService $embeddingService)
-    {
-        $this->embeddingService = $embeddingService;
-    }
-
-    // AÑADIMOS $message como parámetro opcional
     public function findCategory(int $userId, Detail $detail, ?string $message = null): ?int
     {
         // Aca habia un
@@ -40,7 +41,10 @@ class CategorizationService
             ->first();
 
         if ($exactRule) {
-            return $exactRule->category_id;
+            $categoryId = (int) $exactRule->category_id;
+            $this->rememberDetailCategory($detail, $categoryId);
+
+            return $categoryId;
         }
 
         // Cargamos las reglas de palabras clave (cachear esto sería ideal si son muchas)
@@ -57,7 +61,10 @@ class CategorizationService
                 .' -> Cat ID: '.($categoryIdByMessage ?? 'no encontrado'));
 
             if ($categoryIdByMessage) {
-                return $categoryIdByMessage;
+                $categoryId = (int) $categoryIdByMessage;
+                $this->rememberDetailCategory($detail, $categoryId);
+
+                return $categoryId;
             }
         }
 
@@ -67,6 +74,7 @@ class CategorizationService
             $categoryByMessage = $this->analyzeTextForKeywords($message, $keywordRules);
             if ($categoryByMessage) {
                 Log::info("✅ [CAT] Match por MENSAJE para el detail {$detail->id} -> Cat ID: {$categoryByMessage}");
+                $this->rememberDetailCategory($detail, $categoryByMessage);
 
                 return $categoryByMessage;
             }
@@ -74,48 +82,66 @@ class CategorizationService
 
         // 3. Prioridad: Búsqueda en la DESCRIPCIÓN/ENTIDAD
         // Si no hubo suerte en el mensaje, buscamos en "Bodega El Chino".
-        $searchString = $detail->entity_clean ?? $detail->description;
+        $searchString = $this->searchTextFor($detail);
         $categoryByEntity = $this->analyzeTextForKeywords($searchString, $keywordRules);
 
         if ($categoryByEntity) {
             // `$searchString` es el nombre del comercio. Se reporta el detail que
             // lo representa, que es lo que sirve para seguir el rastro.
             Log::info("✅ [CAT] Match por ENTIDAD del detail {$detail->id} -> Cat ID: {$categoryByEntity}");
-            $this->rememberInferredRule($userId, $detail->id, $categoryByEntity);
+            $this->rememberInferredRule($userId, (int) $detail->id, $categoryByEntity);
 
             return $categoryByEntity;
         }
 
-        Log::info('🤖 [CAT] Sin coincidencias de texto. Iniciando Vector Search...');
+        if ($searchString === '') {
+            Log::info('❌ [CAT] No se encontró categoría.');
 
-        $newEmbedding = $this->embeddingService->generate($detail->description); // Vectorizamos el texto limpio mejor
-
-        if (! $newEmbedding) {
             return null;
         }
 
-        $vectorString = '['.implode(',', $newEmbedding).']';
+        Log::info('🔎 [CAT] Sin coincidencias de texto. Iniciando similitud por trigramas...');
 
-        $vectorMatch = Detail::query()
+        // El detalle nuevo hereda la categoría del comercio conocido más parecido.
+        // `%` es el operador que puede resolver el índice GIN; `similarity()` solo
+        // ordena y aplica el umbral fino.
+        $trigramMatch = Detail::query()
             ->select('last_used_category_id')
-            ->selectRaw('(embedding <=> ?) AS distance', [$vectorString])
+            ->selectRaw('similarity(coalesce(entity_clean, description), ?) AS similarity', [$searchString])
             ->where('user_id', $userId)
-            ->whereNotNull('embedding')
             ->whereNotNull('last_used_category_id')
-            ->orderBy('distance', 'asc') // 0 es idéntico
+            ->where('id', '!=', $detail->id)
+            ->whereRaw('coalesce(entity_clean, description) % ?', [$searchString])
+            ->whereRaw('similarity(coalesce(entity_clean, description), ?) > ?', [$searchString, self::THRESHOLD_TRIGRAM])
+            ->orderByRaw('similarity(coalesce(entity_clean, description), ?) DESC', [$searchString])
             ->limit(1)
             ->first();
 
-        if ($vectorMatch && $vectorMatch->distance < self::THRESHOLD_VECTOR) {
-            Log::info("✅ [CAT] Match Vectorial encontrado. Distancia: {$vectorMatch->distance}");
-            $this->rememberInferredRule($userId, $detail->id, $vectorMatch->last_used_category_id);
+        if ($trigramMatch) {
+            $categoryId = (int) $trigramMatch->last_used_category_id;
+            Log::info('✅ [CAT] Match por trigramas encontrado. Similitud: '.$trigramMatch->getAttribute('similarity'));
+            $this->rememberInferredRule($userId, (int) $detail->id, $categoryId);
 
-            return $vectorMatch->last_used_category_id;
+            return $categoryId;
         }
 
         Log::info('❌ [CAT] No se encontró categoría.');
 
         return null;
+    }
+
+    /**
+     * El texto sobre el que se busca una entidad: el normalizado cuando existe.
+     *
+     * `description` es el texto crudo de la entidad financiera. `entity_clean` es
+     * el resultado de quitarle el ruido, y es lo que el paso de entidad ya usaba;
+     * la similitud por trigramas tiene que mirar lo mismo.
+     */
+    private function searchTextFor(Detail $detail): string
+    {
+        $clean = trim((string) ($detail->entity_clean ?? ''));
+
+        return $clean !== '' ? $clean : trim((string) $detail->description);
     }
 
     /**
@@ -149,8 +175,8 @@ class CategorizationService
      * Records a rule the cascade INFERRED, and only if the merchant has none.
      *
      * This deliberately does not overwrite. The cascade infers from a keyword hit
-     * or a trigram-close vector match, and a guess must never displace a decision
-     * the user already made — otherwise a weak match silently rewrites their
+     * or a trigram-close match, and a guess must never displace a decision the
+     * user already made — otherwise a weak match silently rewrites their
      * correction and the merchant starts falling in the wrong place again.
      */
     public function rememberInferredRule(int $userId, int $detailId, int $categoryId): void
@@ -159,6 +185,15 @@ class CategorizationService
             ['user_id' => $userId, 'detail_id' => $detailId],
             ['category_id' => $categoryId]
         );
+
+        $detail = Detail::query()
+            ->whereKey($detailId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if ($detail) {
+            $this->rememberDetailCategory($detail, $categoryId);
+        }
     }
 
     /**
@@ -178,5 +213,34 @@ class CategorizationService
             ['user_id' => $userId, 'detail_id' => $detailId],
             ['category_id' => $categoryId]
         );
+
+        $detail = Detail::query()
+            ->whereKey($detailId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if ($detail) {
+            $this->rememberDetailCategory($detail, $categoryId);
+        }
+    }
+
+    /**
+     * Recuerda la categoría que se le asignó a este comercio.
+     *
+     * `details.last_used_category_id` es la memoria que alimenta la cascada y la
+     * pestaña de sugerencias. Antes solo la escribía el job de embeddings; ahora
+     * cada resolución la deja al día sin depender de una llamada externa.
+     */
+    public function rememberDetailCategory(Detail $detail, int $categoryId): void
+    {
+        if (! $detail->exists) {
+            return;
+        }
+
+        if ((int) $detail->last_used_category_id === $categoryId) {
+            return;
+        }
+
+        $detail->forceFill(['last_used_category_id' => $categoryId])->save();
     }
 }

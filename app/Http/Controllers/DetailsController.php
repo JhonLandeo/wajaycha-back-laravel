@@ -6,7 +6,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Detail\StoreDetailRequest;
 use App\Http\Requests\Detail\UpdateDetailRequest;
-use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Detail;
 use App\Repositories\Contracts\DetailRepositoryContract;
 use Illuminate\Http\JsonResponse;
@@ -41,7 +40,6 @@ class DetailsController extends Controller
         $data['user_id'] = Auth::id();
 
         $detail = Detail::create($data);
-        GenerateEmbeddingForDetail::dispatch($detail, $request->last_used_category_id);
 
         return response()->json($detail, 201);
     }
