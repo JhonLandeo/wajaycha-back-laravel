@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CategoryRule\SyncRuleRequest;
-use App\Jobs\GenerateEmbeddingForDetail;
 use App\Models\Category;
-use App\Models\Detail;
 use App\Repositories\Contracts\CategoryRepositoryContract;
 use App\Repositories\Contracts\DetailRepositoryContract;
 use App\Services\CategorizationService;
@@ -80,18 +78,6 @@ class CategoryRuleController extends Controller
         $detailId = (int) $request->input('detail_id');
 
         $categorizationService->setRule($userId, $detailId, $category->id);
-
-        // Scoped, unlike the `Detail::find()` this replaces. `SyncRuleRequest` already
-        // rejects another user's id, so this changes nothing today — but a lookup that
-        // depends on validation elsewhere to be safe is one edit away from not being.
-        $detail = Detail::query()
-            ->whereKey($detailId)
-            ->where('user_id', $userId)
-            ->first();
-
-        if ($detail) {
-            GenerateEmbeddingForDetail::dispatch($detail, $category->id);
-        }
 
         return response()->json(['status' => 'ok', 'message' => 'Reglas actualizadas']);
     }

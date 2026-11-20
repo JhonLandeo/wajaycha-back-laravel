@@ -86,6 +86,44 @@ it('no inventa una categoria de otro usuario cuando no sabe', function () {
     }
 });
 
+it('hereda la categoria de un comercio parecido por trigramas', function () {
+    $conocido = Detail::factory()->create([
+        'user_id' => $this->user->id,
+        'entity_clean' => 'bodega el chino',
+    ]);
+
+    $this->service->setRule($this->user->id, $conocido->id, $this->transporte->id);
+
+    $nuevo = Detail::factory()->create([
+        'user_id' => $this->user->id,
+        'entity_clean' => 'bodega el chino sac',
+    ]);
+
+    expect($this->service->findCategory($this->user->id, $nuevo, null))->toBe($this->transporte->id);
+
+    // La inferencia deja regla y memoria: la próxima vez ni siquiera hay que
+    // buscar por similitud.
+    expect(CategorizationRule::where('user_id', $this->user->id)->where('detail_id', $nuevo->id)->value('category_id'))
+        ->toBe($this->transporte->id);
+    expect($nuevo->fresh()->last_used_category_id)->toBe($this->transporte->id);
+});
+
+it('no hereda una categoria de un comercio que solo comparte ruido', function () {
+    $conocido = Detail::factory()->create([
+        'user_id' => $this->user->id,
+        'entity_clean' => 'bodega el chino',
+    ]);
+
+    $this->service->setRule($this->user->id, $conocido->id, $this->transporte->id);
+
+    $nuevo = Detail::factory()->create([
+        'user_id' => $this->user->id,
+        'entity_clean' => 'zapateria central',
+    ]);
+
+    expect($this->service->findCategory($this->user->id, $nuevo, null))->toBeNull();
+});
+
 it('resolver por el mensaje NO deja regla aprendida, y por eso vuelve a resolver desde cero', function () {
     $detail = Detail::factory()->create(['user_id' => $this->user->id, 'entity_clean' => 'bodega el chino']);
     $hija = Category::factory()->create([
@@ -96,8 +134,8 @@ it('resolver por el mensaje NO deja regla aprendida, y por eso vuelve a resolver
 
     expect($this->service->findCategory($this->user->id, $detail, 'Zurumbatico'))->toBe($hija->id);
 
-    // Solo las ramas de keyword-sobre-entidad y de vector aprenden. Las dos que
-    // resuelven por el MENSAJE devuelven directo, sin grabar nada. La primera version
+    // Solo las ramas de keyword-sobre-entidad y de trigramas aprenden. Las dos que
+    // resuelven por el MENSAJE devuelven directo, sin grabar regla. La primera version
     // de este test derivaba lo esperado del mismo estado que medía, asi que no podia
     // fallar; esto afirma el hecho.
     expect(CategorizationRule::where('user_id', $this->user->id)->where('detail_id', $detail->id)->exists())
