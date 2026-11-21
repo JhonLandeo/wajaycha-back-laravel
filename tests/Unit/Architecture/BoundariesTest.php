@@ -230,12 +230,14 @@ arch('the newer namespaces declare strict types')
 |     `DB::transaction()` as persistence. It is not: it is a consistency boundary,
 |     and the layer that decides one is exactly where it belongs.
 |
-|     Measured again by act rather than by import, only six places still run a raw
-|     query outside a repository: UserObserver, StoreCategoryAction,
-|     UpdateCategoryAction, ProcessPdfImport, SmartMergeJob and
-|     BackfillSmartDetails. App\Services reached zero and is enforced above.
-|     Six is still too many to list as exceptions, but it is a register that is
-|     shrinking rather than a number that was never going to move.
+|     Measured again by act rather than by import, the register has since emptied.
+|     `UserObserver` only mentions `DB::table()` in a docblock; StoreCategoryAction,
+|     UpdateCategoryAction and ProcessPdfImport now open only `DB::transaction()`;
+|     SmartMergeJob no longer exists; BackfillSmartDetails calls none. The single
+|     remaining `DB::raw('1')`, in ReconcileCrossSourceDuplicates, is the constant
+|     projection of a `whereNotExists` subquery — an EXISTS marker, neither a read
+|     nor a write — inside a console command, where a repository boundary does not
+|     apply. App\Services is enforced above; the rest is clean by act, not by hope.
 |
 | "Every DTO is readonly."
 |     10 of the DTOs are not. `DashboardScope` is `final readonly` and new ones
