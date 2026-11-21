@@ -32,6 +32,30 @@ final class WeeklyShoppingPlan
     ) {}
 
     /**
+     * Attaches the user's check-off marks to the lines. The lines, their order,
+     * quantities and prices are untouched; only the persisted mark changes.
+     *
+     * @param  array<int, int>  $checkedProductIds
+     */
+    public function withChecked(array $checkedProductIds): self
+    {
+        return new self(
+            week: $this->week,
+            lines: array_map(
+                static fn (ShoppingListLine $line): ShoppingListLine => $line->withChecked(
+                    in_array($line->productId, $checkedProductIds, true)
+                ),
+                $this->lines,
+            ),
+            covered: $this->covered,
+            ceiling: $this->ceiling,
+            ceilingState: $this->ceilingState,
+            ceilingResolution: $this->ceilingResolution,
+            estimate: $this->estimate,
+        );
+    }
+
+    /**
      * No API Resources layer (design.md D7) — the controller hands this
      * straight to `response()->json(['data' => …])`.
      *

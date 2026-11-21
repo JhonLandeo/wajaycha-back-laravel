@@ -11,6 +11,7 @@ use App\Models\ConsumptionHabit;
 use App\Models\PantryConsumption;
 use App\Models\PantryItem;
 use App\Models\Product;
+use App\Models\ShoppingListCheck;
 use App\Repositories\Contracts\ShoppingRepositoryContract;
 use Carbon\CarbonImmutable;
 
@@ -205,6 +206,38 @@ final class ShoppingRepository implements ShoppingRepositoryContract
     {
         PantryConsumption::query()
             ->where('meal_plan_entry_id', $mealPlanEntryId)
+            ->delete();
+    }
+
+    public function checkedProductIdsFor(int $userId, string $weekStart): array
+    {
+        return ShoppingListCheck::query()
+            ->where('user_id', $userId)
+            ->where('week_start', $weekStart)
+            ->pluck('product_id')
+            ->map(static fn ($productId): int => (int) $productId)
+            ->all();
+    }
+
+    public function setShoppingListCheck(int $userId, string $weekStart, int $productId, bool $checked): void
+    {
+        if ($checked) {
+            ShoppingListCheck::query()->updateOrCreate(
+                [
+                    'user_id' => $userId,
+                    'week_start' => $weekStart,
+                    'product_id' => $productId,
+                ],
+                [],
+            );
+
+            return;
+        }
+
+        ShoppingListCheck::query()
+            ->where('user_id', $userId)
+            ->where('week_start', $weekStart)
+            ->where('product_id', $productId)
             ->delete();
     }
 }

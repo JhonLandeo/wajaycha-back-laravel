@@ -135,6 +135,9 @@ Route::middleware([JwtMiddleware::class])->group(function () {
 
     Route::get('shopping/weekly-plan', [\App\Http\Controllers\Shopping\WeeklyPlanController::class, 'show']);
 
+    Route::get('shopping/shopping-list', [\App\Http\Controllers\Shopping\ShoppingListController::class, 'show']);
+    Route::patch('shopping/shopping-list/checks', [\App\Http\Controllers\Shopping\ShoppingListController::class, 'setCheck']);
+
     Route::prefix('categories')->group(function () {
         Route::get('/{category}/rules', [CategoryRuleController::class, 'getRules']);
 

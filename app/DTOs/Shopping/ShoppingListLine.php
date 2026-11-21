@@ -35,6 +35,7 @@ final class ShoppingListLine
         public readonly ?CarbonImmutable $soonestExpiryOn,
         public readonly ?LinePrice $price = null,
         public readonly ?WholesaleTrend $wholesaleTrend = null,
+        public readonly bool $checked = false,
     ) {}
 
     /**
@@ -56,6 +57,30 @@ final class ShoppingListLine
             soonestExpiryOn: $this->soonestExpiryOn,
             price: $price,
             wholesaleTrend: $wholesaleTrend,
+            checked: $this->checked,
+        );
+    }
+
+    /**
+     * The same line with the user's check-off mark. A mark never changes a
+     * quantity or a price; it is presentation state persisted by week.
+     */
+    public function withChecked(bool $checked): self
+    {
+        return new self(
+            productId: $this->productId,
+            productName: $this->productName,
+            unit: $this->unit,
+            neededQuantity: $this->neededQuantity,
+            availableQuantity: $this->availableQuantity,
+            expiredQuantity: $this->expiredQuantity,
+            unmatchedUnitQuantity: $this->unmatchedUnitQuantity,
+            toBuyQuantity: $this->toBuyQuantity,
+            hasUnitMismatch: $this->hasUnitMismatch,
+            soonestExpiryOn: $this->soonestExpiryOn,
+            price: $this->price,
+            wholesaleTrend: $this->wholesaleTrend,
+            checked: $checked,
         );
     }
 
@@ -77,6 +102,7 @@ final class ShoppingListLine
             'soonest_expiry_on' => $this->soonestExpiryOn?->toDateString(),
             'price' => $this->price?->toArray(),
             'wholesale_trend' => $this->wholesaleTrend?->toArray(),
+            'checked' => $this->checked,
         ];
     }
 }

@@ -142,4 +142,16 @@ interface ShoppingRepositoryContract
     public function insertPantryConsumptions(array $rows): void;
 
     public function deletePantryConsumptionsForEntry(int $mealPlanEntryId): void;
+
+    /**
+     * Products the user already checked for the given week (ADR-0048 D5).
+     *
+     * @return array<int, int>
+     */
+    public function checkedProductIdsFor(int $userId, string $weekStart): array;
+
+    /**
+     * A row exists ⇔ the product is checked. Unchecking deletes the row.
+     */
+    public function setShoppingListCheck(int $userId, string $weekStart, int $productId, bool $checked): void;
 }
