@@ -44,11 +44,11 @@ enum BotCommand: string
      * What Telegram lists beside the command. Kept to one short line: the client
      * renders it on a single row and truncates the rest.
      *
-     * `MENU` says "gastos" and stays that way. The four buttons behind it are all
-     * spending questions ({@see BotMenuAction}), so widening this line to promise
-     * income would be the same defect in the other direction — copy describing
-     * something the code does not do. The capture path is where income lives, and
-     * that is where it is now announced.
+     * `MENU` says "gastos" and stays that way. The three buttons behind it are
+     * all spending questions ({@see BotMenuAction::menu()}), so widening this
+     * line to promise income would be the same defect in the other direction —
+     * copy describing something the code does not do. The capture path is where
+     * income lives, and that is where it is now announced.
      */
     public function description(): string
     {

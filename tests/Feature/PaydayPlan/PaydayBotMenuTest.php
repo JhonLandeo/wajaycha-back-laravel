@@ -15,17 +15,23 @@ use App\Services\Coaching\MonthOverMonthService;
 use App\Services\Coaching\SpendingRhythmService;
 use Tests\Support\PaydayFixtures as F;
 
-it('offers Cobré hoy with the same value the callback parser reads', function () {
+it('keeps Cobré hoy resolvable with the same value the callback parser reads', function () {
     expect(BotMenuAction::PAYDAY_ARRIVED->value)->toBe(PaydayCallback::PAID)
         ->and(BotMenuAction::PAYDAY_ARRIVED->label())->toBe('Cobré hoy')
         ->and(strlen(BotMenuAction::PAYDAY_ARRIVED->value))->toBeLessThanOrEqual(64)
         ->and(BotMenuAction::tryFromCallback('p:paid'))->toBe(BotMenuAction::PAYDAY_ARRIVED);
 });
 
-it('shows Cobré hoy in the keyboard for every user', function () {
+/**
+ * The payday conversation offers its own button after a deferral, with a cycle
+ * to answer against. Repeating it in the main menu duplicated it for users who
+ * had no plan, so it is no longer drawn there — but the value still resolves.
+ */
+it('does not show Cobré hoy in the menu keyboard', function () {
     $labels = array_map(fn (array $row): string => $row[0]['text'], BotMenuAction::keyboard());
 
-    expect($labels)->toContain('Cobré hoy');
+    expect($labels)->not->toContain('Cobré hoy')
+        ->and(BotMenuAction::tryFromCallback('p:paid'))->toBe(BotMenuAction::PAYDAY_ARRIVED);
 });
 
 function runMenuJob(string $action): void

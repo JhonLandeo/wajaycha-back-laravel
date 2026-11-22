@@ -567,10 +567,11 @@ it('does not claim a split while coaching is switched off', function () {
 });
 
 /**
- * The keyboard has to grow with the enum. A case added without a button is an
- * answer nobody can reach.
+ * The keyboard has to follow the offered subset, not the enum: a case can stay
+ * answerable (old buttons) without being offered again, and a case added to the
+ * menu has to be added to `menu()` before anyone can press it.
  */
-it('offers every action as a button', function () {
+it('offers exactly the actions the menu keeps', function () {
     menuLinkedUser();
 
     (new ProcessTelegramMenu(menuChat()))->handle(
@@ -582,8 +583,17 @@ it('offers every action as a button', function () {
         app(App\Services\Coaching\SpendingRhythmService::class),
     );
 
-    expect(lastSentMessage()['reply_markup']['inline_keyboard'])
-        ->toHaveCount(count(BotMenuAction::cases()));
+    $offered = array_map(
+        fn (array $row): string => $row[0]['callback_data'],
+        lastSentMessage()['reply_markup']['inline_keyboard'],
+    );
+
+    expect($offered)->toBe(array_map(
+        fn (BotMenuAction $action): string => $action->value,
+        BotMenuAction::menu(),
+    ))
+        ->and($offered)->not->toContain(BotMenuAction::FIXED_OR_CHOSEN->value)
+        ->and($offered)->not->toContain(BotMenuAction::PAYDAY_ARRIVED->value);
 });
 
 /**

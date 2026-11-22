@@ -56,10 +56,10 @@ enum BotMenuAction: string
      * How much of a typical month simply arrives, and how much is chosen.
      * Answered from `SpendingRhythmService`.
      *
-     * The only question here that looks at more than the current month, and the
-     * only one whose verdict is derived rather than read: no column records
-     * whether a category is a commitment, so it comes from how much the amount
-     * moves. See {@see \App\Enums\SpendingRhythm}.
+     * No longer offered in the menu: the owner found the answer more interesting
+     * than useful. The case is kept so buttons in messages already sent still
+     * resolve to this answer instead of the unknown-action fallback. See
+     * {@see self::menu()} and {@see \App\Enums\SpendingRhythm}.
      */
     case FIXED_OR_CHOSEN = 'm:fixed';
 
@@ -70,9 +70,13 @@ enum BotMenuAction: string
      * Its value uses the `p:` prefix on purpose: the webhook routes that prefix to
      * the payday job, which can authorise against the user's cycles, while an `m:`
      * key would land in the menu job's unknown-action fallback. It carries no cycle
-     * id because only the latest cycle is ever answerable. Offered to every user:
-     * with no plan, or with the feature off, the reply says so honestly.
-     * The value is {@see \App\DTOs\PaydayPlan\PaydayCallback::PAID}.
+     * id because only the latest cycle is ever answerable.
+     *
+     * Not offered in the menu any more: the payday conversation draws the button
+     * itself after a deferral, where it has a cycle to answer against. The case
+     * stays so {@see self::tryFromCallback()} still maps `p:paid`, and so the
+     * payday job keeps one name for the value. The value is
+     * {@see \App\DTOs\PaydayPlan\PaydayCallback::PAID}.
      */
     case PAYDAY_ARRIVED = 'p:paid';
 
@@ -102,6 +106,34 @@ enum BotMenuAction: string
     }
 
     /**
+     * The actions the menu offers, in the order they appear.
+     *
+     * Deliberately not `cases()`. Two answers live in the enum without being
+     * offered here, and for different reasons:
+     *
+     * - `FIXED_OR_CHOSEN` is retired from the menu. The case stays so a button
+     *   in an old message still resolves instead of falling into the unknown
+     *   branch, but new menus no longer ask the question.
+     * - `PAYDAY_ARRIVED` belongs to the payday conversation, which draws its own
+     *   "Cobré hoy" keyboard after a deferral ({@see \App\Services\PaydayPlan\PaydayPlanComposer::deferred()}).
+     *   Offering it here as well duplicated the button for users with no plan,
+     *   who could only ever be told they had none.
+     *
+     * Adding a case therefore does not silently add a button: the test suite
+     * pins the offered set to this list.
+     *
+     * @return array<int, self>
+     */
+    public static function menu(): array
+    {
+        return [
+            self::HOW_AM_I_DOING,
+            self::HOW_MUCH_TODAY,
+            self::WHAT_CHANGED,
+        ];
+    }
+
+    /**
      * The menu as Telegram's `inline_keyboard`: an array of rows, each row an
      * array of buttons.
      *
@@ -118,7 +150,7 @@ enum BotMenuAction: string
                 'text' => $action->label(),
                 'callback_data' => $action->value,
             ]],
-            self::cases(),
+            self::menu(),
         );
     }
 }
