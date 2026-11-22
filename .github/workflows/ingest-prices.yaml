@@ -1,0 +1,69 @@
+name: Ingest prices to Production
+
+# Manual one-off. The normal path is the scheduler (`PriceSchedule`, Mondays
+# 07:00 for INEI); this exists for the case where that path did not run and the
+# data is already stale, without waiting for the next Monday.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Fuente a ingerir'
+        required: true
+        default: 'inei'
+        type: choice
+        options:
+          - inei
+          - plazavea
+          - emmsa
+          - gmml
+      wait_seconds:
+        description: 'Segundos de espera antes del canary'
+        required: true
+        default: '60'
+        type: string
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Ingest via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            run() {
+              echo "→ $*"
+              if ! "$@"; then
+                echo "::error::Falló: $*"
+                exit 1
+              fi
+            }
+
+            cd "${{ secrets.PROJECT_PATH }}" || exit 1
+
+            echo "→ Entorno y cola"
+            sudo -u www-data php artisan tinker --execute="dump(config('app.env'), config('queue.default'), config('prices.sources.${{ inputs.source }}.enabled'));" || true
+
+            echo "→ Horizon"
+            sudo -u www-data php artisan horizon:status || true
+
+            echo "→ Últimas corridas de ${{ inputs.source }}"
+            sudo -u www-data php artisan tinker --execute="dump(\Illuminate\Support\Facades\DB::table('price_ingestion_runs')->where('source', '${{ inputs.source }}')->select('status','started_at','finished_at','details')->orderByDesc('started_at')->limit(5)->get()->toArray());" || true
+
+            echo "→ Último period_end de ${{ inputs.source }}"
+            sudo -u www-data php artisan tinker --execute="dump(\Illuminate\Support\Facades\DB::table('price_observations')->where('source', '${{ inputs.source }}')->max('period_end'));" || true
+
+            echo "→ Encolando ${{ inputs.source }}"
+            run sudo -u www-data php artisan prices:ingest "${{ inputs.source }}"
+
+            echo "→ Esperando ${{ inputs.wait_seconds }}s a que la cola procese"
+            sleep "${{ inputs.wait_seconds }}"
+
+            echo "→ Canary"
+            run sudo -u www-data php artisan prices:canary "${{ inputs.source }}"
