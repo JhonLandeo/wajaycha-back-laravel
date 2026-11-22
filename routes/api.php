@@ -69,6 +69,9 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::get('all-categories', [CategoryController::class, 'all']);
     Route::get('all-pareto-classification', [ParetoClassificationController::class, 'all']);
     Route::get('pareto-classification/{pareto_classification}/categories', [ParetoClassificationController::class, 'categories']);
+
+    // Lectura derivada de los movimientos, sin tabla propia. Ver ADR-0051.
+    Route::get('recurring', [\App\Http\Controllers\RecurringChargeController::class, 'index']);
     Route::post('update-detail-for-name', [DetailsController::class, 'updateNameCommon']);
     Route::get('get-summary-by-category', [TransactionsController::class, 'getSummaryByCategory']);
 
