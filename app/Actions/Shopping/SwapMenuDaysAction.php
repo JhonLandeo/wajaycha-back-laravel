@@ -15,9 +15,9 @@ use Illuminate\Validation\ValidationException;
  * Intercambia dos días completos del menú guardado (ADR-0038).
  *
  * Solo con entradas pendientes: un día cocinado tiene consumo de despensa y un
- * estado que no tiene sentido mover de fecha. Las sobras tampoco se mueven
- * porque apuntan a una comida de otro día por id; si una sobra cruza el par, el
- * intercambio se rechaza.
+ * estado que no tiene sentido mover de fecha. Las sobras del mismo día viajan
+ * con su comida de origen y conservan el orden; una sobra que cruza el par de
+ * días, o que apunta a una comida fuera de ellos, rechaza el intercambio.
  */
 final class SwapMenuDaysAction
 {
@@ -61,20 +61,36 @@ final class SwapMenuDaysAction
                     'dates' => 'No puedes intercambiar días con comidas cocinadas, saltadas o con estado marcado.',
                 ]);
             }
+        }
 
-            if ($entry->kind === MealEntryKind::Leftover) {
+        $ids = $entries->pluck('id')->map(static fn ($id): int => (int) $id)->all();
+        $movingDates = [$a->toDateString(), $b->toDateString()];
+
+        foreach ($this->mealPlanRepository->leftoversReferencing($userId, $ids) as $referencing) {
+            if (! in_array($referencing->plan_date->toDateString(), $movingDates, true)) {
                 throw ValidationException::withMessages([
-                    'dates' => 'No puedes intercambiar días con sobras. Ajusta esas comidas primero.',
+                    'dates' => 'Una sobra de otro día apunta a una comida de estos días. Ajusta esas sobras primero.',
                 ]);
             }
         }
 
-        $ids = $entries->pluck('id')->map(static fn ($id): int => (int) $id)->all();
+        // Una sobra solo se puede mover con su comida de origen en el mismo
+        // intercambio. Las del mismo día viajan juntas y mantienen el orden; las
+        // que cruzan de día quedarían antes o después de su origen.
+        $entriesById = $entries->keyBy('id');
 
-        if ($this->mealPlanRepository->leftoversReferencing($userId, $ids)->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'dates' => 'Una sobra de otro día apunta a una comida de estos días. Ajusta esas sobras primero.',
-            ]);
+        foreach ($entries as $entry) {
+            if ($entry->kind !== MealEntryKind::Leftover) {
+                continue;
+            }
+
+            $source = $entriesById->get((int) $entry->leftover_of_entry_id);
+
+            if ($source === null || $source->plan_date->toDateString() !== $entry->plan_date->toDateString()) {
+                throw ValidationException::withMessages([
+                    'dates' => 'Solo puedes intercambiar días cuando sus sobras son del mismo día. Ajusta esas comidas primero.',
+                ]);
+            }
         }
 
         $this->mealPlanRepository->swapDays($userId, $a, $b);

@@ -85,7 +85,41 @@ it('rechaza el intercambio si un día tiene una comida ya marcada', function () 
     ], $headers)->assertStatus(422)->assertJsonValidationErrors('dates');
 });
 
-it('rechaza el intercambio si uno de los días contiene sobras', function () {
+it('intercambia días con sobras del mismo día porque viajan con su origen', function () {
+    [$user, $headers] = $this->userWithAuth();
+    $a = swapRecipe($user->id, 'Almuerzo que deja sobras');
+    $lunch = swapEntry($user->id, $a, '2026-11-09');
+    $dinner = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'dinner',
+        'kind' => 'leftover',
+        'status' => 'planned',
+        'recipe_id' => $a->id,
+        'servings' => 2,
+        'cook_servings' => 0,
+        'leftover_of_entry_id' => $lunch->id,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch', 'dinner'],
+        'plan_weekdays' => [1, 2],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    $this->postJson('/api/shopping/menu/swap-days', [
+        'week_start' => '2026-11-09',
+        'date_a' => '2026-11-09',
+        'date_b' => '2026-11-10',
+    ], $headers)->assertOk()->assertJsonPath('status', 'swapped');
+
+    expect($lunch->refresh()->plan_date->toDateString())->toBe('2026-11-10')
+        ->and($dinner->refresh()->plan_date->toDateString())->toBe('2026-11-10')
+        ->and($dinner->refresh()->leftover_of_entry_id)->toBe($lunch->id);
+});
+
+it('rechaza el intercambio si una sobra apunta a una comida del otro día del par', function () {
     [$user, $headers] = $this->userWithAuth();
     $a = swapRecipe($user->id, 'Receta con sobras');
     $source = swapEntry($user->id, $a, '2026-11-09');
