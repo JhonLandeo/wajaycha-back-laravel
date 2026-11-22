@@ -28,6 +28,8 @@ use Illuminate\Support\Facades\DB;
  * - Conflicto. Un maestro sin categoria cuyos satelites traen categorias
  *   distintas no hereda nada: elegir una seria adivinar. Se informa para que la
  *   decida una persona.
+ * - Reparto. Un maestro con splits ya tiene su atribucion completa; no hereda
+ *   una categoria unica ni se le escribe una, porque romperia la exclusion.
  */
 class InheritSatelliteCategories extends Command
 {
@@ -37,7 +39,7 @@ class InheritSatelliteCategories extends Command
 
     protected $description = 'Pasa a los maestros sin categoria la categoria de sus satelites unidos antes del arreglo del linker';
 
-    /** @var array<int, array{user_id: int, category_id: int|null, master_id: int|null}> */
+    /** @var array<int, array{user_id: int, category_id: int|null, master_id: int|null, has_splits: bool}> */
     private array $rows = [];
 
     /** @var array<int, list<int>> maestro => sus satelites directos */
@@ -77,6 +79,14 @@ class InheritSatelliteCategories extends Command
                     Transaction::query()
                         ->whereKey($masterId)
                         ->whereNull('category_id')
+                        // Un maestro con reparto ya tiene su atribución: escribirle
+                        // una categoría rompería la exclusión. La subconsulta repite
+                        // la regla en la escritura, no solo al planificar.
+                        ->whereNotExists(function ($query): void {
+                            $query->select(DB::raw(1))
+                                ->from('transaction_splits')
+                                ->whereColumn('transaction_splits.transaction_id', 'transactions.id');
+                        })
                         ->update(['category_id' => $categoryId]);
                 }
             });
@@ -95,9 +105,11 @@ class InheritSatelliteCategories extends Command
     private function loadLinkedRows(): void
     {
         $columns = ['id', 'user_id', 'category_id', 'matched_transaction_id'];
+        $splitsExists = 'EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = transactions.id) AS has_splits';
 
         $satellites = Transaction::query()
             ->select($columns)
+            ->selectRaw($splitsExists)
             ->whereNotNull('matched_transaction_id')
             ->when($this->option('user'), fn ($query, $userId) => $query->where('user_id', (int) $userId))
             ->get();
@@ -110,7 +122,7 @@ class InheritSatelliteCategories extends Command
         ));
 
         if ($missingMasters !== []) {
-            $this->remember(Transaction::query()->select($columns)->whereKey($missingMasters)->get());
+            $this->remember(Transaction::query()->select($columns)->selectRaw($splitsExists)->whereKey($missingMasters)->get());
         }
 
         foreach ($this->rows as $id => $row) {
@@ -128,6 +140,7 @@ class InheritSatelliteCategories extends Command
                 'user_id' => (int) $transaction->user_id,
                 'category_id' => $transaction->category_id === null ? null : (int) $transaction->category_id,
                 'master_id' => $transaction->matched_transaction_id === null ? null : (int) $transaction->matched_transaction_id,
+                'has_splits' => (bool) $transaction->has_splits,
             ];
         }
     }
@@ -147,6 +160,12 @@ class InheritSatelliteCategories extends Command
 
         if ($own !== null || isset($this->visiting[$id])) {
             return $this->resolved[$id] = $own;
+        }
+
+        // Un maestro con reparto ya eligió su atribución: no hereda una
+        // categoría única ni la propaga hacia arriba.
+        if ($this->rows[$id]['has_splits']) {
+            return $this->resolved[$id] = null;
         }
 
         $this->visiting[$id] = true;

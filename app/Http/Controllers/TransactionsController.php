@@ -10,7 +10,6 @@ use App\DTOs\Transactions\TransactionDataDTO;
 use App\DTOs\Transactions\TransactionFilterDTO;
 use App\Http\Requests\Transaction\StoreTransactionRequest;
 use App\Http\Requests\Transaction\UpdateTransactionRequest;
-use App\Models\Transaction;
 use App\Repositories\Contracts\TransactionRepositoryContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,11 +40,12 @@ final class TransactionsController extends Controller
         // Resolved through the scoped repository rather than route-model binding:
         // binding resolves by primary key alone and would expose another user's row.
         $transaction = $this->repository->findById($id, (int) Auth::id());
-        if (!$transaction) {
+        if (! $transaction) {
             return response()->json(['message' => 'Transacción no encontrada'], 404);
         }
 
-        $transaction->load('detail');
+        $transaction->load(['detail', 'splits.category']);
+
         return response()->json($transaction);
     }
 
@@ -53,6 +53,7 @@ final class TransactionsController extends Controller
     {
         $dto = TransactionDataDTO::fromStoreRequest($request, (int) Auth::id());
         $transaction = $this->storeAction->execute($dto);
+
         return response()->json($transaction, 201);
     }
 
@@ -80,7 +81,7 @@ final class TransactionsController extends Controller
         // The scoped lookup is the single authorization gate. A row belonging to another
         // user is indistinguishable from one that does not exist, which is deliberate:
         // a 403 would confirm the id, handing an enumerator the signal they want.
-        if (!$transaction) {
+        if (! $transaction) {
             return response()->json(['message' => 'Transacción no encontrada'], 404);
         }
 
@@ -102,15 +103,16 @@ final class TransactionsController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $transaction = $this->repository->findById($id, (int) Auth::id());
-        if (!$transaction) {
+        if (! $transaction) {
             return response()->json(['message' => 'Transacción no encontrada'], 404);
         }
 
-        if (!$transaction->is_manual) {
+        if (! $transaction->is_manual) {
             return response()->json(['message' => 'Solo las transacciones manuales pueden ser eliminadas.'], 403);
         }
 
         $this->repository->delete($transaction);
+
         return response()->json(['status' => 'deleted']);
     }
 }

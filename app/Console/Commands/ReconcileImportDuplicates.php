@@ -377,6 +377,12 @@ class ReconcileImportDuplicates extends Command
         return DB::transaction(function () use ($userId, $masterId, $satelliteIds): int {
             $done = 0;
 
+            // El reparto vive en la fila que deja de contar, y el maestro es la
+            // que los reportes leen. Se carga una vez por grupo; adoptarlo es
+            // solo una copia cuando el maestro no tiene ni categoría ni reparto.
+            $master = Transaction::query()->find($masterId);
+            $satellites = Transaction::query()->whereKey($satelliteIds)->get()->keyBy('id');
+
             foreach ($satelliteIds as $satelliteId) {
                 try {
                     // Savepoint propio, por la misma razon que
@@ -407,6 +413,11 @@ class ReconcileImportDuplicates extends Command
                 }
 
                 Transaction::whereKey($satelliteId)->update(['matched_transaction_id' => $masterId]);
+
+                if ($master !== null && isset($satellites[$satelliteId])) {
+                    $this->linker->adoptSplits($master, $satellites[$satelliteId]);
+                }
+
                 $done++;
             }
 

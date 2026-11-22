@@ -271,11 +271,13 @@ final class CategoryRepository implements CategoryRepositoryContract
     /**
      * Year-to-date expense total per category, for yearly budgets only.
      *
-     * Reads `v_unified_transactions` — the same source `spent` and
+     * Reads `v_transaction_allocations` — the same source `spent` and
      * `largestExpenseByCategory()` come from. A yearly envelope is compared
      * against this figure and a monthly budget against `spent`, and if the two
      * came from different sources the coach could report a category as both
      * within its envelope and over its month using numbers that never agreed.
+     *
+     * A split movement contributes only what was assigned to this category.
      *
      * The window is the calendar year in the reference timezone. That is a
      * simplification the owner can revisit: a budget "for the year" could
@@ -292,8 +294,8 @@ final class CategoryRepository implements CategoryRepositoryContract
         $startsAt = CarbonImmutable::create($year, 1, 1, 0, 0, 0, $timezone);
         $endsAt = $startsAt->addYear();
 
-        $rows = DB::table('v_unified_transactions')
-            ->select('category_id', DB::raw('SUM(amount) as spent_in_year'))
+        $rows = DB::table('v_transaction_allocations')
+            ->select('category_id', DB::raw('SUM(allocated_amount) as spent_in_year'))
             ->where('user_id', $userId)
             ->where('type_transaction', 'expense')
             ->whereIn('category_id', $categoryIds)
@@ -317,10 +319,14 @@ final class CategoryRepository implements CategoryRepositoryContract
      * largestExpenseForCategoryMonth()`, which only runs post-evaluation for
      * message composition (design.md D5).
      *
-     * Reads `v_unified_transactions` — the same source `spent` comes from — never
+     * Reads `v_transaction_allocations` — the same source `spent` comes from — never
      * the raw `transactions` table, and never `get_transactions_by_detail()`
      * (design.md D5: its `HAVING COUNT(t.id) > 1` drops single-transaction
      * merchants, exactly the lumpy case this scalar exists to detect).
+     *
+     * The amount is the **allocated** one, not the full ticket: a S/ 200
+     * supermarket split into S/ 20 of cleaning must not look like a S/ 200
+     * cleaning expense. Otherwise every category sharing a split looks lumpy.
      *
      * @param  int[]  $categoryIds
      * @return array<int, float> keyed by category_id
@@ -332,8 +338,8 @@ final class CategoryRepository implements CategoryRepositoryContract
         $endsAt = $startsAt->addMonthNoOverflow();
 
         // Rule 02 Violation Fix: Explicit columns instead of SELECT *
-        $rows = DB::table('v_unified_transactions')
-            ->select('category_id', DB::raw('MAX(amount) as largest_expense'))
+        $rows = DB::table('v_transaction_allocations')
+            ->select('category_id', DB::raw('MAX(allocated_amount) as largest_expense'))
             ->where('user_id', $userId)
             ->where('type_transaction', 'expense')
             ->whereIn('category_id', $categoryIds)

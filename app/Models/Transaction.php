@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property-read Detail|null $detail
@@ -26,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property float $amount
  * @property string $date_operation
  * @property string $type_transaction
+ * @property bool $has_splits
  */
 class Transaction extends Model
 {
@@ -75,5 +77,14 @@ class Transaction extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'category_id');
+    }
+
+    /**
+     * Reparto explícito del movimiento. Existe o no; cuando existe,
+     * `category_id` es null por el invariante de la base. Ver ADR-0050.
+     */
+    public function splits(): HasMany
+    {
+        return $this->hasMany(TransactionSplit::class);
     }
 }

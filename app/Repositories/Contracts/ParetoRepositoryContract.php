@@ -47,9 +47,12 @@ interface ParetoRepositoryContract
      * Net movement per category inside a window, expenses positive and income
      * subtracted, exactly as the report reads it.
      *
+     * A split movement contributes only the part assigned to each category; the
+     * movement's full amount stays in `windowTotals()`.
+     *
      * A null month means the whole year; a null year means everything.
      *
-     * @return array<int, float>  category id => amount
+     * @return array<int, float> category id => amount
      */
     public function netSpendByCategory(int $userId, ?int $month, ?int $year): array;
 

@@ -6,7 +6,6 @@ namespace App\Repositories;
 
 use App\DTOs\Dashboard\DashboardScope;
 use App\Enums\DashboardMeasure;
-use App\Models\UnifyTransactions;
 use App\Repositories\Contracts\DashboardRepositoryContract;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -76,29 +75,31 @@ class DashboardRepository implements DashboardRepositoryContract
     {
         $nameExpression = "COALESCE(c.name, 'Sin categorizar')";
         $totalExpression = "SUM(CASE
-        WHEN t.type_transaction = 'expense' THEN t.amount
-        WHEN t.type_transaction = 'income' THEN -t.amount
+        WHEN a.type_transaction = 'expense' THEN a.allocated_amount
+        WHEN a.type_transaction = 'income' THEN -a.allocated_amount
         ELSE 0
         END)";
 
-        $query = UnifyTransactions::query()
-            ->from('v_unified_transactions as t')
-            ->leftJoin('details as d', 'd.id', '=', 't.detail_id')
-            ->leftJoin('categories as c', 'c.id', '=', 't.category_id')
+        // La vista trae una fila por categoría y monto, incluido el movimiento
+        // sin categorizar (`category_id = NULL`), que conserva su cubo. Así el
+        // dashboard no sobrestima la categoría con el ticket completo de una
+        // compra repartida.
+        $query = DB::table('v_transaction_allocations as a')
+            ->leftJoin('categories as c', 'c.id', '=', 'a.category_id')
             ->select(
                 DB::raw("{$nameExpression} as name"),
                 DB::raw('COUNT(*) as quantity'),
                 DB::raw("{$totalExpression} as total")
             )
             // Not conditional. Every other filter below is optional; ownership is not.
-            ->where('t.user_id', $scope->userId);
+            ->where('a.user_id', $scope->userId);
 
         if ($scope->year) {
-            $query->whereYear('t.date_operation', $scope->year);
+            $query->whereYear('a.date_operation', $scope->year);
         }
 
         if ($scope->month) {
-            $query->whereMonth('t.date_operation', $scope->month);
+            $query->whereMonth('a.date_operation', $scope->month);
         }
 
         if ($search) {
@@ -127,9 +128,9 @@ class DashboardRepository implements DashboardRepositoryContract
         $from = Carbon::create($year, $month, 1)->startOfDay();
         $to = $from->copy()->addMonth();
 
-        $rows = DB::table('v_unified_transactions')
+        $rows = DB::table('v_transaction_allocations')
             ->selectRaw('EXTRACT(DAY FROM date_operation)::int AS day')
-            ->selectRaw('COALESCE(SUM(amount), 0) AS amount')
+            ->selectRaw('COALESCE(SUM(allocated_amount), 0) AS amount')
             ->where('user_id', $userId)
             ->where('type_transaction', 'expense')
             ->whereIn('category_id', $categoryIds)

@@ -82,9 +82,12 @@ final class ParetoRepository implements ParetoRepositoryContract
 
     public function netSpendByCategory(int $userId, ?int $month, ?int $year): array
     {
-        $rows = $this->windowQuery($userId, $month, $year)
+        // `v_transaction_allocations`, no `v_unified_transactions`: una compra
+        // repartida aporta a cada categoría solo su parte. `windowTotals()` sigue
+        // leyendo la vista unificada porque el total del movimiento no cambia.
+        $rows = $this->windowQuery($userId, $month, $year, 'v_transaction_allocations')
             ->select('category_id')
-            ->selectRaw("SUM(CASE WHEN type_transaction = 'expense' THEN amount WHEN type_transaction = 'income' THEN -amount ELSE 0 END) AS net")
+            ->selectRaw("SUM(CASE WHEN type_transaction = 'expense' THEN allocated_amount WHEN type_transaction = 'income' THEN -allocated_amount ELSE 0 END) AS net")
             ->whereNotNull('category_id')
             ->groupBy('category_id')
             ->get();
@@ -127,9 +130,9 @@ final class ParetoRepository implements ParetoRepositoryContract
      * wrapping the column in a function discards it. The repository rules require a
      * sargable predicate, and the PostgreSQL function this replaced did not have one.
      */
-    private function windowQuery(int $userId, ?int $month, ?int $year): Builder
+    private function windowQuery(int $userId, ?int $month, ?int $year, string $table = 'v_unified_transactions'): Builder
     {
-        $query = DB::table('v_unified_transactions')->where('user_id', $userId);
+        $query = DB::table($table)->where('user_id', $userId);
 
         if ($year === null) {
             // A month with no year means "this month across every year", which has no
@@ -158,7 +161,7 @@ final class ParetoRepository implements ParetoRepositoryContract
             ->where('category_pareto_assignments.pareto_classification_id', $paretoId)
             ->where('categories.user_id', $userId)
             ->when($search, function ($query, $search) {
-                $query->where('categories.name', 'ILIKE', '%' . $search . '%');
+                $query->where('categories.name', 'ILIKE', '%'.$search.'%');
             })
             ->withCount('categorizationRules')
             ->orderBy('categorization_rules_count', 'desc')

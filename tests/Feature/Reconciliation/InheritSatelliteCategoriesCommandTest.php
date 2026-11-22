@@ -8,6 +8,7 @@ use App\Models\Detail;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Una fila tal como quedo antes del arreglo del linker: el enlace se escribe
@@ -110,4 +111,37 @@ it('limita la corrida a un usuario con --user', function () {
 
     expect($extractoAna->fresh()->category_id)->toBe($deAna->id)
         ->and($extractoBeto->fresh()->category_id)->toBeNull();
+});
+
+it('no le escribe una categoria a un maestro que ya tiene reparto', function () {
+    $user = User::factory()->create();
+    $comida = Category::factory()->create(['user_id' => $user->id]);
+    $limpieza = Category::factory()->create(['user_id' => $user->id]);
+
+    $extracto = inheritRow($user, SourceType::IMPORT_STATEMENT);
+    inheritRow($user, SourceType::IMPORT_APP, $comida, $extracto);
+
+    DB::table('transaction_splits')->insert([
+        [
+            'transaction_id' => $extracto->id,
+            'category_id' => $comida->id,
+            'user_id' => $user->id,
+            'amount' => '5.00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'transaction_id' => $extracto->id,
+            'category_id' => $limpieza->id,
+            'user_id' => $user->id,
+            'amount' => '3.00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $this->artisan(INHERIT_COMMAND.' --apply')->assertSuccessful();
+
+    expect($extracto->fresh()->category_id)->toBeNull()
+        ->and(DB::table('transaction_splits')->where('transaction_id', $extracto->id)->count())->toBe(2);
 });
