@@ -6,6 +6,7 @@ namespace App\Repositories;
 
 use App\Enums\MealEntryKind;
 use App\Enums\MealEntryStatus;
+use App\Enums\MealType;
 use App\Models\MealPlanEntry;
 use App\Models\MealPlanSettings;
 use App\Repositories\Contracts\MealPlanRepositoryContract;
@@ -15,6 +16,9 @@ use Illuminate\Support\Facades\DB;
 
 final class MealPlanRepository implements MealPlanRepositoryContract
 {
+    /** Days of history offered as leftover sources when planning a meal. */
+    private const LEFTOVER_SOURCE_LOOKBACK_DAYS = 14;
+
     public function settingsFor(int $userId): MealPlanSettings
     {
         /** @var MealPlanSettings $settings */
@@ -275,5 +279,44 @@ final class MealPlanRepository implements MealPlanRepositoryContract
             ->where('kind', MealEntryKind::Leftover->value)
             ->when($exceptEntryId !== null, fn ($query) => $query->whereKeyNot($exceptEntryId))
             ->sum('servings');
+    }
+
+    public function leftoverSourcesFor(
+        int $userId,
+        string $planDate,
+        MealType $mealType,
+        ?int $exceptEntryId = null,
+    ): Collection {
+        $from = CarbonImmutable::parse($planDate)->subDays(self::LEFTOVER_SOURCE_LOOKBACK_DAYS);
+        $earlierMeals = array_values(array_filter(
+            MealType::values(),
+            static fn (string $meal): bool => MealType::from($meal)->order() < $mealType->order(),
+        ));
+
+        return MealPlanEntry::query()
+            ->where('user_id', $userId)
+            ->where('kind', MealEntryKind::Recipe->value)
+            ->whereNotNull('recipe_id')
+            ->where('plan_date', '>=', $from->toDateString())
+            ->where('plan_date', '<=', $planDate)
+            ->where(function ($query) use ($planDate, $earlierMeals): void {
+                $query->where('plan_date', '<', $planDate);
+
+                if ($earlierMeals !== []) {
+                    $query->orWhere(static fn ($sameDay) => $sameDay
+                        ->where('plan_date', $planDate)
+                        ->whereIn('meal_type', $earlierMeals));
+                }
+            })
+            ->whereColumn('cook_servings', '>', 'servings')
+            ->with(['recipe'])
+            ->withSum([
+                'leftovers as claimed_servings' => fn ($query) => $query
+                    ->where('kind', MealEntryKind::Leftover->value)
+                    ->when($exceptEntryId !== null, fn ($leftover) => $leftover->whereKeyNot($exceptEntryId)),
+            ], 'servings')
+            ->orderByDesc('plan_date')
+            ->orderByRaw("CASE meal_type WHEN 'breakfast' THEN 1 WHEN 'lunch' THEN 2 ELSE 3 END")
+            ->get();
     }
 }

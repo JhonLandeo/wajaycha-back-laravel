@@ -8,6 +8,7 @@ use App\Actions\Shopping\ApplyMenuSuggestionAction;
 use App\Actions\Shopping\BuildMenuShoppingListAction;
 use App\Actions\Shopping\BuildMenuSpendingAction;
 use App\Actions\Shopping\ChatAdjustMenuPreviewAction;
+use App\Actions\Shopping\ListLeftoverSourcesAction;
 use App\Actions\Shopping\ReprogramMenuEntryAction;
 use App\Actions\Shopping\SaveMealPlanEntryAction;
 use App\Actions\Shopping\SuggestMealAlternativeAction;
@@ -16,6 +17,7 @@ use App\Actions\Shopping\SwapMenuDaysAction;
 use App\Actions\Shopping\SwapMenuEntriesAction;
 use App\Actions\Shopping\UpdateMealEntryStatusAction;
 use App\Enums\MealEntryStatus;
+use App\Enums\MealType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shopping\ApplyMenuSuggestionRequest;
 use App\Http\Requests\Shopping\SendPreviewMenuChatRequest;
@@ -32,6 +34,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 final class MealPlanController extends Controller
 {
@@ -46,6 +49,7 @@ final class MealPlanController extends Controller
         private readonly MealPlanPresenter $presenter,
         private readonly SuggestMealAlternativeAction $alternativeSuggestion,
         private readonly ReprogramMenuEntryAction $reprogramMenuEntry,
+        private readonly ListLeftoverSourcesAction $listLeftoverSources,
         private readonly ChatAdjustMenuPreviewAction $previewChatAction,
         private readonly SwapMenuDaysAction $swapMenuDaysAction,
         private readonly SwapMenuEntriesAction $swapMenuEntriesAction,
@@ -167,6 +171,24 @@ final class MealPlanController extends Controller
         ]);
 
         return response()->json(['data' => $this->presenter->settings($updated)]);
+    }
+
+    public function leftoverSources(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'plan_date' => ['required', 'date_format:Y-m-d'],
+            'meal_type' => ['required', Rule::enum(MealType::class)],
+            'entry_id' => ['sometimes', 'integer'],
+        ]);
+
+        return response()->json([
+            'data' => $this->listLeftoverSources->execute(
+                (int) Auth::id(),
+                (string) $validated['plan_date'],
+                MealType::from((string) $validated['meal_type']),
+                isset($validated['entry_id']) ? (int) $validated['entry_id'] : null,
+            ),
+        ]);
     }
 
     public function saveEntry(StoreMealPlanEntryRequest $request): JsonResponse

@@ -184,8 +184,12 @@ final class SaveMealPlanEntryAction
             throw ValidationException::withMessages(['leftover_of_entry_id' => 'Elige una comida cocinada que tenga sobras.']);
         }
 
-        if ($planDate <= $source->plan_date->toDateString()) {
+        $sourceDate = $source->plan_date->toDateString();
+        if ($planDate < $sourceDate) {
             throw ValidationException::withMessages(['plan_date' => 'Las sobras deben ir después del día en que se cocinó la comida.']);
+        }
+        if ($planDate === $sourceDate && $mealType->order() <= $source->meal_type->order()) {
+            throw ValidationException::withMessages(['plan_date' => 'Las sobras deben ir después de la comida que las produjo.']);
         }
 
         $servings = (int) ($data['servings'] ?? 0);

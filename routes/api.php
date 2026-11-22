@@ -116,6 +116,7 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::post('shopping/menu/suggest/chat', [\App\Http\Controllers\Shopping\MealPlanController::class, 'previewChat']);
     Route::post('shopping/menu/suggest/apply', [\App\Http\Controllers\Shopping\MealPlanController::class, 'applySuggestion']);
     Route::put('shopping/menu/settings', [\App\Http\Controllers\Shopping\MealPlanController::class, 'updateSettings']);
+    Route::get('shopping/menu/leftover-sources', [\App\Http\Controllers\Shopping\MealPlanController::class, 'leftoverSources']);
     Route::put('shopping/menu/entries', [\App\Http\Controllers\Shopping\MealPlanController::class, 'saveEntry']);
     Route::patch('shopping/menu/entries/{entry}/status', [\App\Http\Controllers\Shopping\MealPlanController::class, 'updateStatus']);
     Route::post('shopping/menu/entries/{entry}/reprogram', [\App\Http\Controllers\Shopping\MealPlanController::class, 'reprogramEntry']);

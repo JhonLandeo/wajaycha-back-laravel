@@ -19,6 +19,16 @@ enum MealType: string
         };
     }
 
+    /** Orden dentro del día: desayuno < almuerzo < cena. */
+    public function order(): int
+    {
+        return match ($this) {
+            self::Breakfast => 1,
+            self::Lunch => 2,
+            self::Dinner => 3,
+        };
+    }
+
     /**
      * @return string[]
      */

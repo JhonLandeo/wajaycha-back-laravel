@@ -51,6 +51,21 @@ interface MealPlanRepositoryContract
     public function leftoverServingsUsed(int $sourceEntryId, ?int $exceptEntryId = null): int;
 
     /**
+     * Recipe entries that still have unused cooked portions and can feed the
+     * target slot: any earlier day, plus earlier meals on the same day. The
+     * window is bounded so an old unclaimed surplus is not offered forever.
+     * `claimed_servings` comes from a `withSum`.
+     *
+     * @return Collection<int, MealPlanEntry>
+     */
+    public function leftoverSourcesFor(
+        int $userId,
+        string $planDate,
+        \App\Enums\MealType $mealType,
+        ?int $exceptEntryId = null,
+    ): Collection;
+
+    /**
      * Entries on other days that point to one of the given source entries.
      *
      * @param  array<int, int>  $sourceEntryIds

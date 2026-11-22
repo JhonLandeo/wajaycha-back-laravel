@@ -158,6 +158,135 @@ it('rejects a recipe for the wrong meal and a leftover without enough portions',
     ], $headers)->assertStatus(422)->assertJsonValidationErrors('servings');
 });
 
+it('lists cooked meals from previous weeks as leftover sources and excludes the edited entry', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = menuRecipe($user->id);
+
+    $source = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-15',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'servings' => 2,
+        'cook_servings' => 4,
+    ]);
+
+    $this->getJson('/api/shopping/menu/leftover-sources?plan_date=2026-11-23&meal_type=lunch', $headers)
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $source->id)
+        ->assertJsonPath('data.0.plan_date', '2026-11-15')
+        ->assertJsonPath('data.0.meal_type_label', 'Almuerzo')
+        ->assertJsonPath('data.0.available_servings', 2);
+
+    $claim = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-16',
+        'meal_type' => 'lunch',
+        'kind' => 'leftover',
+        'servings' => 2,
+        'cook_servings' => 0,
+        'leftover_of_entry_id' => $source->id,
+    ]);
+
+    $this->getJson('/api/shopping/menu/leftover-sources?plan_date=2026-11-23&meal_type=lunch', $headers)
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+
+    $this->getJson("/api/shopping/menu/leftover-sources?plan_date=2026-11-23&meal_type=lunch&entry_id={$claim->id}", $headers)
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.available_servings', 2);
+});
+
+it('offers same-day sources only for a later meal', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = menuRecipe($user->id);
+
+    $lunch = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-23',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'servings' => 2,
+        'cook_servings' => 4,
+    ]);
+
+    $this->getJson('/api/shopping/menu/leftover-sources?plan_date=2026-11-23&meal_type=dinner', $headers)
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $lunch->id);
+
+    $this->getJson('/api/shopping/menu/leftover-sources?plan_date=2026-11-23&meal_type=lunch', $headers)
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+
+    $this->getJson('/api/shopping/menu/leftover-sources?plan_date=2026-11-23&meal_type=breakfast', $headers)
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+
+    MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-24',
+        'meal_type' => 'breakfast',
+        'kind' => 'recipe',
+        'servings' => 2,
+        'cook_servings' => 4,
+    ]);
+
+    $this->getJson('/api/shopping/menu/leftover-sources?plan_date=2026-11-23&meal_type=dinner', $headers)
+        ->assertOk()
+        ->assertJsonCount(1, 'data');
+});
+
+it('saves a same-day leftover from an earlier meal and rejects the reverse', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = menuRecipe($user->id, 'dinner');
+
+    $lunch = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-23',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'servings' => 2,
+        'cook_servings' => 4,
+    ]);
+
+    $this->putJson('/api/shopping/menu/entries', [
+        'plan_date' => '2026-11-23',
+        'meal_type' => 'dinner',
+        'kind' => 'leftover',
+        'leftover_of_entry_id' => $lunch->id,
+        'servings' => 2,
+    ], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.kind', 'leftover')
+        ->assertJsonPath('data.leftover_from.id', $lunch->id);
+
+    $dinner = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-25',
+        'meal_type' => 'dinner',
+        'kind' => 'recipe',
+        'servings' => 2,
+        'cook_servings' => 4,
+    ]);
+
+    $this->putJson('/api/shopping/menu/entries', [
+        'plan_date' => '2026-11-25',
+        'meal_type' => 'lunch',
+        'kind' => 'leftover',
+        'leftover_of_entry_id' => $dinner->id,
+        'servings' => 2,
+    ], $headers)->assertStatus(422)->assertJsonValidationErrors('plan_date');
+});
+
 it('does not count entries on days that are not planned', function () {
     [$user, $headers] = $this->userWithAuth();
     [$recipe] = menuRecipe($user->id);
