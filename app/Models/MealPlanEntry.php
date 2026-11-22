@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Una comida planificada para una fecha.
@@ -31,11 +32,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $servings
  * @property int $cook_servings
  * @property int|null $leftover_of_entry_id
+ * @property int|null $rescheduled_from_entry_id
  * @property string|null $notes
  * @property-read Recipe|null $recipe
  * @property-read Recipe|null $drinkRecipe
  * @property-read MealPlanEntry|null $leftoverOf
  * @property-read \Illuminate\Database\Eloquent\Collection<int, MealPlanEntry> $leftovers
+ * @property-read MealPlanEntry|null $rescheduledFrom
+ * @property-read MealPlanEntry|null $rescheduledTo
  * @property-read User $user
  */
 class MealPlanEntry extends Model
@@ -54,6 +58,7 @@ class MealPlanEntry extends Model
         'servings',
         'cook_servings',
         'leftover_of_entry_id',
+        'rescheduled_from_entry_id',
         'notes',
     ];
 
@@ -89,5 +94,15 @@ class MealPlanEntry extends Model
     public function leftovers(): HasMany
     {
         return $this->hasMany(self::class, 'leftover_of_entry_id');
+    }
+
+    public function rescheduledFrom(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'rescheduled_from_entry_id');
+    }
+
+    public function rescheduledTo(): HasOne
+    {
+        return $this->hasOne(self::class, 'rescheduled_from_entry_id');
     }
 }

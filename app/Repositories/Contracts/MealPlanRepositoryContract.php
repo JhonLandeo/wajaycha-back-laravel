@@ -39,6 +39,12 @@ interface MealPlanRepositoryContract
 
     public function clearWeek(int $userId, CarbonImmutable $startsOn, CarbonImmutable $endsOn): void;
 
+    /**
+     * Delete the entries of a week from a date onwards, preserving the history
+     * that already happened (`plan_date` before `$from`).
+     */
+    public function clearWeekFrom(int $userId, CarbonImmutable $startsOn, CarbonImmutable $endsOn, CarbonImmutable $from): void;
+
     public function clearDay(int $userId, CarbonImmutable $date): void;
 
     /** Servings already claimed by leftover entries of a source entry. */
@@ -65,4 +71,14 @@ interface MealPlanRepositoryContract
      * @return Collection<int, MealPlanEntry>
      */
     public function preferenceHistoryFor(int $userId, CarbonImmutable $since, CarbonImmutable $until): Collection;
+
+    /**
+     * Meals from the window whose planned dish was not cooked and that were not
+     * reprogrammed yet. `leftover` and `ate_out` are included on purpose: they
+     * are alternatives already eaten, not cooked dishes, and the UI offers to
+     * reprogram them manually.
+     *
+     * @return Collection<int, MealPlanEntry>
+     */
+    public function pendingEntriesFor(int $userId, CarbonImmutable $since, CarbonImmutable $until): Collection;
 }

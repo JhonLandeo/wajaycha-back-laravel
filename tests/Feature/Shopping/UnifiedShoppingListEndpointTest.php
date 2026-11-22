@@ -10,9 +10,14 @@ use App\Models\Recipe;
 use App\Models\RecipeIngredient;
 use App\Models\ShoppingListCheck;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
+
+afterEach(function () {
+    $this->travelBack();
+});
 
 /**
  * @return array{0: Recipe, 1: Product}
@@ -82,6 +87,43 @@ it('merges menu and habits and subtracts the pantry once', function () {
         ->and((float) $lines[0]['needed_quantity'])->toBe(1.5)
         ->and((float) $lines[0]['to_buy_quantity'])->toBe(1.25)
         ->and($lines[0]['checked'])->toBeFalse();
+});
+
+it('does not buy ingredients for planned meals whose day already passed', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-11 08:00:00', 'America/Lima'));
+
+    [$user, $headers] = $this->userWithAuth();
+    [$pastRecipe, $pastProduct] = unifiedRecipe($user->id);
+    [$todayRecipe, $todayProduct] = unifiedRecipe($user->id);
+
+    MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $pastRecipe->id,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'status' => 'planned',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+    MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $todayRecipe->id,
+        'plan_date' => '2026-11-11',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'status' => 'planned',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+
+    $lines = $this->getJson('/api/shopping/shopping-list?week_start=2026-11-09&sources=menu', $headers)
+        ->assertOk()
+        ->json('data.lines');
+    $productIds = collect($lines)->pluck('product_id')->all();
+
+    expect($productIds)->toContain($todayProduct->id)
+        ->not->toContain($pastProduct->id);
 });
 
 it('filters by source without mixing the other one', function () {

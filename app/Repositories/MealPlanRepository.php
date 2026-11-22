@@ -48,7 +48,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
         return MealPlanEntry::query()
             ->where('user_id', $userId)
             ->whereBetween('plan_date', [$startsOn->toDateString(), $endsOn->toDateString()])
-            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe'])
+            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe', 'rescheduledFrom'])
             ->orderBy('plan_date')
             ->orderByRaw("CASE meal_type WHEN 'breakfast' THEN 1 WHEN 'lunch' THEN 2 ELSE 3 END")
             ->get();
@@ -60,7 +60,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
         $entry = MealPlanEntry::query()
             ->whereKey($id)
             ->where('user_id', $userId)
-            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe'])
+            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe', 'rescheduledFrom'])
             ->first();
 
         return $entry;
@@ -73,7 +73,7 @@ final class MealPlanRepository implements MealPlanRepositoryContract
             ->where('user_id', $userId)
             ->where('plan_date', $planDate)
             ->where('meal_type', $mealType->value)
-            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe'])
+            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe', 'rescheduledFrom'])
             ->first();
 
         return $entry;
@@ -81,6 +81,21 @@ final class MealPlanRepository implements MealPlanRepositoryContract
 
     public function upsertEntry(int $userId, array $data): MealPlanEntry
     {
+        $attributes = [
+            'kind' => $data['kind'],
+            'status' => $data['status'] ?? 'planned',
+            'recipe_id' => $data['recipe_id'] ?? null,
+            'drink_recipe_id' => $data['drink_recipe_id'] ?? null,
+            'servings' => $data['servings'] ?? 0,
+            'cook_servings' => $data['cook_servings'] ?? 0,
+            'leftover_of_entry_id' => $data['leftover_of_entry_id'] ?? null,
+            'notes' => $data['notes'] ?? null,
+        ];
+
+        if (array_key_exists('rescheduled_from_entry_id', $data)) {
+            $attributes['rescheduled_from_entry_id'] = $data['rescheduled_from_entry_id'];
+        }
+
         /** @var MealPlanEntry $entry */
         $entry = MealPlanEntry::query()->updateOrCreate(
             [
@@ -88,19 +103,15 @@ final class MealPlanRepository implements MealPlanRepositoryContract
                 'plan_date' => $data['plan_date'],
                 'meal_type' => $data['meal_type'],
             ],
-            [
-                'kind' => $data['kind'],
-                'status' => $data['status'] ?? 'planned',
-                'recipe_id' => $data['recipe_id'] ?? null,
-                'drink_recipe_id' => $data['drink_recipe_id'] ?? null,
-                'servings' => $data['servings'] ?? 0,
-                'cook_servings' => $data['cook_servings'] ?? 0,
-                'leftover_of_entry_id' => $data['leftover_of_entry_id'] ?? null,
-                'notes' => $data['notes'] ?? null,
-            ]
+            $attributes,
         );
 
-        return $entry->load(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe']);
+        return $entry->load([
+            'recipe.ingredients.product',
+            'drinkRecipe.ingredients.product',
+            'leftoverOf.recipe',
+            'rescheduledFrom',
+        ]);
     }
 
     public function deleteEntry(MealPlanEntry $entry): bool
@@ -120,6 +131,17 @@ final class MealPlanRepository implements MealPlanRepositoryContract
         MealPlanEntry::query()
             ->where('user_id', $userId)
             ->whereBetween('plan_date', [$startsOn->toDateString(), $endsOn->toDateString()])
+            ->delete();
+    }
+
+    public function clearWeekFrom(int $userId, CarbonImmutable $startsOn, CarbonImmutable $endsOn, CarbonImmutable $from): void
+    {
+        $fromDate = $from->setTimezone('America/Lima')->startOfDay();
+        $start = $fromDate->greaterThan($startsOn) ? $fromDate : $startsOn;
+
+        MealPlanEntry::query()
+            ->where('user_id', $userId)
+            ->whereBetween('plan_date', [$start->toDateString(), $endsOn->toDateString()])
             ->delete();
     }
 
@@ -156,6 +178,26 @@ final class MealPlanRepository implements MealPlanRepositoryContract
                 MealEntryStatus::Skipped->value,
             ])
             ->with(['recipe.ingredients.product'])
+            ->get();
+    }
+
+    public function pendingEntriesFor(int $userId, CarbonImmutable $since, CarbonImmutable $until): Collection
+    {
+        return MealPlanEntry::query()
+            ->where('user_id', $userId)
+            ->whereBetween('plan_date', [$since->toDateString(), $until->toDateString()])
+            ->where('kind', MealEntryKind::Recipe->value)
+            ->whereNotNull('recipe_id')
+            ->whereIn('status', [
+                MealEntryStatus::Planned->value,
+                MealEntryStatus::Skipped->value,
+                MealEntryStatus::Leftover->value,
+                MealEntryStatus::AteOut->value,
+            ])
+            ->whereDoesntHave('rescheduledTo')
+            ->with(['recipe.ingredients.product', 'drinkRecipe.ingredients.product', 'leftoverOf.recipe', 'rescheduledFrom'])
+            ->orderByDesc('plan_date')
+            ->orderByRaw("CASE meal_type WHEN 'breakfast' THEN 1 WHEN 'lunch' THEN 2 ELSE 3 END")
             ->get();
     }
 

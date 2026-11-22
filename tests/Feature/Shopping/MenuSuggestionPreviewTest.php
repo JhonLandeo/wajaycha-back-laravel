@@ -77,6 +77,98 @@ it('previews a week without writing and applies the reviewed entries', function 
     expect(MealPlanEntry::query()->where('user_id', $user->id)->count())->toBe(2);
 });
 
+it('does not delete the days that already passed when applying a suggestion', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = previewRecipe($user->id);
+    previewRecipe($user->id);
+
+    $past = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'status' => 'cooked',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+
+    $this->travelTo(CarbonImmutable::parse('2026-11-11 08:00:00', 'America/Lima'));
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $preview = $this->postJson('/api/shopping/menu/suggest/preview?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->assertJsonPath('data.entries.0.plan_date', '2026-11-11')
+        ->json('data.entries');
+
+    $this->postJson('/api/shopping/menu/suggest/apply', [
+        'week_start' => '2026-11-09',
+        'entries' => $preview,
+    ], $headers)->assertOk();
+
+    $kept = MealPlanEntry::query()->whereKey($past->id)->first();
+
+    expect($kept)->not->toBeNull()
+        ->and($kept?->status?->value)->toBe('cooked');
+});
+
+it('keeps the carry-over link when the reviewed pending meal is applied', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = previewRecipe($user->id);
+
+    $past = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-08',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'status' => 'planned',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $preview = $this->postJson('/api/shopping/menu/suggest/preview?week_start=2026-11-09', [], $headers)
+        ->assertOk()
+        ->json('data.entries');
+
+    $carried = collect($preview)->first(
+        fn (array $entry): bool => ($entry['rescheduled_from']['id'] ?? null) === $past->id,
+    );
+
+    expect($carried)->not->toBeNull();
+
+    $this->postJson('/api/shopping/menu/suggest/apply', [
+        'week_start' => '2026-11-09',
+        'entries' => $preview,
+    ], $headers)->assertOk();
+
+    $new = MealPlanEntry::query()
+        ->where('user_id', $user->id)
+        ->where('rescheduled_from_entry_id', $past->id)
+        ->first();
+
+    expect($new)->not->toBeNull()
+        ->and($new?->plan_date->toDateString())->toBe('2026-11-09')
+        ->and($past->refresh()->status?->value)->toBe('planned');
+});
+
 it('rejects a proposal that repeats a main recipe in the same week', function () {
     [$user, $headers] = $this->userWithAuth();
     [$recipe] = previewRecipe($user->id);

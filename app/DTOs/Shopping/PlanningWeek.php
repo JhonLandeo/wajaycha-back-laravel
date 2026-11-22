@@ -46,4 +46,22 @@ final class PlanningWeek
             endsOn: $start->startOfWeek(CarbonImmutable::MONDAY)->addDays(6),
         );
     }
+
+    /**
+     * Primera fecha cuyas comidas planificadas todavía importan para comprar.
+     *
+     * Una semana pasada es historia y conserva todos sus días; la semana en
+     * curso descarta los días que ya pasaron; una semana futura empieza en su
+     * lunes. Así la compra no pide ingredientes de comidas que quedaron atrás.
+     */
+    public function shoppingFrom(): ?CarbonImmutable
+    {
+        $today = $this->asOf->setTimezone('America/Lima')->startOfDay();
+
+        if ($this->endsOn->lessThan($today)) {
+            return null;
+        }
+
+        return $this->startsOn->greaterThan($today) ? $this->startsOn : $today;
+    }
 }

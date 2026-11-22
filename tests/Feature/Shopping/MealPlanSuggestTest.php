@@ -380,6 +380,91 @@ it('does not propose days that already passed in the current week', function () 
     expect($dates)->toBe(['2026-11-11']);
 });
 
+it('keeps entries from the past when it rebuilds the current week', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$recipe] = suggestionRecipe($user->id, 'Receta A');
+
+    $this->travelTo(CarbonImmutable::parse('2026-11-11 08:00:00', 'America/Lima'));
+
+    $past = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $recipe->id,
+        'plan_date' => '2026-11-09',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'status' => 'cooked',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1, 2, 3],
+        'excluded_terms' => [],
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk();
+
+    $kept = MealPlanEntry::query()->whereKey($past->id)->first();
+
+    expect($kept)->not->toBeNull()
+        ->and($kept?->status?->value)->toBe('cooked');
+});
+
+it('carries pending meals into the nearest slot and leaves alternatives for manual reprogramming', function () {
+    [$user, $headers] = $this->userWithAuth();
+    [$pendingRecipe] = suggestionRecipe($user->id, 'Pendiente');
+    [$alternativeRecipe] = suggestionRecipe($user->id, 'Alternativa');
+
+    $pending = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $pendingRecipe->id,
+        'plan_date' => '2026-11-08',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'status' => 'planned',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+    $alternative = MealPlanEntry::factory()->create([
+        'user_id' => $user->id,
+        'recipe_id' => $alternativeRecipe->id,
+        'plan_date' => '2026-11-07',
+        'meal_type' => 'lunch',
+        'kind' => 'recipe',
+        'status' => 'ate_out',
+        'servings' => 2,
+        'cook_servings' => 2,
+    ]);
+
+    $this->putJson('/api/shopping/menu/settings', [
+        'household_size' => 2,
+        'meal_types' => ['lunch'],
+        'plan_weekdays' => [1],
+        'excluded_terms' => [],
+        'new_recipes_per_week' => 0,
+    ], $headers)->assertOk();
+
+    config(['services.opencode.api_key' => '']);
+
+    $this->postJson('/api/shopping/menu/suggest?week_start=2026-11-09', [], $headers)
+        ->assertOk();
+
+    $carried = MealPlanEntry::query()
+        ->where('user_id', $user->id)
+        ->where('rescheduled_from_entry_id', $pending->id)
+        ->first();
+
+    expect($carried)->not->toBeNull()
+        ->and($carried?->plan_date->toDateString())->toBe('2026-11-09')
+        ->and($carried?->recipe_id)->toBe($pendingRecipe->id)
+        ->and(MealPlanEntry::query()->where('rescheduled_from_entry_id', $alternative->id)->exists())->toBeFalse();
+});
+
 it('leaves a finished week untouched when there is nothing left to plan', function () {
     [$user, $headers] = $this->userWithAuth();
     [$recipe] = suggestionRecipe($user->id, 'Receta A');

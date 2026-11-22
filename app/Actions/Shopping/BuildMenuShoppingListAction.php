@@ -46,7 +46,12 @@ final class BuildMenuShoppingListAction
 
         $settings = $this->mealPlanRepository->settingsFor($userId);
         $entries = $this->mealPlanRepository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
-        $needs = $this->menuNeeds->build($entries, $settings->plan_weekdays, $settings->meal_types);
+        $needs = $this->menuNeeds->build(
+            $entries,
+            $settings->plan_weekdays,
+            $settings->meal_types,
+            $week->shoppingFrom(),
+        );
         $pantry = $this->shoppingRepository->pantryStockFor($userId);
         $ceiling = $this->ceilingResolver->resolve($userId, $asOf);
 

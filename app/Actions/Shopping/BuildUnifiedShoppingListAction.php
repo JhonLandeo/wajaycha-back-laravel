@@ -53,7 +53,12 @@ final class BuildUnifiedShoppingListAction
         if (in_array('menu', $sources, true)) {
             $settings = $this->mealPlanRepository->settingsFor($userId);
             $entries = $this->mealPlanRepository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
-            $lineSets[] = $this->menuNeeds->build($entries, $settings->plan_weekdays, $settings->meal_types);
+            $lineSets[] = $this->menuNeeds->build(
+                $entries,
+                $settings->plan_weekdays,
+                $settings->meal_types,
+                $week->shoppingFrom(),
+            );
         }
 
         if (in_array('habits', $sources, true)) {

@@ -8,6 +8,7 @@ use App\Actions\Shopping\ApplyMenuSuggestionAction;
 use App\Actions\Shopping\BuildMenuShoppingListAction;
 use App\Actions\Shopping\BuildMenuSpendingAction;
 use App\Actions\Shopping\ChatAdjustMenuPreviewAction;
+use App\Actions\Shopping\ReprogramMenuEntryAction;
 use App\Actions\Shopping\SaveMealPlanEntryAction;
 use App\Actions\Shopping\SuggestMealAlternativeAction;
 use App\Actions\Shopping\SuggestMenuAction;
@@ -44,6 +45,7 @@ final class MealPlanController extends Controller
         private readonly UpdateMealEntryStatusAction $updateStatusAction,
         private readonly MealPlanPresenter $presenter,
         private readonly SuggestMealAlternativeAction $alternativeSuggestion,
+        private readonly ReprogramMenuEntryAction $reprogramMenuEntry,
         private readonly ChatAdjustMenuPreviewAction $previewChatAction,
         private readonly SwapMenuDaysAction $swapMenuDaysAction,
         private readonly SwapMenuEntriesAction $swapMenuEntriesAction,
@@ -250,6 +252,19 @@ final class MealPlanController extends Controller
         return response()->json(['status' => 'deleted']);
     }
 
+    public function reprogramEntry(int $entry): JsonResponse
+    {
+        $model = $this->repository->findEntry($entry, (int) Auth::id());
+
+        if ($model === null) {
+            abort(404);
+        }
+
+        $created = $this->reprogramMenuEntry->execute($model);
+
+        return response()->json(['data' => $this->presenter->entry($created)]);
+    }
+
     public function shoppingList(Request $request): JsonResponse
     {
         $week = $this->weekFrom($request);
@@ -266,11 +281,14 @@ final class MealPlanController extends Controller
     {
         $settings = $this->repository->settingsFor($userId);
         $entries = $this->repository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
+        $today = CarbonImmutable::now('America/Lima')->startOfDay();
+        $pending = $this->repository->pendingEntriesFor($userId, $today->subDays(7), $today->subDay());
 
         return [
             'week' => $this->presenter->week($week),
             'settings' => $this->presenter->settings($settings),
             'entries' => $entries->map(fn (MealPlanEntry $entry): array => $this->presenter->entry($entry))->values()->all(),
+            'pending' => $pending->map(fn (MealPlanEntry $entry): array => $this->presenter->entry($entry))->values()->all(),
         ];
     }
 

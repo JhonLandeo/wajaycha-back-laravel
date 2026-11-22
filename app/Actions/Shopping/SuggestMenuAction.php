@@ -11,10 +11,12 @@ use App\DTOs\Shopping\PantryStock;
 use App\DTOs\Shopping\PlanningWeek;
 use App\Enums\DietProfile;
 use App\Enums\MealEntryKind;
+use App\Enums\MealEntryStatus;
 use App\Enums\MenuStrategy;
 use App\Enums\RecipeCourse;
 use App\Enums\RecipeCuisine;
 use App\Enums\Unit;
+use App\Models\MealPlanEntry;
 use App\Models\MealPlanSettings;
 use App\Models\Recipe;
 use App\Repositories\Contracts\FoodBudgetRepositoryContract;
@@ -51,6 +53,9 @@ use Throwable;
 final class SuggestMenuAction
 {
     private const MAX_RECIPE_OCCURRENCES = 1;
+
+    /** Cuántas comidas sin cocinar se reservan automáticamente en una sugerencia. */
+    private const MAX_CARRY_OVER = 3;
 
     /** @var array<int, \App\Models\ConsumptionHabit> */
     private array $habits = [];
@@ -104,7 +109,10 @@ final class SuggestMenuAction
 
         try {
             $source = $this->execute($userId, $week->startsOn->toDateString());
-            $entries = $this->mealPlanRepository->entriesForWeek($userId, $week->startsOn, $week->endsOn);
+            $today = $week->asOf->setTimezone('America/Lima')->toDateString();
+            $entries = $this->mealPlanRepository->entriesForWeek($userId, $week->startsOn, $week->endsOn)
+                ->filter(fn ($entry): bool => $entry->plan_date->toDateString() >= $today)
+                ->values();
 
             return ['source' => $source, 'week' => $week, 'entries' => $entries];
         } finally {
@@ -201,12 +209,36 @@ final class SuggestMenuAction
         $priorityOrder = $this->pantryPriority->orderedProductIds($pantry, $asOf);
         $usage = [];
         $slotRecipe = [];
-
-        $selected = $this->fromAi($week, $settings, $days, $meals, $candidates, $pantry, $available, $usage, $slotRecipe, $priorityOrder);
-        $source = $selected === [] ? 'fallback' : 'ai';
+        $carryOver = $this->reservePendingMeals(
+            $userId,
+            $week,
+            $settings,
+            $days,
+            $meals,
+            $candidates,
+            $available,
+            $usage,
+            $slotRecipe,
+        );
+        $reserved = array_fill_keys(array_keys($carryOver), true);
+        $aiSelected = $this->fromAi(
+            $week,
+            $settings,
+            $days,
+            $meals,
+            $candidates,
+            $pantry,
+            $available,
+            $usage,
+            $slotRecipe,
+            $priorityOrder,
+            $reserved,
+        );
+        $selected = $carryOver + $aiSelected;
+        $source = $aiSelected === [] ? 'fallback' : 'ai';
 
         DB::transaction(function () use ($userId, $week, $settings, $days, $meals, $candidates, $selected, &$available, &$usage, &$slotRecipe, $priorityOrder): void {
-            $this->mealPlanRepository->clearWeek($userId, $week->startsOn, $week->endsOn);
+            $this->mealPlanRepository->clearWeekFrom($userId, $week->startsOn, $week->endsOn, $week->asOf);
 
             $created = [];
             foreach ($selected as $key => $choice) {
@@ -220,6 +252,7 @@ final class SuggestMenuAction
                     'servings' => (int) $settings->household_size,
                     'cook_servings' => $choice['cook_servings'],
                     'leftover_of_entry_id' => null,
+                    'rescheduled_from_entry_id' => $choice['rescheduled_from_entry_id'] ?? null,
                     'notes' => null,
                 ]);
                 $created[$key] = $entry;
@@ -319,6 +352,107 @@ final class SuggestMenuAction
     }
 
     /**
+     * Reserva los primeros huecos para las comidas pendientes que no se
+     * cocinaron. Solo `planned` y `skipped` entran automáticamente: las sobras y
+     * las comidas fuera ya resolvieron la ranura y se ofrecen para reprogramar
+     * manualmente. El tope evita que la semana nueva sea un vertedero de
+     * pendientes (ADR-0044).
+     *
+     * @param  array<int, string>  $days
+     * @param  array<int, string>  $meals
+     * @param  array<string, array<int, Recipe>>  $candidates
+     * @param  array<int, array{quantity: float, unit: Unit, expiresSoon: bool}>  $available
+     * @param  array<int, int>  $usage
+     * @param  array<string, int>  $slotRecipe
+     * @return array<string, array{recipe_id: int, drink_recipe_id: int|null, cook_servings: int, rescheduled_from_entry_id: int}>
+     */
+    private function reservePendingMeals(
+        int $userId,
+        PlanningWeek $week,
+        MealPlanSettings $settings,
+        array $days,
+        array $meals,
+        array $candidates,
+        array &$available,
+        array &$usage,
+        array &$slotRecipe,
+    ): array {
+        $asOf = $week->asOf->setTimezone('America/Lima')->startOfDay();
+        $pending = $this->mealPlanRepository
+            ->pendingEntriesFor($userId, $asOf->subDays(7), $asOf->subDay())
+            ->filter(static fn (MealPlanEntry $entry): bool => in_array($entry->status, [
+                MealEntryStatus::Planned,
+                MealEntryStatus::Skipped,
+            ], true));
+
+        $selected = [];
+        $seenRecipes = [];
+
+        foreach ($pending as $entry) {
+            if (count($selected) >= self::MAX_CARRY_OVER) {
+                break;
+            }
+
+            $recipeId = (int) $entry->recipe_id;
+            $meal = $entry->meal_type->value;
+
+            if (isset($seenRecipes[$recipeId]) || ! in_array($meal, $meals, true)) {
+                continue;
+            }
+
+            $recipe = $this->findCandidate($candidates[$meal] ?? [], $recipeId);
+
+            if ($recipe === null || $recipe->course === RecipeCourse::Drink) {
+                continue;
+            }
+
+            $key = null;
+            foreach ($days as $date) {
+                $candidateKey = $date.'|'.$meal;
+
+                if (! isset($selected[$candidateKey]) && ! isset($slotRecipe[$candidateKey])) {
+                    $key = $candidateKey;
+                    break;
+                }
+            }
+
+            if ($key === null) {
+                continue;
+            }
+
+            $servings = max(1, (int) $settings->household_size);
+            $cook = max($servings, min((int) $entry->cook_servings, $servings * 2));
+            $evaluation = $this->evaluate($recipe, $cook, $available);
+            $drink = $entry->drink_recipe_id === null
+                ? null
+                : $this->findCandidate($candidates[$meal] ?? [], (int) $entry->drink_recipe_id);
+            $drinkId = $drink !== null && $drink->course === RecipeCourse::Drink && (int) $drink->id !== $recipeId
+                ? (int) $drink->id
+                : null;
+
+            $this->deplete($available, $evaluation['requirements']);
+            $usage[$recipeId] = ($usage[$recipeId] ?? 0) + 1;
+            $slotRecipe[$key] = $recipeId;
+
+            if ($drinkId !== null) {
+                $drinkEvaluation = $this->evaluate($drink, $servings, $available);
+                $this->deplete($available, $drinkEvaluation['requirements']);
+                $usage[$drinkId] = ($usage[$drinkId] ?? 0) + 1;
+            }
+
+            $selected[$key] = [
+                'recipe_id' => $recipeId,
+                'drink_recipe_id' => $drinkId,
+                'cook_servings' => $cook,
+                'rescheduled_from_entry_id' => (int) $entry->id,
+            ];
+            $seenRecipes[$recipeId] = true;
+        }
+
+        return $selected;
+    }
+
+    /**
      * @param  array<int, string>  $days
      * @param  array<int, string>  $meals
      * @param  array<string, array<int, Recipe>>  $candidates
@@ -327,6 +461,7 @@ final class SuggestMenuAction
      * @param  array<int, int>  $usage
      * @param  array<string, int>  $slotRecipe
      * @param  array<int, int>  $priorityOrder
+     * @param  array<string, bool>  $reserved
      * @return array<string, array{recipe_id: int, drink_recipe_id: int|null, cook_servings: int}>
      */
     private function fromAi(
@@ -340,6 +475,7 @@ final class SuggestMenuAction
         array &$usage,
         array &$slotRecipe,
         array $priorityOrder,
+        array $reserved = [],
     ): array {
         try {
             $response = $this->gateway->generateJson([
@@ -406,6 +542,11 @@ final class SuggestMenuAction
         foreach ($days as $date) {
             foreach ($meals as $meal) {
                 $key = $date.'|'.$meal;
+
+                if (isset($reserved[$key])) {
+                    continue;
+                }
+
                 $choice = $choices[$key] ?? null;
 
                 if ($choice === null) {

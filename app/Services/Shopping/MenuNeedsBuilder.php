@@ -9,6 +9,7 @@ use App\Enums\MealEntryKind;
 use App\Enums\MealEntryStatus;
 use App\Enums\Unit;
 use App\Models\Recipe;
+use Carbon\CarbonImmutable;
 
 /**
  * Translates a saved menu into the same plain need lines the habits produce.
@@ -25,13 +26,22 @@ final class MenuNeedsBuilder
      * @param  iterable<int, \App\Models\MealPlanEntry>  $entries
      * @param  array<int, int>  $planWeekdays
      * @param  array<int, string>  $mealTypes
+     * @param  CarbonImmutable|null  $notBefore  Ignore planned entries from earlier
+     *                                          days; null keeps a historical week.
      * @return array<int, ConsumptionHabitLine>
      */
-    public function build(iterable $entries, array $planWeekdays, array $mealTypes): array
-    {
+    public function build(
+        iterable $entries,
+        array $planWeekdays,
+        array $mealTypes,
+        ?CarbonImmutable $notBefore = null,
+    ): array {
         $aggregated = [];
 
         foreach ($entries as $entry) {
+            if ($notBefore !== null && $entry->plan_date->toDateString() < $notBefore->toDateString()) {
+                continue;
+            }
             if (! in_array($entry->plan_date->isoWeekday(), $planWeekdays, true)) {
                 continue;
             }

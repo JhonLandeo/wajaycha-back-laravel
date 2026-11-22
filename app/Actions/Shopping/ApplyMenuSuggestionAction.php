@@ -6,6 +6,7 @@ namespace App\Actions\Shopping;
 
 use App\DTOs\Shopping\PlanningWeek;
 use App\Enums\MealEntryKind;
+use App\Enums\MealEntryStatus;
 use App\Enums\RecipeCourse;
 use App\Models\MealPlanSettings;
 use App\Models\Product;
@@ -102,7 +103,8 @@ final class ApplyMenuSuggestionAction
                 }
             }
 
-            $this->mealPlanRepository->clearWeek($userId, $week->startsOn, $week->endsOn);
+            $this->assertRescheduledSources($normalized, $userId);
+            $this->mealPlanRepository->clearWeekFrom($userId, $week->startsOn, $week->endsOn, $week->asOf);
 
             $newEntryIds = [];
 
@@ -124,6 +126,7 @@ final class ApplyMenuSuggestionAction
                     'servings' => $entry['servings'],
                     'cook_servings' => $entry['cook_servings'],
                     'leftover_of_entry_id' => null,
+                    'rescheduled_from_entry_id' => $entry['rescheduled_from_entry_id'],
                     'notes' => $entry['notes'],
                 ]);
 
@@ -204,6 +207,46 @@ final class ApplyMenuSuggestionAction
     }
 
     /**
+     * A suggestion may carry a pending meal from an earlier day. The source is
+     * validated here, not trusted from the client, and one source can only have
+     * one reprogrammed child.
+     *
+     * @param  array<int, array<string, mixed>>  $normalized
+     */
+    private function assertRescheduledSources(array $normalized, int $userId): void
+    {
+        $seen = [];
+
+        foreach ($normalized as $entry) {
+            $sourceId = $entry['rescheduled_from_entry_id'];
+
+            if ($sourceId === null) {
+                continue;
+            }
+
+            if (isset($seen[$sourceId])) {
+                throw ValidationException::withMessages([
+                    'entries' => 'La propuesta reprograma dos veces la misma comida.',
+                ]);
+            }
+
+            $source = $this->mealPlanRepository->findEntry((int) $sourceId, $userId);
+
+            if ($source === null
+                || $source->kind !== MealEntryKind::Recipe
+                || $source->status === MealEntryStatus::Cooked
+                || $source->plan_date->toDateString() >= $entry['plan_date']
+                || $source->rescheduledTo()->exists()) {
+                throw ValidationException::withMessages([
+                    'entries' => 'La comida reprogramada ya no está disponible para moverla.',
+                ]);
+            }
+
+            $seen[$sourceId] = true;
+        }
+    }
+
+    /**
      * @param  array<int, mixed>  $entries
      * @param  array<int, string>  $days
      * @param  array<int, string>  $meals
@@ -219,6 +262,7 @@ final class ApplyMenuSuggestionAction
      *     servings: int,
      *     cook_servings: int,
      *     leftover_of_entry_id: int|null,
+     *     rescheduled_from_entry_id: int|null,
      *     notes: string|null
      * }>
      */
@@ -263,6 +307,9 @@ final class ApplyMenuSuggestionAction
 
             $recipe = is_array($entry['recipe'] ?? null) ? $entry['recipe'] : null;
             $drink = is_array($entry['drink_recipe'] ?? null) ? $entry['drink_recipe'] : null;
+            $rescheduledFrom = $entry['rescheduled_from_entry_id']
+                ?? (is_array($entry['rescheduled_from'] ?? null) ? ($entry['rescheduled_from']['id'] ?? null) : null);
+            $rescheduledFromId = $rescheduledFrom === null ? null : (int) $rescheduledFrom;
 
             $normalized[] = [
                 'id' => (int) ($entry['id'] ?? 0),
@@ -279,6 +326,9 @@ final class ApplyMenuSuggestionAction
                 'cook_servings' => $cookServings,
                 'leftover_of_entry_id' => $kind === MealEntryKind::Leftover
                     ? (int) ($entry['leftover_of_entry_id'] ?? 0)
+                    : null,
+                'rescheduled_from_entry_id' => $kind === MealEntryKind::Recipe && $rescheduledFromId !== null && $rescheduledFromId > 0
+                    ? $rescheduledFromId
                     : null,
                 'notes' => isset($entry['notes']) && is_string($entry['notes']) ? $entry['notes'] : null,
             ];

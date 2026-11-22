@@ -120,6 +120,12 @@ final class MealPlanPresenter
                 'meal_type' => $entry->leftoverOf->meal_type->value,
                 'recipe_name' => $entry->leftoverOf->recipe?->name,
             ],
+            'rescheduled_from' => $entry->rescheduledFrom === null ? null : [
+                'id' => (int) $entry->rescheduledFrom->id,
+                'plan_date' => $entry->rescheduledFrom->plan_date->toDateString(),
+                'meal_type' => $entry->rescheduledFrom->meal_type->value,
+                'recipe_name' => $entry->rescheduledFrom->recipe?->name,
+            ],
             'nutrition' => $this->nutrition->forEntry($entry)->toArray(),
             'notes' => $entry->notes,
         ];
