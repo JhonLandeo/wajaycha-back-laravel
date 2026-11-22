@@ -48,16 +48,16 @@ jobs:
             cd "${{ secrets.PROJECT_PATH }}" || exit 1
 
             echo "→ Entorno y cola"
-            sudo -u www-data php artisan tinker --execute="dump(config('app.env'), config('queue.default'), config('prices.sources.${{ inputs.source }}.enabled'));" || true
+            sudo -u www-data env HOME=/tmp php artisan tinker --execute="dump(config('app.env'), config('queue.default'), config('prices.sources.${{ inputs.source }}.enabled'));" || true
 
             echo "→ Horizon"
             sudo -u www-data php artisan horizon:status || true
 
             echo "→ Últimas corridas de ${{ inputs.source }}"
-            sudo -u www-data php artisan tinker --execute="dump(\Illuminate\Support\Facades\DB::table('price_ingestion_runs')->where('source', '${{ inputs.source }}')->select('status','started_at','finished_at','details')->orderByDesc('started_at')->limit(5)->get()->toArray());" || true
+            sudo -u www-data env HOME=/tmp php artisan tinker --execute="dump(\Illuminate\Support\Facades\DB::table('price_ingestion_runs')->where('source', '${{ inputs.source }}')->select('status','started_at','finished_at','details')->orderByDesc('started_at')->limit(5)->get()->toArray());" || true
 
             echo "→ Último period_end de ${{ inputs.source }}"
-            sudo -u www-data php artisan tinker --execute="dump(\Illuminate\Support\Facades\DB::table('price_observations')->where('source', '${{ inputs.source }}')->max('period_end'));" || true
+            sudo -u www-data env HOME=/tmp php artisan tinker --execute="dump(\Illuminate\Support\Facades\DB::table('price_observations')->where('source', '${{ inputs.source }}')->max('period_end'));" || true
 
             echo "→ Encolando ${{ inputs.source }}"
             run sudo -u www-data php artisan prices:ingest "${{ inputs.source }}"
