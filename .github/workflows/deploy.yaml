@@ -100,7 +100,44 @@ jobs:
 
           # 8. Sacar del modo mantenimiento COMO www-data
           run sudo -u www-data php artisan up
-          
+
+          # 8.1. Dejar el scheduler corriendo.
+          #
+          # El deploy reiniciaba Horizon pero no arrancaba `schedule:work`, asi
+          # que los comandos programados —entre ellos `prices:ingest inei` los
+          # lunes— nunca corrian en produccion. El sintoma fue visible recien
+          # en noviembre: la unica corrida de INEI era la siembra de agosto.
+          #
+          # La unidad se reescribe en cada deploy para que el cambio quede
+          # versionado aca y no dependa de una caja configurada a mano.
+          echo "Instalando y reiniciando el scheduler de Laravel..."
+          PHP_BIN="$(sudo -u www-data sh -c 'command -v php' || true)"
+          if [ -z "$PHP_BIN" ]; then
+            echo "::error::No se encontro el binario php para www-data."
+            exit 1
+          fi
+          sudo tee /etc/systemd/system/wajaycha-scheduler.service >/dev/null <<EOF
+          [Unit]
+          Description=Wajaycha Laravel scheduler
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=www-data
+          Group=www-data
+          WorkingDirectory=${{ secrets.PROJECT_PATH }}
+          ExecStart=${PHP_BIN} ${{ secrets.PROJECT_PATH }}/artisan schedule:work
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          run sudo systemctl daemon-reload
+          run sudo systemctl enable --now wajaycha-scheduler
+          run sudo systemctl restart wajaycha-scheduler
+          run sudo systemctl is-active wajaycha-scheduler
+
           # 9. Publicar la lista de comandos del bot.
           #
           # Va DESPUES de `artisan up` a proposito. La lista vive en el enum
