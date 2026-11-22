@@ -1,9 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -12,7 +10,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        $sql = <<<SQL
+        // `CREATE OR REPLACE` no puede cambiar el tipo de retorno. Las funciones
+        // sobreviven a `migrate:fresh` (que solo borra tablas), así que un test
+        // DB que ya corrió una versión posterior de esta función fallaría acá al
+        // recrear el esquema. El DROP hace que esta migración sea idempotente
+        // frente a cualquier versión previa, sin afectar a una base que la corre
+        // por primera vez.
+        DB::unprepared('DROP FUNCTION IF EXISTS get_transactions(integer, integer, integer, integer, type_transaction, numeric, character varying, text, integer, boolean, boolean, boolean)');
+
+        $sql = <<<'SQL'
             CREATE OR REPLACE FUNCTION get_transactions(p_per_page integer, p_page integer, p_year integer, p_month integer, p_type type_transaction, p_amount numeric, p_search character varying, p_category text, p_user_id integer, p_recurring boolean, p_weekend boolean, p_workday boolean)
             RETURNS TABLE(id bigint, message text, amount numeric, date_operation character varying, type_transaction character varying, category_id bigint, detail_id bigint, detail_name character varying, frequency_general jsonb, frequency bigint, yape_trans jsonb, yape_id bigint, user_id bigint, source_type text, suggested_category_id bigint, suggest_name character varying, tags jsonb, is_manual boolean, total_count bigint)
             LANGUAGE sql
@@ -115,7 +121,5 @@ SQL;
     /**
      * Reverse the migrations.
      */
-    public function down(): void
-    {
-    }
+    public function down(): void {}
 };

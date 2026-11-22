@@ -12,6 +12,7 @@ use App\Http\Controllers\ParetoClassificationController;
 use App\Http\Controllers\Reconciliation\ReconciliationCandidateController;
 use App\Http\Controllers\TagsController;
 use App\Http\Controllers\TransactionsController;
+use App\Http\Controllers\TransactionSplitsController;
 use App\Http\Controllers\TransactionYapeController;
 use App\Http\Middleware\JwtMiddleware;
 use Illuminate\Support\Facades\Route;
@@ -53,6 +54,8 @@ Route::middleware([JwtMiddleware::class])->group(function () {
     Route::resource('categories', CategoryController::class);
     Route::patch('categories/{category}/pareto', [CategoryController::class, 'patchPareto']);
     Route::resource('transactions', TransactionsController::class);
+    Route::put('transactions/{transaction}/splits', [TransactionSplitsController::class, 'update']);
+    Route::delete('transactions/{transaction}/splits', [TransactionSplitsController::class, 'destroy']);
     Route::resource('imports', ImportController::class);
     Route::resource('details', DetailsController::class);
     Route::resource('tags', TagsController::class);

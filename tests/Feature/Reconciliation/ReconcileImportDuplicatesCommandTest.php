@@ -14,6 +14,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -485,4 +486,42 @@ it('no une la reimportacion a un maestro del que el usuario ya la separo', funct
 
     expect($reimportada->fresh()->matched_transaction_id)->toBeNull()
         ->and(ReconciliationCandidate::count())->toBe(1);
+});
+
+it('adopta el reparto de la copia cuando la fila que sobrevive no tiene nada', function () {
+    $user = User::factory()->create();
+    $detail = merchant($user);
+    $comida = Category::factory()->create(['user_id' => $user->id]);
+    $limpieza = Category::factory()->create(['user_id' => $user->id]);
+
+    $primera = importedRow($user, $detail, '29.90', '2026-07-08 14:52:00');
+    $repetida = importedRow($user, $detail, '29.90', '2026-07-08 14:52:00');
+
+    DB::table('transaction_splits')->insert([
+        [
+            'transaction_id' => $repetida->id,
+            'category_id' => $comida->id,
+            'user_id' => $user->id,
+            'amount' => '20.00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'transaction_id' => $repetida->id,
+            'category_id' => $limpieza->id,
+            'user_id' => $user->id,
+            'amount' => '9.90',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $this->artisan('transactions:reconcile-import-duplicates --apply')->assertSuccessful();
+
+    $masterSplits = DB::table('transaction_splits')->where('transaction_id', $primera->id)->get();
+
+    expect($primera->fresh()->matched_transaction_id)->toBeNull()
+        ->and($masterSplits)->toHaveCount(2)
+        ->and((float) $masterSplits->sum('amount'))->toBe(29.90)
+        ->and($repetida->fresh()->matched_transaction_id)->toBe($primera->id);
 });

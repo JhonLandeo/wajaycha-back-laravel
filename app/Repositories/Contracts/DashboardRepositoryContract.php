@@ -58,6 +58,8 @@ interface DashboardRepositoryContract
     /**
      * Net spend grouped by category, largest first, uncategorised included.
      *
+     * A split movement counts once per category with its assigned amount.
+     *
      * @return array<int, array{name: string, quantity: int, total: string}>
      */
     public function spendByCategory(DashboardScope $scope, ?string $search = null): array;
@@ -68,7 +70,8 @@ interface DashboardRepositoryContract
      * The category list is not a convenience filter: pacing compares spending
      * against the sum of those categories' budgets, so widening the scope to
      * every expense would divide two different things. An empty list returns an
-     * empty series without touching the database.
+     * empty series without touching the database. Amounts are the assigned ones,
+     * not the full ticket of a split movement.
      *
      * @param  array<int, int>  $categoryIds
      * @return array<int, float> day of month => amount

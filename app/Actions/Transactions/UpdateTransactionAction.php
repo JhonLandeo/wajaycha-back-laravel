@@ -10,6 +10,8 @@ use App\Models\Transaction;
 use App\Models\TransactionTag;
 use App\Repositories\Contracts\TransactionRepositoryContract;
 use App\Services\CategorizationService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 final class UpdateTransactionAction
 {
@@ -23,6 +25,24 @@ final class UpdateTransactionAction
         $transaction = $this->repository->findById($dto->transaction_id ?? 0, $dto->user_id);
         if (! $transaction) {
             throw new \RuntimeException('Transaction not found');
+        }
+
+        // Un movimiento repartido no admite una categoría única ni un monto
+        // distinto sin tocar el reparto. Se rechaza acá, antes de escribir, y se
+        // remite al endpoint que sí sabe deshacerlo. La base también lo
+        // rechazaría, pero como error de SQL; esto responde 422.
+        if ($transaction->splits()->exists()) {
+            if ($dto->category_id !== null) {
+                throw ValidationException::withMessages([
+                    'category_id' => 'Este movimiento tiene un reparto por categoría. Quítalo antes de asignar una sola categoría.',
+                ]);
+            }
+
+            if ($transaction->is_manual && $this->amountChanged($transaction, $dto->amount)) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Este movimiento tiene un reparto por categoría. Ajusta el reparto antes de cambiar el monto.',
+                ]);
+            }
         }
 
         $updateData = [];
@@ -112,6 +132,14 @@ final class UpdateTransactionAction
                     ->where('transactions.user_id', $transaction->user_id)
                     ->where('d.description', $detail->description)
                     ->whereNull('transactions.category_id')
+                    // Un movimiento repartido tiene category_id null, pero no está
+                    // sin categorizar. Escribirle una categoría acá rompería la
+                    // exclusión y borraría la atribución que el usuario hizo.
+                    ->whereNotExists(function ($query): void {
+                        $query->select(DB::raw(1))
+                            ->from('transaction_splits')
+                            ->whereColumn('transaction_splits.transaction_id', 'transactions.id');
+                    })
                     ->update(['category_id' => $newCategoryId]);
 
                 $this->categorizationService->setRule(
@@ -153,5 +181,10 @@ final class UpdateTransactionAction
                 $this->categorizationService->rememberDetailCategory($detail, $newCategoryId);
             }
         }
+    }
+
+    private function amountChanged(Transaction $transaction, float $amount): bool
+    {
+        return (int) round((float) $transaction->amount * 100) !== (int) round($amount * 100);
     }
 }

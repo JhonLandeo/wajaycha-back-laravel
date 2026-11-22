@@ -6,6 +6,9 @@ namespace App\Services\Reconciliation;
 
 use App\Enums\SourceType;
 use App\Models\Transaction;
+use App\Models\TransactionSplit;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Decides which of two records of one movement keeps counting.
@@ -69,14 +72,90 @@ class ReconciliationLinker
      */
     public function inheritCategory(Transaction $master, Transaction $satellite): void
     {
-        // El maestro es la fila que se ve, y suele ser la que menos dice: el
-        // extracto trae "YAPE JOSE TOR" y la categoria la puso alguien sobre el
-        // Excel. Si no se pasa, el movimiento queda sin categoria en los reportes.
-        // Solo se llena un vacio: una categoria que el maestro ya tiene es una
-        // decision de alguien y no se pisa.
-        if ($master->category_id === null && $satellite->category_id !== null) {
+        // Un maestro repartido no admite una categoría única: ya tiene su
+        // atribución completa. Asignarle una rompería el invariante.
+        if ($master->category_id !== null || $this->hasSplits($master)) {
+            return;
+        }
+
+        // El reparto del satélite es más detallado que una categoría suelta y se
+        // adopta solo cuando el maestro no decidió nada. Si los montos no
+        // coinciden, `adoptSplits()` lo rechaza y se cae a la herencia de
+        // categoría de siempre.
+        if ($this->adoptSplits($master, $satellite)) {
+            return;
+        }
+
+        if ($satellite->category_id !== null) {
             $master->update(['category_id' => $satellite->category_id]);
         }
+    }
+
+    /**
+     * Copies the satellite's split onto a master that has neither a category nor
+     * a split of its own.
+     *
+     * The satellite keeps its rows: it stops counting through
+     * `matched_transaction_id`, but if the link is undone it becomes visible
+     * again with its own attribution intact. The copy exists because the master
+     * is the row the reports read, and losing a user's split on a duplicate
+     * would leave the visible row with no category at all.
+     *
+     * Only an exact amount match is adopted. Two records of one movement should
+     * have the same total, but if they do not, copying would violate the sum
+     * invariant; the safe answer is to leave the master as it was.
+     */
+    public function adoptSplits(Transaction $master, Transaction $satellite): bool
+    {
+        if ($master->category_id !== null || $this->hasSplits($master)) {
+            return false;
+        }
+
+        $splits = TransactionSplit::query()
+            ->where('transaction_id', $satellite->id)
+            ->get();
+
+        if ($splits->isEmpty()) {
+            return false;
+        }
+
+        $splitCents = (int) $splits->sum(
+            static fn (TransactionSplit $split): int => (int) round((float) $split->amount * 100)
+        );
+        $masterCents = (int) round((float) $master->amount * 100);
+
+        if ($splitCents !== $masterCents) {
+            Log::warning('No se adoptó el reparto al conciliar: los montos no coinciden.', [
+                'master_id' => $master->id,
+                'satellite_id' => $satellite->id,
+                'master_amount' => $master->amount,
+                'split_total' => $splitCents / 100,
+            ]);
+
+            return false;
+        }
+
+        DB::transaction(function () use ($master, $splits): void {
+            $now = now();
+
+            TransactionSplit::query()->insert($splits->map(
+                static fn (TransactionSplit $split): array => [
+                    'transaction_id' => $master->id,
+                    'category_id' => $split->category_id,
+                    'user_id' => $master->user_id,
+                    'amount' => $split->amount,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ],
+            )->all());
+        });
+
+        return true;
+    }
+
+    private function hasSplits(Transaction $transaction): bool
+    {
+        return $transaction->splits()->exists();
     }
 
     /**
